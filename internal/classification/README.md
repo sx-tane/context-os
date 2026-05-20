@@ -1,0 +1,72 @@
+# Classification Domain
+
+The classification domain assigns a document category and confidence score. This category routes extraction and reasoning behavior.
+
+## Responsibility
+
+- Inspect normalized document text.
+- Assign one `types.Classification`.
+- Provide an explainable confidence score.
+
+## Input And Output
+
+```mermaid
+flowchart LR
+  document[NormalizedDocument]
+  classify[Classify]
+  classified[ClassifiedDocument]
+
+  document --> classify --> classified
+```
+
+## Key API
+
+```go
+func Classify(doc types.NormalizedDocument) types.ClassifiedDocument
+```
+
+## Rule Order
+
+The classifier lowercases `Title + " " + Body` and applies the first matching rule.
+
+| Match | Classification | Confidence |
+| --- | --- | --- |
+| `blocker`, `blocked` | `Blocker` | `0.9` |
+| `decision`, `decided` | `Decision` | `0.85` |
+| `risk`, `delay` | `PMORisk` | `0.8` |
+| `frontend`, `fe`, `screen` | `FEConcern` | `0.75` |
+| `backend`, `be`, `database` | `BEConcern` | `0.75` |
+| `api`, `endpoint` | `APIDiscussion` | `0.75` |
+| `requirement`, `business logic` | `BusinessLogic` | `0.75` |
+| no match | `Unknown` | `0.4` |
+
+## Dependencies
+
+```mermaid
+flowchart TD
+  classification[internal/classification]
+  types[domain/types]
+  pipeline[domain/pipelines]
+
+  classification --> types
+  pipeline --> classification
+```
+
+## Example Usage
+
+```go
+classified := classification.Classify(doc)
+```
+
+## Implementation Notes
+
+- Rule order matters. A document containing both `blocker` and `api` becomes `Blocker`.
+- Keep confidence values explainable. If ML or LLM classification is added, store reasoning evidence or rule traces.
+- Avoid broadening keywords without tests; short tokens like `fe` and `be` can match ordinary words.
+
+## Production Requirements
+
+- Return classification evidence such as matched rules, source spans, or model rationale references.
+- Track confidence calibration against an evaluation set.
+- Support multi-label or ambiguous classification when one document carries multiple delivery signals.
+- Keep deterministic fallbacks available even when AI-assisted classification is enabled.

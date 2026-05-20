@@ -35,9 +35,9 @@ Build ONLY:
 
 ---
 
-# 3. MVP Goal
+# 3. First Production Milestone
 
-FIRST SUCCESS METRIC:
+FIRST PRODUCTION SUCCESS METRIC:
 
 ```text
 Detect real FE / BE misunderstanding automatically.
@@ -414,7 +414,7 @@ System internally:
 
 ---
 
-# 11. MVP Build Order
+# 11. Production Build Order
 
 ## Phase 1
 

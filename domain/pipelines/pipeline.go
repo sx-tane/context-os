@@ -3,6 +3,8 @@ package pipelines
 import (
 	"context"
 
+	"github.com/sx-tane/context-os/domain/contracts"
+	"github.com/sx-tane/context-os/domain/types"
 	"github.com/sx-tane/context-os/internal/classification"
 	"github.com/sx-tane/context-os/internal/extraction"
 	"github.com/sx-tane/context-os/internal/graph"
@@ -11,8 +13,6 @@ import (
 	"github.com/sx-tane/context-os/internal/normalization"
 	"github.com/sx-tane/context-os/internal/reasoning"
 	"github.com/sx-tane/context-os/internal/relationship"
-	"github.com/sx-tane/context-os/domain/contracts"
-	"github.com/sx-tane/context-os/domain/types"
 )
 
 type Result struct {
@@ -20,7 +20,7 @@ type Result struct {
 	Mismatches []types.Mismatch    `json:"mismatches"`
 }
 
-func RunMVP(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.SourceRequest) (Result, error) {
+func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.SourceRequest) (Result, error) {
 	events, err := sourcePipeline.Ingest(ctx, req)
 	if err != nil {
 		return Result{}, err

@@ -44,6 +44,8 @@ ContextOS is not a generic chatbot, coding assistant, or issue tracker replaceme
 
 ## System Architecture
 
+For the detailed implementation reference, domain diagrams, and per-stage guides, start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ### Layered Processing Pipeline
 
 ```mermaid
@@ -140,9 +142,9 @@ Domain contracts and primitives live in [domain/contracts](domain/contracts), [d
 - search: PostgreSQL full text (OpenSearch optional later)
 - AI execution strategy: provider-agnostic, hidden internal execution interfaces
 
-## Beyond MVP: Detailed Delivery Plan
+## Production Delivery Plan
 
-This project is intentionally not limited to a demo MVP. The plan below targets production-grade organizational intelligence.
+The plan below targets production-grade organizational intelligence with local-first operation, replay-safe ingestion, durable graph memory, and explainable misalignment findings.
 
 ### Phase 0: Platform Foundation
 
@@ -256,7 +258,7 @@ ContextOS should be judged by delivery outcomes, not model novelty.
 
 - apps: deployable surfaces (api, frontend, ai-worker)
 - internal: domain implementations and orchestration logic
-- shared: cross-domain contracts, entities, events, and pipeline types
+- domain: cross-domain contracts, entities, events, and pipeline types
 - storage: local-first data layers by processing stage
 - tests: pipeline-level validation and integration checks
 - docs: architecture and connector specifications
