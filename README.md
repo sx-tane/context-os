@@ -142,6 +142,52 @@ Domain contracts and primitives live in [domain/contracts](domain/contracts), [d
 - search: PostgreSQL full text (OpenSearch optional later)
 - AI execution strategy: provider-agnostic, hidden internal execution interfaces
 
+## Getting Started (Local)
+
+### Prerequisites
+
+- Go 1.24.x
+- Bun (for `apps/frontend`)
+- Python 3.12 + uv (for `apps/ai-worker`)
+
+### 1) Validate the repository
+
+```bash
+go mod tidy
+go test ./...
+```
+
+### 2) Start the API app
+
+```bash
+go run ./apps/api
+```
+
+### 3) Start the frontend app
+
+```bash
+cd apps/frontend
+bun install
+bun run dev
+```
+
+### 4) Prepare the AI worker environment
+
+```bash
+cd apps/ai-worker
+uv sync
+```
+
+Current status: `apps/ai-worker` is scaffolded with `pyproject.toml`; add runtime worker commands as implementation lands.
+
+### Run everything together
+
+Use separate terminals:
+
+- Terminal 1: `go run ./apps/api`
+- Terminal 2: `cd apps/frontend && bun install && bun run dev`
+- Terminal 3: `cd apps/ai-worker && uv sync`
+
 ## Production Delivery Plan
 
 The plan below targets production-grade organizational intelligence with local-first operation, replay-safe ingestion, durable graph memory, and explainable misalignment findings.
