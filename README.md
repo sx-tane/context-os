@@ -265,7 +265,7 @@ ContextOS should be judged by delivery outcomes, not model novelty.
 
 ## Near-Term Build Priorities
 
-1. finalize canonical contracts in shared and internal boundaries
+1. finalize canonical contracts in domain and internal boundaries
 2. implement connector reliability guarantees (idempotency + replay)
 3. establish measurable identity-resolution benchmarks
 4. ship first misalignment reports with explainable evidence
