@@ -284,7 +284,7 @@ contextos/
 │   │
 │   └── presentation/
 │
-├── shared/
+├── domain/
 │
 │   ├── entities/
 │   │

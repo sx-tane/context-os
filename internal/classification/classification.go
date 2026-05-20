@@ -3,7 +3,7 @@ package classification
 import (
 	"strings"
 
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 func Classify(doc types.NormalizedDocument) types.ClassifiedDocument {

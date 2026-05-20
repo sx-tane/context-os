@@ -1,6 +1,6 @@
 package entities
 
-import "github.com/sx-tane/context-os/shared/types"
+import "github.com/sx-tane/context-os/domain/types"
 
 type CanonicalEntity struct {
 	Entity     types.Entity `json:"entity"`

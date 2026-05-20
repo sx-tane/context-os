@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sx-tane/context-os/shared/entities"
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/entities"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 var separatorPattern = regexp.MustCompile(`[^a-z0-9]+`)

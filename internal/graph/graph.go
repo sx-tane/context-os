@@ -1,8 +1,8 @@
 package graph
 
 import (
-	"github.com/sx-tane/context-os/shared/entities"
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/entities"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 type ContextGraph struct {

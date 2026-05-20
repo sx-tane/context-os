@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 var tokenPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9_]*(?:Status|State|ID|Id|Type|Flag|Field|Column)?`)

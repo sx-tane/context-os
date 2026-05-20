@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sx-tane/context-os/shared/events"
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/events"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 func Normalize(event events.Event) types.NormalizedDocument {

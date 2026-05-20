@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/sx-tane/context-os/shared/contracts"
-	"github.com/sx-tane/context-os/shared/events"
+	"github.com/sx-tane/context-os/domain/contracts"
+	"github.com/sx-tane/context-os/domain/events"
 )
 
 type MCPConnector struct {

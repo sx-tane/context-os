@@ -6,8 +6,8 @@ import (
 
 	"github.com/sx-tane/context-os/internal/ingestion"
 	githubsource "github.com/sx-tane/context-os/internal/source/github"
-	"github.com/sx-tane/context-os/shared/contracts"
-	"github.com/sx-tane/context-os/shared/pipelines"
+	"github.com/sx-tane/context-os/domain/contracts"
+	"github.com/sx-tane/context-os/domain/pipelines"
 )
 
 func TestRunMVPDetectsPotentialMismatch(t *testing.T) {

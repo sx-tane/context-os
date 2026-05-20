@@ -3,8 +3,8 @@ package relationship
 import (
 	"fmt"
 
-	"github.com/sx-tane/context-os/shared/entities"
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/entities"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 func Build(canonical []entities.CanonicalEntity) []types.Relationship {

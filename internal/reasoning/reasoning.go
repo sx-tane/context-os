@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/sx-tane/context-os/internal/graph"
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 func DetectMismatches(g *graph.ContextGraph) []types.Mismatch {

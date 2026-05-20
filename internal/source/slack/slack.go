@@ -2,7 +2,7 @@ package slack
 
 import (
 	"github.com/sx-tane/context-os/internal/source"
-	"github.com/sx-tane/context-os/shared/contracts"
+	"github.com/sx-tane/context-os/domain/contracts"
 )
 
 func NewConnector() contracts.MCPSourceConnector {

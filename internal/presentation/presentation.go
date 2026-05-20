@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 type Role string

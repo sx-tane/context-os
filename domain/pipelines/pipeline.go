@@ -11,8 +11,8 @@ import (
 	"github.com/sx-tane/context-os/internal/normalization"
 	"github.com/sx-tane/context-os/internal/reasoning"
 	"github.com/sx-tane/context-os/internal/relationship"
-	"github.com/sx-tane/context-os/shared/contracts"
-	"github.com/sx-tane/context-os/shared/types"
+	"github.com/sx-tane/context-os/domain/contracts"
+	"github.com/sx-tane/context-os/domain/types"
 )
 
 type Result struct {

@@ -3,8 +3,8 @@ package ingestion
 import (
 	"context"
 
-	"github.com/sx-tane/context-os/shared/contracts"
-	"github.com/sx-tane/context-os/shared/events"
+	"github.com/sx-tane/context-os/domain/contracts"
+	"github.com/sx-tane/context-os/domain/events"
 )
 
 type Pipeline struct {
