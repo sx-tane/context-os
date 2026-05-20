@@ -1,7 +1,7 @@
 ---
 description: "Use for implementing ContextOS pipeline features with tests, especially contracts, connectors, identity resolution, and reasoning outputs."
 name: "ContextOS Implementer"
-tools: [read, search, edit, execute, todo]
+tools: all
 user-invocable: true
 ---
 You are a ContextOS implementation specialist.
