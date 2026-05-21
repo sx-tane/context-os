@@ -1,10 +1,11 @@
 package openapi
 
 import (
-	"github.com/sx-tane/context-os/internal/source"
-	"github.com/sx-tane/context-os/domain/contracts"
+	"context-os/domain/contracts"
+	"context-os/internal/source"
 )
 
+// NewConnector returns an OpenAPI source connector that ingests API specification events.
 func NewConnector() contracts.MCPSourceConnector {
 	return source.NewMCPConnector("openapi", contracts.CapabilityAPISpec)
 }

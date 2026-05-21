@@ -1,8 +1,8 @@
 package graph
 
 import (
-	"github.com/sx-tane/context-os/domain/entities" // CanonicalEntity stored in the graph
-	"github.com/sx-tane/context-os/domain/types"    // Relationship stored in the graph
+	"context-os/domain/entities" // CanonicalEntity stored in the graph
+	"context-os/domain/types"    // Relationship stored in the graph
 )
 
 // ContextGraph is the in-memory store for all resolved entities and relationships.
@@ -31,4 +31,14 @@ func (g *ContextGraph) AddRelationships(input []types.Relationship) {
 	for _, relationship := range input {
 		g.Relationships[relationship.ID] = relationship // use the relationship ID as key so duplicates overwrite cleanly
 	}
+}
+
+// AllEntities returns all canonical entities stored in the graph as a slice.
+// Order is not guaranteed; callers that need stable output should sort after receiving.
+func (g *ContextGraph) AllEntities() []entities.CanonicalEntity {
+	out := make([]entities.CanonicalEntity, 0, len(g.Entities))
+	for _, e := range g.Entities {
+		out = append(out, e)
+	}
+	return out
 }

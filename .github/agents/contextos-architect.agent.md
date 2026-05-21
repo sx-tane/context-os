@@ -26,7 +26,7 @@ Key architectural constraints from Go best practices:
 
 - Do not write or edit code.
 - Do not propose SaaS-first or multi-tenant-first design unless explicitly requested.
-- Avoid broad platform work that does not improve FE and BE mismatch detection path.
+- Avoid broad platform work that does not improve cross-layer misalignment detection.
 
 ## Procedure
 

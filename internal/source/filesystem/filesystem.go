@@ -1,10 +1,11 @@
 package filesystem
 
 import (
-	"github.com/sx-tane/context-os/internal/source"
-	"github.com/sx-tane/context-os/domain/contracts"
+	"context-os/domain/contracts"
+	"context-os/internal/source"
 )
 
+// NewConnector returns a filesystem source connector that ingests local file events.
 func NewConnector() contracts.MCPSourceConnector {
 	return source.NewMCPConnector("filesystem", contracts.CapabilityFiles)
 }

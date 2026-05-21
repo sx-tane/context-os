@@ -57,8 +57,8 @@ func TestRepositoryScaffoldPathsExist(t *testing.T) {
 	}
 
 	requiredFiles := []string{ // key files that must exist for each app to be runnable
-		"apps/frontend/package.json",
-		"apps/frontend/bun.lockb",
+		"apps/ui/package.json",
+		"apps/ui/bun.lockb",
 		"apps/api/main.go",
 		"apps/ai-worker/pyproject.toml",
 	}

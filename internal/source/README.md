@@ -47,14 +47,14 @@ func (c MCPConnector) Ingest(ctx context.Context, req contracts.SourceRequest) (
 
 ## Connector Wrappers
 
-| Package | Name | Capability |
-| --- | --- | --- |
-| [github](github/github.go) | `github` | `repository` |
-| [slack](slack/slack.go) | `slack` | `messages` |
-| [jira](jira/jira.go) | `jira` | `issues` |
-| [openapi](openapi/openapi.go) | `openapi` | `api_spec` |
-| [excel](excel/excel.go) | `excel` | `spreadsheet` |
-| [filesystem](filesystem/filesystem.go) | `filesystem` | `files` |
+| Package                                | Name         | Capability    |
+| -------------------------------------- | ------------ | ------------- |
+| [github](github/github.go)             | `github`     | `repository`  |
+| [slack](slack/slack.go)                | `slack`      | `messages`    |
+| [jira](jira/jira.go)                   | `jira`       | `issues`      |
+| [openapi](openapi/openapi.go)          | `openapi`    | `api_spec`    |
+| [excel](excel/excel.go)                | `excel`      | `spreadsheet` |
+| [filesystem](filesystem/filesystem.go) | `filesystem` | `files`       |
 
 Each wrapper currently exposes:
 
@@ -82,7 +82,7 @@ flowchart TD
 pipe := ingestion.NewPipeline(githubsource.NewConnector())
 result, err := pipelines.Run(ctx, pipe, contracts.SourceRequest{
     URI:     "repo://example",
-    Content: "frontend expects refundStatus but backend has missingRefundState mismatch",
+    Content: "presentation layer expects refundStatus but service layer has missingRefundState mismatch",
 })
 ```
 

@@ -14,11 +14,11 @@ The presentation domain shapes reasoning outputs for a target role.
 type Role string
 
 const (
-    PMO          Role = "pmo"
-    Frontend     Role = "frontend"
-    Backend      Role = "backend"
-    QA           Role = "qa"
-    Architecture Role = "architecture"
+    PMO              Role = "pmo"
+    PresentationLayer Role = "presentation_layer"
+    ServiceLayer      Role = "service_layer"
+    QA               Role = "qa"
+    Architecture     Role = "architecture"
 )
 ```
 
@@ -63,7 +63,7 @@ flowchart TD
 ## Example Usage
 
 ```go
-summary := presentation.RenderSummary(presentation.Frontend, result.Mismatches)
+summary := presentation.RenderSummary(presentation.PresentationLayer, result.Mismatches)
 ```
 
 ## Implementation Notes
@@ -74,7 +74,7 @@ summary := presentation.RenderSummary(presentation.Frontend, result.Mismatches)
 
 ## Production Requirements
 
-- Render role-specific summaries for PMO, frontend, backend, QA, and architecture without losing evidence.
+- Render role-specific summaries for PMO, presentation layer, service layer, QA, and architecture without losing evidence.
 - Show confidence, impact, severity, affected artifacts, and recommended next action.
 - Keep output stable enough for API/UI tests.
 - Separate detected facts from recommendations and AI-assisted narrative.

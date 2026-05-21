@@ -10,7 +10,7 @@ Most organizations do not fail because information is missing. They fail because
 
 Typical failure patterns:
 
-- frontend and backend implement different business assumptions
+- presentation and service layers implement different business assumptions
 - PMO status does not match engineering reality
 - Jira, Slack, GitHub, docs, and spreadsheets disagree on scope and intent
 - key concepts are renamed across teams and languages
@@ -49,56 +49,41 @@ For the detailed implementation reference, domain diagrams, and per-stage guides
 ### Layered Processing Pipeline
 
 ```mermaid
-flowchart TD
-  subgraph SRC[Source Connectors]
+flowchart TB
+  subgraph R1[Collect and Parse]
     direction LR
-    S1[GitHub]
-    S2[Slack]
-    S3[Jira]
-    S4[OpenAPI]
-    S5[Excel]
-    S6[Filesystem]
+    SRC[Source Connectors] --> P1[Ingestion] --> P2[Normalization] --> P3[Classification] --> P4[Extraction]
   end
 
-  P1[Ingestion]
-  P2[Normalization]
-  P3[Classification]
-  P4[Extraction]
-  P5[Identity Resolution]
-  P6[Relationship]
-  P7[Context Graph]
-  P8[Reasoning]
-
-  subgraph OUT[Intelligence Outputs]
-    direction LR
-    O1[Misalignment Reports]
-    O2[Business Logic Maps]
-    O3[Dependency Risk Views]
-    O4[PMO Summaries]
-    O5[Recommendations]
+  subgraph R2[Understand and Deliver]
+    direction RL
+    P5[Identity Resolution] --> P6[Relationship] --> P7[Context Graph] --> P8[Reasoning] --> OUT[Intelligence Outputs]
   end
 
-  SRC --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> OUT
+  P4 --> P5
 ```
 
-**What each stage inside Context Processing does:**
+### Pipeline Stages and Domain Modules
 
-| Stage                   | What it does                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Ingestion**           | Receives raw events and documents emitted by source connectors                                         |
-| **Normalization**       | Converts raw input into a consistent canonical document schema                                         |
-| **Classification**      | Identifies the content type and routes it to the right extraction rules                                |
-| **Extraction**          | Pulls out candidate entities, intents, and business rules from the document text                       |
-| **Identity Resolution** | Merges duplicate entity names from different sources into single canonical identities, keeping aliases |
-| **Relationship**        | Links related canonical entities together to form edges in the graph                                   |
-| **Context Graph**       | Materializes all entities and relationships into a queryable in-memory structure                       |
-| **Reasoning**           | Analyzes the graph and detects misalignment between frontend, backend, and PMO understanding           |
+| Stage                   | What it does                                                                | Domain module                                                          |
+| ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Source**              | Connects to external tools and emits raw events and documents               | `internal/source` — connector abstraction and source-specific adapters |
+| **Ingestion**           | Receives raw events and captures metadata at intake                         | `internal/ingestion` — raw event/document intake and metadata capture  |
+| **Normalization**       | Converts raw input into a consistent canonical document schema              | `internal/normalization` — canonical schema and text normalization     |
+| **Classification**      | Identifies content type and routes it to extraction rules                   | `internal/classification` — content typing and signal routing          |
+| **Extraction**          | Pulls out candidate entities, intents, and business rules                   | `internal/extraction` — entity, intent, and rule extraction            |
+| **Identity Resolution** | Merges duplicate entity names into single canonical identities with aliases | `internal/identity` — canonical identity resolution and alias merging  |
+| **Relationship**        | Links canonical entities together as scored graph edges                     | `internal/relationship` — cross-entity linkage and edge scoring        |
+| **Context Graph**       | Materializes entities and relationships into a queryable structure          | `internal/graph` — graph materialization and traversal views           |
+| **Reasoning**           | Detects cross-layer context misalignment across knowledge participants      | `internal/reasoning` — detection logic and explanation assembly        |
+| **Execution**           | Orchestrates asynchronous intelligence tasks                                | `internal/execution` — async task orchestration                        |
+| **Presentation**        | Shapes outputs for API and UI consumption                                   | `internal/presentation` — output shaping for API and UI                |
 
 ### Runtime Component Architecture
 
 ```mermaid
 flowchart TD
-  UI[Frontend: SvelteKit]
+  UI[Context UI: SvelteKit]
   API[API Service: Go]
   AW[AI Worker: Python]
   Q[NATS]
@@ -117,22 +102,6 @@ flowchart TD
   AW --> ST
 ```
 
-### Domain Responsibilities
-
-Current domain modules map to pipeline stages in [internal](internal):
-
-- source: connector abstraction and source-specific adapters
-- ingestion: raw event/document intake and metadata capture
-- normalization: canonical schema and text normalization
-- classification: content typing and signal routing
-- extraction: entity, intent, and rule extraction
-- identity: canonical identity resolution and alias merging
-- relationship: cross-entity linkage and edge scoring
-- graph: graph materialization and traversal views
-- reasoning: detection logic and explanation assembly
-- execution: orchestration of asynchronous intelligence tasks
-- presentation: shaping outputs for API and UI consumption
-
 ## Data Contracts and Storage Model
 
 Data is persisted across processing maturity levels:
@@ -146,8 +115,8 @@ Domain contracts and primitives live in [domain/contracts](domain/contracts), [d
 
 ## Tech Stack
 
-- frontend: SvelteKit
-- backend APIs and core orchestration: Go
+- context UI: SvelteKit
+- APIs and core orchestration: Go
 - AI/LLM task workers: Python
 - database and vector storage: PostgreSQL + pgvector
 - async messaging: NATS
@@ -156,49 +125,28 @@ Domain contracts and primitives live in [domain/contracts](domain/contracts), [d
 
 ## Getting Started (Local)
 
-### Prerequisites
+### 1) Set up prerequisites
 
-- Go 1.24.x
-- Bun (for `apps/frontend`)
-- Python 3.12 + uv (for `apps/ai-worker`)
+```bash
+./scripts/setup-local.sh
+```
 
-### 1) Validate the repository
+Installs Go, Bun, Python 3.12, and `uv` on Linux. Run once on a fresh machine.
+
+### 2) Validate the repository
 
 ```bash
 go mod tidy
 go test ./...
 ```
 
-### 2) Start the API app
+### 3) Start all services
 
 ```bash
-go run ./apps/api
+./scripts/start-all.sh
 ```
 
-### 3) Start the frontend app
-
-```bash
-cd apps/frontend
-bun install
-bun run dev
-```
-
-### 4) Prepare the AI worker environment
-
-```bash
-cd apps/ai-worker
-uv sync
-```
-
-Current status: `apps/ai-worker` is scaffolded with `pyproject.toml`; add runtime worker commands as implementation lands.
-
-### Run everything together
-
-Use separate terminals:
-
-- Terminal 1: `go run ./apps/api`
-- Terminal 2: `cd apps/frontend && bun install && bun run dev`
-- Terminal 3: `cd apps/ai-worker && uv sync`
+Starts the API, context UI dev server, and AI worker together. Press `Ctrl+C` to stop all processes. If `uv` is not found, the AI worker is skipped automatically.
 
 ## Production Delivery Plan
 
@@ -264,7 +212,7 @@ Exit criteria:
 
 Goals:
 
-- detect FE/BE contract drift, PMO vs implementation drift, and requirement gaps
+- detect cross-layer context drift, PMO vs implementation drift, and requirement gaps
 - generate explainable findings with evidence links
 - prioritize risks by likely delivery impact
 
@@ -306,7 +254,7 @@ Exit criteria:
 
 ContextOS should be judged by delivery outcomes, not model novelty.
 
-- reduction in FE/BE mismatch incidents
+- reduction in cross-layer misalignment incidents
 - reduction in repeated clarification cycles
 - improved predictability of delivery milestones
 - faster impact analysis during requirement changes
@@ -314,7 +262,7 @@ ContextOS should be judged by delivery outcomes, not model novelty.
 
 ## Current Repository Structure
 
-- apps: deployable surfaces (api, frontend, ai-worker)
+- apps: deployable surfaces (api, context UI, ai-worker)
 - internal: domain implementations and orchestration logic
 - domain: cross-domain contracts, entities, events, and pipeline types
 - storage: local-first data layers by processing stage

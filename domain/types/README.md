@@ -24,14 +24,14 @@ Normalized documents are the common processing unit after ingestion. They should
 type Classification string
 
 const (
-    BusinessLogic Classification = "business_logic"
-    APIDiscussion Classification = "api_discussion"
-    PMORisk       Classification = "pmo_risk"
-    FEConcern     Classification = "fe_concern"
-    BEConcern     Classification = "be_concern"
-    Blocker       Classification = "blocker"
-    Decision      Classification = "decision"
-    Unknown       Classification = "unknown"
+    BusinessLogic   Classification = "business_logic"
+    APIDiscussion   Classification = "api_discussion"
+    PMORisk         Classification = "pmo_risk"
+    ConsumerConcern Classification = "consumer_concern"
+    ProducerConcern Classification = "producer_concern"
+    Blocker         Classification = "blocker"
+    Decision        Classification = "decision"
+    Unknown         Classification = "unknown"
 )
 ```
 

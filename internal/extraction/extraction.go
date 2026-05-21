@@ -5,7 +5,7 @@ import (
 	"regexp"  // used to match token patterns in the document body
 	"strings" // used for trimming and lowercasing names
 
-	"github.com/sx-tane/context-os/domain/types" // ClassifiedDocument input and Entity output
+	"context-os/domain/types" // ClassifiedDocument input and Entity output
 )
 
 // tokenPattern matches identifiers that look like named concepts (e.g. refundStatus, UserID, paymentFlag).

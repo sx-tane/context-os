@@ -3,8 +3,8 @@ package relationship
 import (
 	"fmt" // used to build deterministic relationship IDs
 
-	"github.com/sx-tane/context-os/domain/entities" // CanonicalEntity input type
-	"github.com/sx-tane/context-os/domain/types"    // Relationship output type
+	"context-os/domain/entities" // CanonicalEntity input type
+	"context-os/domain/types"    // Relationship output type
 )
 
 // Build creates co-occurrence relationships between adjacent canonical entities from the same document.

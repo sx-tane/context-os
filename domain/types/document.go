@@ -20,8 +20,8 @@ const (
 	BusinessLogic Classification = "business_logic"  // document describes business rules or requirements
 	APIDiscussion Classification = "api_discussion"   // document discusses API contracts or endpoints
 	PMORisk       Classification = "pmo_risk"         // document flags project risk or delay
-	FEConcern     Classification = "fe_concern"        // document is primarily about frontend behaviour
-	BEConcern     Classification = "be_concern"        // document is primarily about backend behaviour
+	ConsumerConcern Classification = "consumer_concern" // document is primarily a presentation-layer (consumer) concern
+	ProducerConcern Classification = "producer_concern" // document is primarily a service-layer (producer) concern
 	Blocker       Classification = "blocker"           // document signals a blocking issue
 	Decision      Classification = "decision"          // document records a team decision
 	Unknown       Classification = "unknown"           // document did not match any known signal pattern

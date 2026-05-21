@@ -3,8 +3,8 @@ package ingestion
 import (
 	"context" // carries cancellation signals into each connector
 
-	"github.com/sx-tane/context-os/domain/contracts" // MCPSourceConnector interface and SourceRequest
-	"github.com/sx-tane/context-os/domain/events"    // Event type collected from connectors
+	"context-os/domain/contracts" // MCPSourceConnector interface and SourceRequest
+	"context-os/domain/events"    // Event type collected from connectors
 )
 
 // Pipeline fans a single SourceRequest out to all registered connectors.

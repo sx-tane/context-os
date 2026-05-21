@@ -10,7 +10,7 @@ Build a local-first modular AI operating system that:
 
 - synchronizes organizational understanding
 - extracts business logic automatically
-- detects FE / BE / PMO mismatch
+- detects cross-layer context misalignment
 - builds persistent context graph
 - orchestrates hidden AI execution
 - continuously updates delivery intelligence
@@ -22,12 +22,14 @@ Build a local-first modular AI operating system that:
 ## IMPORTANT
 
 Do NOT build:
+
 - huge SaaS
 - multi-tenant architecture
 - enterprise auth
 - complicated infra
 
 Build ONLY:
+
 - local-first
 - personal-use focused
 - modular domains
@@ -40,14 +42,14 @@ Build ONLY:
 FIRST PRODUCTION SUCCESS METRIC:
 
 ```text
-Detect real FE / BE misunderstanding automatically.
+Detect real cross-layer context misalignment automatically.
 ```
 
 NOT:
 
-* autonomous PM
-* AGI project management
-* full AI replacement
+- autonomous PM
+- AGI project management
+- full AI replacement
 
 ---
 
@@ -63,12 +65,12 @@ Receive external data.
 
 ## Examples
 
-* Slack
-* Jira
-* GitHub
-* OpenAPI
-* Excel
-* Local Files
+- Slack
+- Jira
+- GitHub
+- OpenAPI
+- Excel
+- Local Files
 
 ## Output
 
@@ -113,13 +115,13 @@ Unified processing format.
 
 Classify:
 
-* business logic
-* API discussion
-* PMO risk
-* FE concern
-* BE concern
-* blocker
-* decision
+- business logic
+- API discussion
+- PMO risk
+- presentation-layer concern
+- service-layer concern
+- blocker
+- decision
 
 ---
 
@@ -129,12 +131,12 @@ Classify:
 
 Extract structured entities:
 
-* API fields
-* DB columns
-* enums
-* requirements
-* services
-* dependencies
+- API fields
+- DB columns
+- enums
+- requirements
+- services
+- dependencies
 
 ---
 
@@ -144,9 +146,9 @@ Extract structured entities:
 
 Resolve:
 
-* same meaning
-* different naming
-* different systems
+- same meaning
+- different naming
+- different systems
 
 into:
 
@@ -178,7 +180,7 @@ Example:
 Requirement
 → affects API
 → affects DB
-→ affects FE screen
+→ affects presentation layer
 ```
 
 ---
@@ -191,10 +193,10 @@ Persistent organizational memory.
 
 Stores:
 
-* entities
-* aliases
-* relationships
-* history
+- entities
+- aliases
+- relationships
+- history
 
 ---
 
@@ -204,10 +206,10 @@ Stores:
 
 Analyze graph:
 
-* mismatch detection
-* impact analysis
-* PMO visibility
-* implementation gaps
+- mismatch detection
+- impact analysis
+- PMO visibility
+- implementation gaps
 
 ---
 
@@ -219,9 +221,9 @@ Hidden AI orchestration.
 
 Internally:
 
-* launch Codex CLI
-* analyze repo
-* generate implementation understanding
+- launch Codex CLI
+- analyze repo
+- generate implementation understanding
 
 ---
 
@@ -233,11 +235,11 @@ Role-based outputs.
 
 Views:
 
-* PMO
-* FE
-* BE
-* QA
-* Architecture
+- PMO
+- presentation layer
+- service layer
+- QA
+- Architecture
 
 ---
 
@@ -389,15 +391,15 @@ Raw snapshots.
 
 AI should:
 
-* classify
-* extract
-* summarize
-* reason
+- classify
+- extract
+- summarize
+- reason
 
 AI should NOT:
 
-* become source of truth
-* directly mutate graph blindly
+- become source of truth
+- directly mutate graph blindly
 
 ---
 
@@ -407,10 +409,10 @@ User never directly interacts with Codex.
 
 System internally:
 
-* prepares context
-* launches Codex CLI
-* imports analysis
-* updates graph
+- prepares context
+- launches Codex CLI
+- imports analysis
+- updates graph
 
 ---
 
@@ -418,27 +420,27 @@ System internally:
 
 ## Phase 1
 
-* repo scanner
-* Slack export parser
-* OpenAPI parser
-* normalization pipeline
+- repo scanner
+- Slack export parser
+- OpenAPI parser
+- normalization pipeline
 
 ## Phase 2
 
-* extraction engine
-* identity resolution
-* relationship graph
+- extraction engine
+- identity resolution
+- relationship graph
 
 ## Phase 3
 
-* mismatch detection
-* PMO summaries
-* FE / BE synchronization
+- mismatch detection
+- PMO summaries
+- cross-layer context synchronization
 
 ## Phase 4
 
-* hidden Codex execution
-* implementation analysis
+- hidden Codex execution
+- implementation analysis
 
 ---
 
@@ -450,10 +452,10 @@ Business Logic Synchronization Engine
 
 Detect:
 
-* outdated FE assumptions
-* missing API fields
-* inconsistent enums
-* unresolved business logic
+- outdated presentation-layer assumptions
+- missing API fields
+- inconsistent enums
+- unresolved business logic
 
 ---
 
@@ -461,17 +463,17 @@ Detect:
 
 The moat is NOT:
 
-* prompts
-* connectors
-* models
+- prompts
+- connectors
+- models
 
 The moat IS:
 
-* context graph
-* organizational memory
-* identity resolution
-* relationship intelligence
-* synchronized understanding
+- context graph
+- organizational memory
+- identity resolution
+- relationship intelligence
+- synchronized understanding
 
 ---
 

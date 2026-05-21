@@ -1,6 +1,6 @@
 package entities
 
-import "github.com/sx-tane/context-os/domain/types" // provides the core Entity type
+import "context-os/domain/types" // provides the core Entity type
 
 // CanonicalEntity wraps a resolved entity with its confidence score and review flag.
 type CanonicalEntity struct {

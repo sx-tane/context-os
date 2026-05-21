@@ -5,8 +5,8 @@ import (
 	"errors"  // used to construct a descriptive validation error
 	"strings" // used to check whether the request content or URI is blank
 
-	"github.com/sx-tane/context-os/domain/contracts" // Capability and SourceRequest types
-	"github.com/sx-tane/context-os/domain/events"    // Event type emitted after successful ingestion
+	"context-os/domain/contracts" // Capability and SourceRequest types
+	"context-os/domain/events"    // Event type emitted after successful ingestion
 )
 
 // MCPConnector is the shared base connector all source adapters are built on.

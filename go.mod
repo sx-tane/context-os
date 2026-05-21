@@ -1,3 +1,3 @@
-module github.com/sx-tane/context-os
+module context-os
 
 go 1.24.13

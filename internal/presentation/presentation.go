@@ -4,18 +4,18 @@ import (
 	"fmt"     // used to format the summary header line
 	"strings" // used to join summary lines into a single string
 
-	"github.com/sx-tane/context-os/domain/types" // Mismatch input type
+	"context-os/domain/types" // Mismatch input type
 )
 
 // Role identifies the audience a summary is being rendered for.
 type Role string
 
 const (
-	PMO          Role = "pmo"          // project management office view
-	Frontend     Role = "frontend"     // frontend engineering view
-	Backend      Role = "backend"      // backend engineering view
-	QA           Role = "qa"           // quality assurance view
-	Architecture Role = "architecture" // system architecture view
+	PMO              Role = "pmo"               // project management office view
+	PresentationLayer Role = "presentation_layer" // presentation-layer (consumer) knowledge participant view
+	ServiceLayer      Role = "service_layer"      // service-layer (producer) knowledge participant view
+	QA               Role = "qa"                // quality assurance view
+	Architecture     Role = "architecture"       // system architecture view
 )
 
 // RenderSummary formats mismatch findings as a role-labelled plain-text summary.

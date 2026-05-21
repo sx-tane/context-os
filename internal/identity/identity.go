@@ -4,8 +4,8 @@ import (
 	"regexp"  // used to strip separators when computing a canonical key
 	"strings" // used for lowercasing and trimming entity names
 
-	"github.com/sx-tane/context-os/domain/entities" // CanonicalEntity output type
-	"github.com/sx-tane/context-os/domain/types"    // Entity input type
+	"context-os/domain/entities" // CanonicalEntity output type
+	"context-os/domain/types"    // Entity input type
 )
 
 // separatorPattern matches any character that is not a lowercase letter or digit.

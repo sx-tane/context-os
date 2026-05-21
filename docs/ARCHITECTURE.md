@@ -1,6 +1,6 @@
 # ContextOS Architecture
 
-ContextOS is a production-oriented, local-first context synchronization platform. Its first production success metric is narrow and concrete: detect real frontend and backend misunderstanding automatically with traceable evidence, confidence, impact, and recommended action.
+ContextOS is a production-oriented, local-first context synchronization platform. Its first production success metric is narrow and concrete: detect real cross-layer context misalignment automatically with traceable evidence, confidence, impact, and recommended action.
 
 This document is the fast path into the codebase. It explains the production domain flow, points to each stage, names the contracts that must stay stable, and separates target behavior from current implementation status.
 
@@ -27,19 +27,19 @@ flowchart TD
 
 **What each stage does:**
 
-| Stage                   | Responsibility                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------- |
-| **Source**              | Connects to GitHub, Jira, Slack, OpenAPI, Excel, and Filesystem and emits raw events   |
-| **Ingestion**           | Receives connector events and captures raw source data with source traceability        |
-| **Normalization**       | Converts raw events into a consistent canonical document schema                        |
-| **Classification**      | Identifies the content type and routes the document to the right extraction path       |
-| **Extraction**          | Pulls out candidate entities, intents, and business rules from document text           |
-| **Identity Resolution** | Merges duplicate entity names from different sources into single canonical identities  |
-| **Relationship**        | Links related canonical entities into typed, evidence-backed graph edges               |
-| **Context Graph**       | Materializes all entities and relationships into a queryable in-memory structure       |
-| **Reasoning**           | Analyzes the graph and detects FE/BE/PMO misalignment, produces findings with evidence |
-| **Execution**           | Runs optional local AI tasks that generate supporting evidence for reasoning           |
-| **Presentation**        | Shapes findings into role-specific summaries for PMO, FE, BE, QA, and architecture     |
+| Stage                   | Responsibility                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Source**              | Connects to GitHub, Jira, Slack, OpenAPI, Excel, and Filesystem and emits raw events                          |
+| **Ingestion**           | Receives connector events and captures raw source data with source traceability                               |
+| **Normalization**       | Converts raw events into a consistent canonical document schema                                               |
+| **Classification**      | Identifies the content type and routes the document to the right extraction path                              |
+| **Extraction**          | Pulls out candidate entities, intents, and business rules from document text                                  |
+| **Identity Resolution** | Merges duplicate entity names from different sources into single canonical identities                         |
+| **Relationship**        | Links related canonical entities into typed, evidence-backed graph edges                                      |
+| **Context Graph**       | Materializes all entities and relationships into a queryable in-memory structure                              |
+| **Reasoning**           | Analyzes the graph and detects cross-layer context misalignment, produces findings with evidence              |
+| **Execution**           | Runs optional local AI tasks that generate supporting evidence for reasoning                                  |
+| **Presentation**        | Shapes findings into role-specific summaries for PMO, presentation layer, service layer, QA, and architecture |
 
 ## Production Runtime Flow
 
@@ -93,7 +93,7 @@ sequenceDiagram
 | Graph          | Materialize canonical entities and relationships as persistent organizational memory. | [internal/graph](../internal/graph/README.md)                   | Production graph needs durable storage, history, replay, and query support.                                       |
 | Reasoning      | Detect misalignment and produce explainable findings.                                 | [internal/reasoning](../internal/reasoning/README.md)           | Findings must include confidence, impact, evidence, severity, and recommended action.                             |
 | Execution      | Provide local hidden AI orchestration boundary.                                       | [internal/execution](../internal/execution/README.md)           | Execution results are assistive evidence and must be auditable.                                                   |
-| Presentation   | Render role-specific outputs.                                                         | [internal/presentation](../internal/presentation/README.md)     | PMO, frontend, backend, QA, and architecture views must preserve evidence and actionability.                      |
+| Presentation   | Render role-specific outputs.                                                         | [internal/presentation](../internal/presentation/README.md)     | PMO, presentation layer, service layer, QA, and architecture views must preserve evidence and actionability.      |
 
 ## Domain Contracts
 
@@ -206,22 +206,22 @@ flowchart LR
 
 Production readiness means the system can be replayed, audited, and trusted locally without hiding uncertain inference behind vague summaries.
 
-| Area         | Production Requirement                                                                            |
-| ------------ | ------------------------------------------------------------------------------------------------- |
-| Idempotency  | Replaying the same source artifact must not create duplicate canonical facts.                     |
-| Provenance   | Every document, entity, relationship, and mismatch must trace back to source artifacts.           |
-| Confidence   | Classification, extraction, identity, relationship, and reasoning outputs must expose confidence. |
-| Evidence     | Findings must include evidence references, not only generated summaries.                          |
-| Impact       | Mismatches must explain likely delivery impact for FE, BE, PMO, QA, and architecture.             |
-| Replay       | Pipeline stages must support deterministic replay from raw or normalized artifacts.               |
-| Local-first  | The default path must work without SaaS-only dependencies.                                        |
-| Human review | Ambiguous identity merges and high-impact findings must support manual review state.              |
+| Area         | Production Requirement                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Idempotency  | Replaying the same source artifact must not create duplicate canonical facts.                                                 |
+| Provenance   | Every document, entity, relationship, and mismatch must trace back to source artifacts.                                       |
+| Confidence   | Classification, extraction, identity, relationship, and reasoning outputs must expose confidence.                             |
+| Evidence     | Findings must include evidence references, not only generated summaries.                                                      |
+| Impact       | Mismatches must explain likely delivery impact for all knowledge participants (presentation, service, PMO, QA, architecture). |
+| Replay       | Pipeline stages must support deterministic replay from raw or normalized artifacts.                                           |
+| Local-first  | The default path must work without SaaS-only dependencies.                                                                    |
+| Human review | Ambiguous identity merges and high-impact findings must support manual review state.                                          |
 
 ## Current Implementation Status
 
 - Source connectors emit `document.ingested` events with connector metadata.
 - Normalization trims title and body and records a fresh UTC normalization timestamp.
-- Classification uses deterministic keyword ordering; blocker and decision terms win before risk or FE/BE/API routing terms.
+- Classification uses deterministic keyword ordering; blocker and decision terms win before risk or presentation/service/API routing terms.
 - Extraction finds alphanumeric tokens and infers entity type from suffixes, token content, and document classification.
 - Identity resolution canonicalizes by lowercasing and removing non-alphanumeric separators.
 - Relationship building links adjacent canonical entities that came from the same source document.

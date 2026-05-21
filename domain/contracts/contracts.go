@@ -3,7 +3,7 @@ package contracts
 import (
 	"context" // provides the cancellation and deadline context passed into connectors
 
-	"github.com/sx-tane/context-os/domain/events" // event types produced by ingestion
+	"context-os/domain/events" // event types produced by ingestion
 )
 
 // Capability describes a category of data a connector can ingest.

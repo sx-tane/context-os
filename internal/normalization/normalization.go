@@ -4,8 +4,8 @@ import (
 	"strings" // used to trim whitespace from subject and content fields
 	"time"    // used to stamp when normalization ran
 
-	"github.com/sx-tane/context-os/domain/events" // Event type consumed as input
-	"github.com/sx-tane/context-os/domain/types"  // NormalizedDocument type produced as output
+	"context-os/domain/events" // Event type consumed as input
+	"context-os/domain/types"  // NormalizedDocument type produced as output
 )
 
 // Normalize converts a raw pipeline event into a canonical NormalizedDocument.
