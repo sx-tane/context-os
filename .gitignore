@@ -4,9 +4,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Environment files
+# Environment files — ignore real env files but keep the example template
 .env
 .env.*
+!.env.example
 
 # Go
 bin/

@@ -1,0 +1,28 @@
+# Ignore version control and editor noise
+.git
+.github
+.vscode
+.devcontainer
+
+# Ignore storage volumes — never needed inside images
+storage/
+
+# Ignore test artefacts
+tests/
+
+# Ignore frontend node_modules and build output — installed fresh inside the image
+apps/frontend/node_modules
+apps/frontend/.svelte-kit
+apps/frontend/build
+
+# Ignore Python cache and egg-info
+**/__pycache__
+**/*.pyc
+**/*.pyo
+apps/ai-worker/*.egg-info
+
+# Ignore scripts and docs not needed at runtime
+scripts/
+docs/
+prompts/
+migrations/

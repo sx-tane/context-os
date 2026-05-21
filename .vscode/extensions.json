@@ -8,6 +8,7 @@
     "ms-azuretools.vscode-containers",
     "ms-python.python",
     "ms-python.black-formatter",
-    "bierner.markdown-mermaid"
+    "bierner.markdown-mermaid",
+    "tomoki1207.pdf"
   ]
 }

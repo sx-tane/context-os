@@ -53,6 +53,11 @@ install_go() {
 
   export PATH="/usr/local/go/bin:$PATH"
   append_if_missing 'export PATH=/usr/local/go/bin:$PATH' "$HOME/.bashrc"
+
+  info "Installing goimports (go formatter used by VS Code)"
+  go install golang.org/x/tools/cmd/goimports@latest
+  append_if_missing 'export PATH="$HOME/go/bin:$PATH"' "$HOME/.bashrc"
+  export PATH="$HOME/go/bin:$PATH"
 }
 
 install_bun() {

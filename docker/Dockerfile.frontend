@@ -1,0 +1,16 @@
+# Bun-based dev server (bun.lockb present in the project)
+FROM oven/bun:1-alpine
+
+WORKDIR /app
+
+# Install dependencies in a separate layer for better caching
+COPY apps/frontend/package.json apps/frontend/bun.lockb ./
+RUN bun install --frozen-lockfile
+
+# Copy remaining source after deps are installed
+COPY apps/frontend/ .
+
+EXPOSE 5173
+
+# server.host is set to true in vite.config.ts so the dev server binds to 0.0.0.0
+CMD ["bun", "run", "dev"]
