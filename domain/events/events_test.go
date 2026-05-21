@@ -6,13 +6,15 @@ import (
 )
 
 func TestEventVocabularyIncludesPipelineStages(t *testing.T) {
+	// This table protects the event names other stages will publish and consume.
 	want := map[Type]string{
-		DocumentIngested:    "document.ingested",
-		DocumentNormalized:  "document.normalized",
-		EntityExtracted:     "entity.extracted",
-		IdentityResolved:    "identity.resolved",
-		RelationshipCreated: "relationship.created",
-		MismatchDetected:    "mismatch.detected",
+		DocumentIngested:      "document.ingested",
+		DocumentNormalized:    "document.normalized",
+		EntityExtracted:       "entity.extracted",
+		IdentityResolved:      "identity.resolved",
+		RelationshipCreated:   "relationship.created",
+		MismatchDetected:      "mismatch.detected",
+		CodexAnalysisComplete: "codex.analysis.completed",
 	}
 
 	for eventType, value := range want {
@@ -23,12 +25,14 @@ func TestEventVocabularyIncludesPipelineStages(t *testing.T) {
 }
 
 func TestNewCreatesReplayStableEnvelope(t *testing.T) {
+	// Metadata can provide upstream provenance that should be copied into the envelope.
 	metadata := map[string]string{
 		MetadataSourceID: "github:issue:42",
 		MetadataTraceID:  "trace-42",
 		"team":           "payments",
 	}
 
+	// Creating the same event twice simulates replaying the same source artifact.
 	event := New(DocumentIngested, "github", "repo#42", "refund status mismatch", metadata)
 	replayed := New(DocumentIngested, "github", "repo#42", "refund status mismatch", metadata)
 	metadata["team"] = "changed"
@@ -63,6 +67,7 @@ func TestNewCreatesReplayStableEnvelope(t *testing.T) {
 }
 
 func TestNewDefaultsReplayIdentifiers(t *testing.T) {
+	// When callers do not pass metadata, New still creates stable IDs and a usable map.
 	event := New(DocumentNormalized, "normalization", "document-1", "body", nil)
 	replayed := New(DocumentNormalized, "normalization", "document-1", "body", nil)
 
@@ -81,6 +86,7 @@ func TestNewDefaultsReplayIdentifiers(t *testing.T) {
 }
 
 func TestNewAcceptsExplicitEventID(t *testing.T) {
+	// Connectors may already have a durable event ID from the upstream system.
 	event := New(EntityExtracted, "extraction", "document-1", "entity", map[string]string{
 		MetadataEventID: "external-event-1",
 	})
