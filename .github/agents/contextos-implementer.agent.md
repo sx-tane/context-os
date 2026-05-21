@@ -24,6 +24,11 @@ Key rules to enforce on every Go change:
 - Every goroutine spawned in a stage must respect `ctx.Done()` or a quit channel.
 - Exported identifiers need a doc comment starting with the identifier name.
 
+## Issue Workflow Guidance
+
+When creating or updating GitHub implementation issues, apply the **contextos-issue-workflow** skill.
+Follow the established parent-child format and keep labels (`type`, `area`) consistent across the group.
+
 ## Constraints
 
 - Keep changes scoped to requested behavior.
