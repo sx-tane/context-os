@@ -1,47 +1,109 @@
+// Package events defines the serializable event envelope shared by pipeline stages.
 package events
 
 import (
-	"fmt"  // used to build deterministic event IDs
-	"time" // used to capture when each event occurred
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+	"time"
 )
 
 // Type identifies the kind of event that occurred in the pipeline.
 type Type string
 
 const (
-	DocumentIngested      Type = "document.ingested"         // a raw source artifact was captured
-	DocumentNormalized    Type = "document.normalized"       // a document was converted to canonical form
-	EntityExtracted       Type = "entity.extracted"          // a named entity was pulled from a document
-	IdentityResolved      Type = "identity.resolved"         // two or more aliases were merged into one entity
-	RelationshipCreated   Type = "relationship.created"      // a link between two entities was established
-	MismatchDetected      Type = "mismatch.detected"         // a delivery misalignment was found
-	CodexAnalysisComplete Type = "codex.analysis.completed" // an AI analysis task finished
+	// DocumentIngested identifies raw source artifacts captured by ingestion.
+	DocumentIngested Type = "document.ingested"
+	// DocumentNormalized identifies source artifacts converted to canonical documents.
+	DocumentNormalized Type = "document.normalized"
+	// EntityExtracted identifies entities pulled from normalized documents.
+	EntityExtracted Type = "entity.extracted"
+	// IdentityResolved identifies aliases merged into canonical identities.
+	IdentityResolved Type = "identity.resolved"
+	// RelationshipCreated identifies links created between domain entities.
+	RelationshipCreated Type = "relationship.created"
+	// MismatchDetected identifies delivery misalignments found by reasoning.
+	MismatchDetected Type = "mismatch.detected"
+	// CodexAnalysisComplete identifies completed local execution analysis.
+	CodexAnalysisComplete Type = "codex.analysis.completed"
+)
+
+const (
+	// SchemaVersion is the current version for the event envelope contract.
+	SchemaVersion = "v1"
+	// MetadataEventID names the metadata value used to provide a replay-stable event ID.
+	MetadataEventID = "event_id"
+	// MetadataSourceID names the metadata value used to provide source artifact identity.
+	MetadataSourceID = "source_id"
+	// MetadataTraceID names the metadata value used to correlate events in one pipeline run.
+	MetadataTraceID = "trace_id"
 )
 
 // Event is the core unit of data flowing through the pipeline.
 type Event struct {
-	ID         string            `json:"id"`          // deterministic identifier built from type, subject, and timestamp
-	Type       Type              `json:"type"`        // what kind of event this is
-	Source     string            `json:"source"`      // which connector or stage emitted this event
-	Subject    string            `json:"subject"`     // the artifact this event is about (URI, key, or name)
-	Content    string            `json:"content"`     // raw text payload of the artifact
-	Metadata   map[string]string `json:"metadata"`    // arbitrary key-value context attached by the emitting stage
-	OccurredAt time.Time         `json:"occurred_at"` // UTC timestamp of when this event was created
+	ID            string            `json:"id"`
+	TraceID       string            `json:"trace_id"`
+	Type          Type              `json:"type"`
+	SchemaVersion string            `json:"schema_version"`
+	Source        string            `json:"source"`
+	SourceID      string            `json:"source_id"`
+	Subject       string            `json:"subject"`
+	Content       string            `json:"content"`
+	Metadata      map[string]string `json:"metadata"`
+	OccurredAt    time.Time         `json:"occurred_at"`
 }
 
-// New creates an Event with a deterministic ID derived from type, subject, and nanosecond timestamp.
+// New creates an Event with replay-stable identity and provenance defaults.
 func New(eventType Type, source, subject, content string, metadata map[string]string) Event {
-	if metadata == nil {
-		metadata = map[string]string{} // always initialise to avoid nil map panics downstream
+	metadata = cloneMetadata(metadata)
+
+	sourceID := strings.TrimSpace(metadata[MetadataSourceID])
+	if sourceID == "" {
+		sourceID = strings.TrimSpace(subject)
 	}
-	occurredAt := time.Now().UTC() // capture the current UTC time before building the ID
+	if sourceID == "" {
+		sourceID = strings.TrimSpace(source)
+	}
+
+	id := strings.TrimSpace(metadata[MetadataEventID])
+	if id == "" {
+		id = stableID(eventType, source, sourceID, subject)
+	}
+
+	traceID := strings.TrimSpace(metadata[MetadataTraceID])
+	if traceID == "" {
+		traceID = id
+	}
+
 	return Event{
-		ID:         fmt.Sprintf("%s:%s:%d", eventType, subject, occurredAt.UnixNano()), // embed nanoseconds so IDs are unique even for the same subject
-		Type:       eventType,  // store the event kind for routing downstream
-		Source:     source,     // record which connector produced this event
-		Subject:    subject,    // record what artifact this event describes
-		Content:    content,    // carry the raw text forward for normalization
-		Metadata:   metadata,   // attach any extra context from the source
-		OccurredAt: occurredAt, // store the timestamp for replay and ordering
+		ID:            id,
+		TraceID:       traceID,
+		Type:          eventType,
+		SchemaVersion: SchemaVersion,
+		Source:        source,
+		SourceID:      sourceID,
+		Subject:       subject,
+		Content:       content,
+		Metadata:      metadata,
+		OccurredAt:    time.Now().UTC(),
 	}
+}
+
+func cloneMetadata(metadata map[string]string) map[string]string {
+	out := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		out[key] = value
+	}
+	return out
+}
+
+func stableID(eventType Type, source, sourceID, subject string) string {
+	parts := []string{
+		string(eventType),
+		strings.TrimSpace(source),
+		strings.TrimSpace(sourceID),
+		strings.TrimSpace(subject),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return "event:" + hex.EncodeToString(sum[:])
 }
