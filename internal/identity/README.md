@@ -13,10 +13,10 @@ Identity resolution is the core ContextOS domain. It merges candidate entities t
 
 ```mermaid
 flowchart LR
-  raw[[]types.Entity]
+  raw["[]types.Entity"]
   key[CanonicalKey]
   resolve[Resolve]
-  canonical[[]entities.CanonicalEntity]
+  canonical["[]entities.CanonicalEntity"]
 
   raw --> key --> resolve --> canonical
 ```
@@ -43,8 +43,8 @@ func appendUnique(values []string, next string) []string
 
 Examples:
 
-| Input | Key |
-| --- | --- |
+| Input           | Key            |
+| --------------- | -------------- |
 | `refund_status` | `refundstatus` |
 | `Refund Status` | `refundstatus` |
 | `refund-status` | `refundstatus` |
@@ -64,12 +64,12 @@ flowchart TD
   entities[domain/entities]
   types[domain/types]
   relationship[internal/relationship]
-  graph[internal/graph]
+  ctxgraph[internal/graph]
 
   identity --> entities
   identity --> types
   relationship --> identity
-  graph --> identity
+  ctxgraph --> identity
 ```
 
 ## Example Usage

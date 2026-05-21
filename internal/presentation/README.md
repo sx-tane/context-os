@@ -38,7 +38,7 @@ func RenderSummary(role Role, mismatches []types.Mismatch) string
 
 ```mermaid
 flowchart LR
-  mismatches[[]Mismatch]
+  mismatches["[]Mismatch"]
   role[Role]
   render[RenderSummary]
   summary[string]

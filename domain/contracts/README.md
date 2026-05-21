@@ -51,7 +51,7 @@ type MCPSourceConnector interface {
 flowchart LR
   request[SourceRequest]
   connector[MCPSourceConnector]
-  event[[]events.Event]
+  event["[]events.Event"]
 
   request --> connector --> event
 ```

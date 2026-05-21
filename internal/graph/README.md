@@ -29,14 +29,14 @@ func (g *ContextGraph) AddRelationships(input []types.Relationship)
 
 ```mermaid
 flowchart LR
-  canonical[[]CanonicalEntity]
-  relationships[[]Relationship]
-  graph[ContextGraph]
+  canonical["[]CanonicalEntity"]
+  relationships["[]Relationship"]
+  ctxgraph[ContextGraph]
   reasoning[Reasoning]
 
-  canonical --> graph
-  relationships --> graph
-  graph --> reasoning
+  canonical --> ctxgraph
+  relationships --> ctxgraph
+  ctxgraph --> reasoning
 ```
 
 ## Behavior
@@ -49,16 +49,16 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  graph[internal/graph]
+  ctxgraph[internal/graph]
   entities[domain/entities]
   types[domain/types]
   reasoning[internal/reasoning]
   pipeline[domain/pipelines]
 
-  graph --> entities
-  graph --> types
-  reasoning --> graph
-  pipeline --> graph
+  ctxgraph --> entities
+  ctxgraph --> types
+  reasoning --> ctxgraph
+  pipeline --> ctxgraph
 ```
 
 ## Example Usage

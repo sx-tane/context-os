@@ -7,15 +7,15 @@ This document is the fast path into the codebase. It explains the production dom
 ## Domain Map
 
 ```mermaid
-flowchart LR
-  source[Source connectors]
+flowchart TD
+  source[Source]
   ingestion[Ingestion]
   normalization[Normalization]
   classification[Classification]
   extraction[Extraction]
-  identity[Identity resolution]
+  identity[Identity Resolution]
   relationship[Relationship]
-  ctxgraph[Context graph]
+  ctxgraph[Context Graph]
   reasoning[Reasoning]
   execution[Execution]
   presentation[Presentation]
@@ -24,6 +24,22 @@ flowchart LR
   reasoning -. optional local AI work .-> execution
   execution -. analysis evidence .-> reasoning
 ```
+
+**What each stage does:**
+
+| Stage                   | Responsibility                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| **Source**              | Connects to GitHub, Jira, Slack, OpenAPI, Excel, and Filesystem and emits raw events   |
+| **Ingestion**           | Receives connector events and captures raw source data with source traceability        |
+| **Normalization**       | Converts raw events into a consistent canonical document schema                        |
+| **Classification**      | Identifies the content type and routes the document to the right extraction path       |
+| **Extraction**          | Pulls out candidate entities, intents, and business rules from document text           |
+| **Identity Resolution** | Merges duplicate entity names from different sources into single canonical identities  |
+| **Relationship**        | Links related canonical entities into typed, evidence-backed graph edges               |
+| **Context Graph**       | Materializes all entities and relationships into a queryable in-memory structure       |
+| **Reasoning**           | Analyzes the graph and detects FE/BE/PMO misalignment, produces findings with evidence |
+| **Execution**           | Runs optional local AI tasks that generate supporting evidence for reasoning           |
+| **Presentation**        | Shapes findings into role-specific summaries for PMO, FE, BE, QA, and architecture     |
 
 ## Production Runtime Flow
 
@@ -95,28 +111,29 @@ The stable domain layer is split by contract type.
 
 ```mermaid
 flowchart TD
-  contracts[domain/contracts]
-  events[domain/events]
-  types[domain/types]
-  entities[domain/entities]
-  pipeline[domain/pipelines]
+  subgraph INT[Internal Layer — stage implementations]
+    direction LR
+    source[source]
+    ingestion[ingestion]
+    normalization[normalization]
+    classification[classification]
+    extraction[extraction]
+    identity[identity]
+    relationship[relationship]
+    ctxgraph[graph]
+    reasoning[reasoning]
+    execution[execution]
+    presentation[presentation]
+  end
 
-  source[internal/source]
-  ingestion[internal/ingestion]
-  normalization[internal/normalization]
-  classification[internal/classification]
-  extraction[internal/extraction]
-  identity[internal/identity]
-  relationship[internal/relationship]
-  ctxgraph[internal/graph]
-  reasoning[internal/reasoning]
-  execution[internal/execution]
-  presentation[internal/presentation]
-
-  contracts --> events
-  entities --> types
-  pipeline --> contracts
-  pipeline --> types
+  subgraph DOM[Domain Layer — stable contracts]
+    direction LR
+    contracts[contracts]
+    events[events]
+    types[types]
+    entities[entities]
+    pipeline[pipelines]
+  end
 
   source --> contracts
   source --> events
@@ -145,7 +162,27 @@ flowchart TD
   pipeline --> reasoning
 ```
 
-Domain packages define portable contracts and primitives. Internal packages implement behavior. Keep new behavior on the internal side unless it changes the shared contract intentionally.
+**Rules:**
+
+- Internal packages import from domain only — domain never imports internal.
+- No internal stage imports another internal stage directly.
+- `pipelines` is the only orchestrator; it wires all stages together.
+
+**What each internal package imports from domain:**
+
+| Internal package | Imports                                   |
+| ---------------- | ----------------------------------------- |
+| source           | contracts, events                         |
+| ingestion        | contracts, events                         |
+| normalization    | events, types                             |
+| classification   | types                                     |
+| extraction       | types                                     |
+| identity         | entities, types                           |
+| relationship     | entities, types                           |
+| graph            | entities, types                           |
+| reasoning        | types (plus graph as a dependency)        |
+| presentation     | types                                     |
+| pipelines        | contracts, types, and all internal stages |
 
 ## Data Shape Through The Pipeline
 

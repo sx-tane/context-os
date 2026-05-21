@@ -12,11 +12,11 @@ The reasoning domain analyzes the context graph and emits delivery mismatch find
 
 ```mermaid
 flowchart LR
-  graph[ContextGraph]
+  ctxgraph[ContextGraph]
   detect[DetectMismatches]
-  mismatches[[]Mismatch]
+  mismatches["[]Mismatch"]
 
-  graph --> detect --> mismatches
+  ctxgraph --> detect --> mismatches
 ```
 
 ## Key API
@@ -46,12 +46,12 @@ The emitted finding uses:
 ```mermaid
 flowchart TD
   reasoning[internal/reasoning]
-  graph[internal/graph]
+  ctxgraph[internal/graph]
   types[domain/types]
   presentation[internal/presentation]
   pipeline[domain/pipelines]
 
-  reasoning --> graph
+  reasoning --> ctxgraph
   reasoning --> types
   presentation --> reasoning
   pipeline --> reasoning

@@ -49,8 +49,9 @@ For the detailed implementation reference, domain diagrams, and per-stage guides
 ### Layered Processing Pipeline
 
 ```mermaid
-flowchart LR
-  subgraph S[Source Connectors]
+flowchart TD
+  subgraph SRC[Source Connectors]
+    direction LR
     S1[GitHub]
     S2[Slack]
     S3[Jira]
@@ -59,28 +60,39 @@ flowchart LR
     S6[Filesystem]
   end
 
-  subgraph P[Context Processing]
-    P1[Ingestion]
-    P2[Normalization]
-    P3[Classification]
-    P4[Extraction]
-    P5[Identity Resolution]
-    P6[Relationship]
-    P7[Context Graph]
-    P8[Reasoning]
-  end
+  P1[Ingestion]
+  P2[Normalization]
+  P3[Classification]
+  P4[Extraction]
+  P5[Identity Resolution]
+  P6[Relationship]
+  P7[Context Graph]
+  P8[Reasoning]
 
-  subgraph O[Intelligence Outputs]
-    O1[Delivery Misalignment Reports]
+  subgraph OUT[Intelligence Outputs]
+    direction LR
+    O1[Misalignment Reports]
     O2[Business Logic Maps]
     O3[Dependency Risk Views]
     O4[PMO Summaries]
-    O5[Actionable Recommendations]
+    O5[Recommendations]
   end
 
-  S --> P
-  P --> O
+  SRC --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> OUT
 ```
+
+**What each stage inside Context Processing does:**
+
+| Stage                   | What it does                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Ingestion**           | Receives raw events and documents emitted by source connectors                                         |
+| **Normalization**       | Converts raw input into a consistent canonical document schema                                         |
+| **Classification**      | Identifies the content type and routes it to the right extraction rules                                |
+| **Extraction**          | Pulls out candidate entities, intents, and business rules from the document text                       |
+| **Identity Resolution** | Merges duplicate entity names from different sources into single canonical identities, keeping aliases |
+| **Relationship**        | Links related canonical entities together to form edges in the graph                                   |
+| **Context Graph**       | Materializes all entities and relationships into a queryable in-memory structure                       |
+| **Reasoning**           | Analyzes the graph and detects misalignment between frontend, backend, and PMO understanding           |
 
 ### Runtime Component Architecture
 

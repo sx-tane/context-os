@@ -12,9 +12,9 @@ The relationship domain creates edges between canonical entities so the context 
 
 ```mermaid
 flowchart LR
-  canonical[[]CanonicalEntity]
+  canonical["[]CanonicalEntity"]
   build[Build]
-  relationships[[]Relationship]
+  relationships["[]Relationship"]
 
   canonical --> build --> relationships
 ```
@@ -43,12 +43,12 @@ flowchart TD
   relationship[internal/relationship]
   entities[domain/entities]
   types[domain/types]
-  graph[internal/graph]
+  ctxgraph[internal/graph]
   pipeline[domain/pipelines]
 
   relationship --> entities
   relationship --> types
-  graph --> relationship
+  ctxgraph --> relationship
   pipeline --> relationship
 ```
 
