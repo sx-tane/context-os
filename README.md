@@ -10,7 +10,7 @@ Most organizations do not fail because information is missing. They fail because
 
 Typical failure patterns:
 
-- frontend and backend implement different business assumptions
+- presentation and service layers implement different business assumptions
 - PMO status does not match engineering reality
 - Jira, Slack, GitHub, docs, and spreadsheets disagree on scope and intent
 - key concepts are renamed across teams and languages
@@ -44,49 +44,13 @@ ContextOS is not a generic chatbot, coding assistant, or issue tracker replaceme
 
 ## System Architecture
 
-For the detailed implementation reference, domain diagrams, and per-stage guides, start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-### Layered Processing Pipeline
-
-```mermaid
-flowchart LR
-  subgraph S[Source Connectors]
-    S1[GitHub]
-    S2[Slack]
-    S3[Jira]
-    S4[OpenAPI]
-    S5[Excel]
-    S6[Filesystem]
-  end
-
-  subgraph P[Context Processing]
-    P1[Ingestion]
-    P2[Normalization]
-    P3[Classification]
-    P4[Extraction]
-    P5[Identity Resolution]
-    P6[Relationship]
-    P7[Context Graph]
-    P8[Reasoning]
-  end
-
-  subgraph O[Intelligence Outputs]
-    O1[Delivery Misalignment Reports]
-    O2[Business Logic Maps]
-    O3[Dependency Risk Views]
-    O4[PMO Summaries]
-    O5[Actionable Recommendations]
-  end
-
-  S --> P
-  P --> O
-```
+The pipeline processes source events through eleven deterministic stages from ingestion to presentation. For domain diagrams, stage contracts, dependency rules, and per-stage implementation guides, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Runtime Component Architecture
 
 ```mermaid
 flowchart TD
-  UI[Frontend: SvelteKit]
+  UI[Context UI: SvelteKit]
   API[API Service: Go]
   AW[AI Worker: Python]
   Q[NATS]
@@ -105,23 +69,7 @@ flowchart TD
   AW --> ST
 ```
 
-### Domain Responsibilities
-
-Current domain modules map to pipeline stages in [internal](internal):
-
-- source: connector abstraction and source-specific adapters
-- ingestion: raw event/document intake and metadata capture
-- normalization: canonical schema and text normalization
-- classification: content typing and signal routing
-- extraction: entity, intent, and rule extraction
-- identity: canonical identity resolution and alias merging
-- relationship: cross-entity linkage and edge scoring
-- graph: graph materialization and traversal views
-- reasoning: detection logic and explanation assembly
-- execution: orchestration of asynchronous intelligence tasks
-- presentation: shaping outputs for API and UI consumption
-
-## Data Contracts and Storage Model
+## Storage Model
 
 Data is persisted across processing maturity levels:
 
@@ -130,17 +78,42 @@ Data is persisted across processing maturity levels:
 - snapshots: reproducible point-in-time context states
 - embeddings: vectorized semantic representations
 
-Domain contracts and primitives live in [domain/contracts](domain/contracts), [domain/entities](domain/entities), [domain/events](domain/events), [domain/pipelines](domain/pipelines), and [domain/types](domain/types).
+Domain contracts and package structure are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tech Stack
 
-- frontend: SvelteKit
-- backend APIs and core orchestration: Go
+- context UI: SvelteKit
+- APIs and core orchestration: Go
 - AI/LLM task workers: Python
 - database and vector storage: PostgreSQL + pgvector
 - async messaging: NATS
 - search: PostgreSQL full text (OpenSearch optional later)
 - AI execution strategy: provider-agnostic, hidden internal execution interfaces
+
+## Getting Started (Local)
+
+### 1) Set up prerequisites
+
+```bash
+./scripts/setup-local.sh
+```
+
+Installs Go, Bun, Python 3.12, and `uv` on Linux. Run once on a fresh machine.
+
+### 2) Validate the repository
+
+```bash
+go mod tidy
+go test ./...
+```
+
+### 3) Start all services
+
+```bash
+./scripts/start-all.sh
+```
+
+Starts the API, context UI dev server, and AI worker together. Press `Ctrl+C` to stop all processes. If `uv` is not found, the AI worker is skipped automatically.
 
 ## Production Delivery Plan
 
@@ -206,7 +179,7 @@ Exit criteria:
 
 Goals:
 
-- detect FE/BE contract drift, PMO vs implementation drift, and requirement gaps
+- detect cross-layer context drift, PMO vs implementation drift, and requirement gaps
 - generate explainable findings with evidence links
 - prioritize risks by likely delivery impact
 
@@ -248,7 +221,7 @@ Exit criteria:
 
 ContextOS should be judged by delivery outcomes, not model novelty.
 
-- reduction in FE/BE mismatch incidents
+- reduction in cross-layer misalignment incidents
 - reduction in repeated clarification cycles
 - improved predictability of delivery milestones
 - faster impact analysis during requirement changes
@@ -256,7 +229,7 @@ ContextOS should be judged by delivery outcomes, not model novelty.
 
 ## Current Repository Structure
 
-- apps: deployable surfaces (api, frontend, ai-worker)
+- apps: deployable surfaces (api, context UI, ai-worker)
 - internal: domain implementations and orchestration logic
 - domain: cross-domain contracts, entities, events, and pipeline types
 - storage: local-first data layers by processing stage
@@ -265,7 +238,7 @@ ContextOS should be judged by delivery outcomes, not model novelty.
 
 ## Near-Term Build Priorities
 
-1. finalize canonical contracts in shared and internal boundaries
+1. finalize canonical contracts in domain and internal boundaries
 2. implement connector reliability guarantees (idempotency + replay)
 3. establish measurable identity-resolution benchmarks
 4. ship first misalignment reports with explainable evidence

@@ -33,12 +33,12 @@ flowchart TD
   extract[Extract]
   resolve[Resolve]
   relate[Build relationships]
-  graph[ContextGraph]
+  ctxgraph[ContextGraph]
   reason[Detect mismatches]
   result[Result]
 
-  request --> ingest --> event --> normalize --> classify --> extract --> resolve --> relate --> graph --> reason --> result
-  resolve --> graph
+  request --> ingest --> event --> normalize --> classify --> extract --> resolve --> relate --> ctxgraph --> reason --> result
+  resolve --> ctxgraph
 ```
 
 ## Behavior

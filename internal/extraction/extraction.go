@@ -1,51 +1,54 @@
 package extraction
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
+	"fmt"     // used to build deterministic entity IDs
+	"regexp"  // used to match token patterns in the document body
+	"strings" // used for trimming and lowercasing names
 
-	"github.com/sx-tane/context-os/domain/types"
+	"context-os/domain/types" // ClassifiedDocument input and Entity output
 )
 
+// tokenPattern matches identifiers that look like named concepts (e.g. refundStatus, UserID, paymentFlag).
 var tokenPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9_]*(?:Status|State|ID|Id|Type|Flag|Field|Column)?`)
 
+// Extract pulls named entity tokens from a classified document's body text.
 func Extract(doc types.ClassifiedDocument) []types.Entity {
-	matches := tokenPattern.FindAllString(doc.Document.Body, -1)
-	seen := map[string]bool{}
-	entities := make([]types.Entity, 0, len(matches))
-	for _, match := range matches {
-		name := strings.TrimSpace(match)
-		key := strings.ToLower(name)
-		if len(name) < 3 || seen[key] {
+	matches := tokenPattern.FindAllString(doc.Document.Body, -1) // find all token candidates in the body
+	seen := map[string]bool{}                                     // track which canonical keys have already been added
+	entities := make([]types.Entity, 0, len(matches))             // pre-allocate with a reasonable capacity
+	for _, match := range matches {                               // process each regex match in order
+		name := strings.TrimSpace(match)     // clean surrounding whitespace from the token
+		key := strings.ToLower(name)         // normalise to lowercase for deduplication
+		if len(name) < 3 || seen[key] {      // skip tokens that are too short or already captured
 			continue
 		}
-		seen[key] = true
+		seen[key] = true // mark this key so future duplicates are skipped
 		entities = append(entities, types.Entity{
-			ID:       fmt.Sprintf("%s:%s", doc.Document.ID, key),
-			Type:     inferType(name, doc.Classification),
-			Name:     name,
-			SourceID: doc.Document.ID,
-			Metadata: map[string]string{"classification": string(doc.Classification)},
+			ID:       fmt.Sprintf("%s:%s", doc.Document.ID, key),                     // combine document ID and key for a stable entity ID
+			Type:     inferType(name, doc.Classification),                            // determine what kind of concept this token represents
+			Name:     name,                                                           // preserve the original casing from the text
+			SourceID: doc.Document.ID,                                                // link back to the document it came from
+			Metadata: map[string]string{"classification": string(doc.Classification)}, // carry the document's classification forward
 		})
 	}
-	return entities
+	return entities // return the deduplicated list of extracted entities
 }
 
+// inferType maps an entity name and its document classification to the most likely EntityType.
 func inferType(name string, classification types.Classification) types.EntityType {
-	lower := strings.ToLower(name)
+	lower := strings.ToLower(name) // lowercase once for all comparisons below
 	switch {
 	case strings.Contains(lower, "field") || strings.Contains(lower, "status") || strings.Contains(lower, "state"):
-		return types.APIField
+		return types.APIField // status/state/field names are typically API schema fields
 	case strings.Contains(lower, "column") || strings.Contains(lower, "database"):
-		return types.DBColumn
+		return types.DBColumn // column or database names map to DB concepts
 	case strings.Contains(lower, "type") || strings.Contains(lower, "flag"):
-		return types.Enum
+		return types.Enum // type/flag names are usually enumerated values
 	case classification == types.BusinessLogic:
-		return types.Requirement
+		return types.Requirement // tokens from business logic documents are treated as requirements
 	case classification == types.APIDiscussion:
-		return types.Service
+		return types.Service // tokens from API discussions are treated as service names
 	default:
-		return types.Dependency
+		return types.Dependency // everything else is a generic dependency
 	}
 }

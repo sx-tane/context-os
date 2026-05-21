@@ -1,39 +1,14 @@
+// Package pipelines defines the domain-level contract and result type for a full pipeline run.
+// The orchestration logic that calls internal stages lives in internal/pipeline.
 package pipelines
 
 import (
-	"context"
-
-	"github.com/sx-tane/context-os/domain/contracts"
-	"github.com/sx-tane/context-os/domain/types"
-	"github.com/sx-tane/context-os/internal/classification"
-	"github.com/sx-tane/context-os/internal/extraction"
-	"github.com/sx-tane/context-os/internal/graph"
-	"github.com/sx-tane/context-os/internal/identity"
-	"github.com/sx-tane/context-os/internal/ingestion"
-	"github.com/sx-tane/context-os/internal/normalization"
-	"github.com/sx-tane/context-os/internal/reasoning"
-	"github.com/sx-tane/context-os/internal/relationship"
+	"context-os/domain/entities" // CanonicalEntity accumulated during the run
+	"context-os/domain/types"    // Mismatch detected by the reasoning stage
 )
 
+// Result is the output produced by a full pipeline run.
 type Result struct {
-	Graph      *graph.ContextGraph `json:"graph"`
-	Mismatches []types.Mismatch    `json:"mismatches"`
-}
-
-func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.SourceRequest) (Result, error) {
-	events, err := sourcePipeline.Ingest(ctx, req)
-	if err != nil {
-		return Result{}, err
-	}
-	contextGraph := graph.New()
-	for _, event := range events {
-		doc := normalization.Normalize(event)
-		classified := classification.Classify(doc)
-		extracted := extraction.Extract(classified)
-		canonical := identity.Resolve(extracted)
-		relationships := relationship.Build(canonical)
-		contextGraph.AddEntities(canonical)
-		contextGraph.AddRelationships(relationships)
-	}
-	return Result{Graph: contextGraph, Mismatches: reasoning.DetectMismatches(contextGraph)}, nil
+	Entities   []entities.CanonicalEntity `json:"entities"`   // all canonical entities accumulated during the run
+	Mismatches []types.Mismatch           `json:"mismatches"` // delivery misalignments detected by the reasoning stage
 }

@@ -1,0 +1,58 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment files — ignore real env files but keep the example template
+.env
+.env.*
+!.env.example
+
+# Go
+bin/
+*.test
+*.out
+coverage.out
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Python packaging artifacts
+*.egg-info/
+dist/
+build/
+
+# Frontend / Bun / Node
+node_modules/
+apps/frontend/.svelte-kit/
+apps/frontend/dist/
+apps/frontend/.vite/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local runtime data (keep scaffolding READMEs)
+storage/raw/**
+storage/parsed/**
+storage/snapshots/**
+storage/embeddings/**
+!storage/raw/README.md
+!storage/parsed/README.md
+!storage/snapshots/README.md
+!storage/embeddings/README.md

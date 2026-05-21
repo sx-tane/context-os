@@ -18,10 +18,10 @@ type CanonicalEntity struct {
 
 ## Field Meaning
 
-| Field | Meaning |
-| --- | --- |
-| `Entity` | Canonical entity payload, including aliases and metadata. |
-| `Confidence` | Resolution confidence from 0 to 1. Current exact canonical-key grouping uses `1`. |
+| Field        | Meaning                                                                               |
+| ------------ | ------------------------------------------------------------------------------------- |
+| `Entity`     | Canonical entity payload, including aliases and metadata.                             |
+| `Confidence` | Resolution confidence from 0 to 1. Current exact canonical-key grouping uses `1`.     |
 | `NeedsHuman` | Manual-review flag for ambiguous merges. Current exact matching sets this to `false`. |
 
 ## Produced By
@@ -30,9 +30,9 @@ type CanonicalEntity struct {
 
 ```mermaid
 flowchart LR
-  extracted[[]types.Entity]
+  extracted["[]types.Entity"]
   identity[identity.Resolve]
-  canonical[[]entities.CanonicalEntity]
+  canonical["[]entities.CanonicalEntity"]
 
   extracted --> identity --> canonical
 ```

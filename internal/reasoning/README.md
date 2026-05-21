@@ -5,18 +5,18 @@ The reasoning domain analyzes the context graph and emits delivery mismatch find
 ## Responsibility
 
 - Inspect canonical entities and relationships.
-- Detect likely FE/BE or delivery understanding mismatches.
+- Detect cross-layer context misalignment and delivery understanding gaps.
 - Produce actionable `types.Mismatch` findings.
 
 ## Input And Output
 
 ```mermaid
 flowchart LR
-  graph[ContextGraph]
+  ctxgraph[ContextGraph]
   detect[DetectMismatches]
-  mismatches[[]Mismatch]
+  mismatches["[]Mismatch"]
 
-  graph --> detect --> mismatches
+  ctxgraph --> detect --> mismatches
 ```
 
 ## Key API
@@ -39,19 +39,19 @@ The emitted finding uses:
 - `Summary`: `Potential delivery mismatch around <entity name>`
 - `EntityIDs`: the single matching entity ID
 - `Severity`: `medium`
-- `Recommended`: confirmation guidance for FE and BE understanding
+- `Recommended`: confirmation guidance across knowledge layers (presentation, service, PMO)
 
 ## Dependencies
 
 ```mermaid
 flowchart TD
   reasoning[internal/reasoning]
-  graph[internal/graph]
+  ctxgraph[internal/graph]
   types[domain/types]
   presentation[internal/presentation]
   pipeline[domain/pipelines]
 
-  reasoning --> graph
+  reasoning --> ctxgraph
   reasoning --> types
   presentation --> reasoning
   pipeline --> reasoning
@@ -65,14 +65,14 @@ mismatches := reasoning.DetectMismatches(contextGraph)
 
 ## Implementation Notes
 
-- This is intentionally explainable but not production-complete. It is the first deterministic rule for FE/BE drift detection.
+- This is intentionally explainable but not production-complete. It is the first deterministic rule for cross-layer context drift detection.
 - Production findings must include confidence, impact, and evidence back to source artifacts.
 - Avoid opaque AI-only findings. AI output should support or rank evidence, not replace provenance.
 - Add tests for every detection rule because reasoning changes directly affect the first production success metric.
 
 ## Production Requirements
 
-- Detect FE/BE contract drift, PMO status drift, requirement gaps, outdated implementation assumptions, and dependency risks.
+- Detect cross-layer contract drift, PMO status drift, requirement gaps, outdated implementation assumptions, and dependency risks.
 - Emit confidence, impact, affected roles, evidence, severity, and recommended action for every finding.
 - Keep false-positive tracking and regression fixtures for real or realistic delivery artifacts.
 - Treat execution output as supporting evidence only when it can be traced and reviewed.

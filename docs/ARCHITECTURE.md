@@ -1,26 +1,26 @@
 # ContextOS Architecture
 
-ContextOS is a production-oriented, local-first context synchronization platform. Its first production success metric is narrow and concrete: detect real frontend and backend misunderstanding automatically with traceable evidence, confidence, impact, and recommended action.
+ContextOS is a production-oriented, local-first context synchronization platform. Its first production success metric is narrow and concrete: detect real cross-layer context misalignment automatically with traceable evidence, confidence, impact, and recommended action.
 
 This document is the fast path into the codebase. It explains the production domain flow, points to each stage, names the contracts that must stay stable, and separates target behavior from current implementation status.
 
 ## Domain Map
 
 ```mermaid
-flowchart LR
-  source[Source connectors]
+flowchart TD
+  source[Source]
   ingestion[Ingestion]
   normalization[Normalization]
   classification[Classification]
   extraction[Extraction]
-  identity[Identity resolution]
+  identity[Identity Resolution]
   relationship[Relationship]
-  graph[Context graph]
+  ctxgraph[Context Graph]
   reasoning[Reasoning]
   execution[Execution]
   presentation[Presentation]
 
-  source --> ingestion --> normalization --> classification --> extraction --> identity --> relationship --> graph --> reasoning --> presentation
+  source --> ingestion --> normalization --> classification --> extraction --> identity --> relationship --> ctxgraph --> reasoning --> presentation
   reasoning -. optional local AI work .-> execution
   execution -. analysis evidence .-> reasoning
 ```
@@ -44,79 +44,80 @@ sequenceDiagram
 
   User->>Pipeline: SourceRequest or scheduled sync
   Pipeline->>Ingestion: Ingest(ctx, req)
-  Ingestion-->>Pipeline: []events.Event
+  Ingestion-->>Pipeline: events.Event list
   loop each event
     Pipeline->>Normalization: Normalize(event)
     Normalization-->>Pipeline: NormalizedDocument
     Pipeline->>Classification: Classify(doc)
     Classification-->>Pipeline: ClassifiedDocument
     Pipeline->>Extraction: Extract(classified)
-    Extraction-->>Pipeline: []Entity
+    Extraction-->>Pipeline: Entity list
     Pipeline->>Identity: Resolve(entities)
-    Identity-->>Pipeline: []CanonicalEntity
+    Identity-->>Pipeline: CanonicalEntity list
     Pipeline->>Relationship: Build(canonical)
-    Relationship-->>Pipeline: []Relationship
+    Relationship-->>Pipeline: Relationship list
     Pipeline->>Graph: AddEntities + AddRelationships
   end
   Pipeline->>Reasoning: DetectMismatches(graph)
-  Reasoning-->>Pipeline: []Mismatch
+  Reasoning-->>Pipeline: Mismatch list
   Pipeline-->>User: Graph snapshot + explainable findings
 ```
 
 ## Stage Responsibilities
 
-| Stage | Responsibility | Code | Notes |
-| --- | --- | --- | --- |
-| Source | Convert external systems into connector events. | [internal/source](../internal/source/README.md) | Production connectors must be idempotent, replay-safe, and provenance-rich. |
-| Ingestion | Fan source requests through registered connectors and preserve source traceability. | [internal/ingestion](../internal/ingestion/README.md) | Production ingestion needs stable event IDs, durable raw capture, and retry semantics. |
-| Normalization | Convert event envelopes into normalized documents. | [internal/normalization](../internal/normalization/README.md) | Production normalization must be deterministic and reproducible from raw source data. |
-| Classification | Assign routing classification, confidence, and evidence. | [internal/classification](../internal/classification/README.md) | Production classification must include explainable rule/model evidence. |
-| Extraction | Extract candidate domain entities from text and structured payloads. | [internal/extraction](../internal/extraction/README.md) | Production extraction must preserve offsets, source spans, and extraction confidence. |
-| Identity | Merge candidate entities into canonical identities. | [internal/identity](../internal/identity/README.md) | Core domain. Production identity resolution must handle aliases, multilingual names, conflicts, and human review. |
-| Relationship | Build evidence-backed links between resolved entities. | [internal/relationship](../internal/relationship/README.md) | Production relationships need typed edge vocabulary, confidence, and provenance. |
-| Graph | Materialize canonical entities and relationships as persistent organizational memory. | [internal/graph](../internal/graph/README.md) | Production graph needs durable storage, history, replay, and query support. |
-| Reasoning | Detect misalignment and produce explainable findings. | [internal/reasoning](../internal/reasoning/README.md) | Findings must include confidence, impact, evidence, severity, and recommended action. |
-| Execution | Provide local hidden AI orchestration boundary. | [internal/execution](../internal/execution/README.md) | Execution results are assistive evidence and must be auditable. |
-| Presentation | Render role-specific outputs. | [internal/presentation](../internal/presentation/README.md) | PMO, frontend, backend, QA, and architecture views must preserve evidence and actionability. |
+| Stage          | Responsibility                                                                        | Code                                                            | Notes                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Source         | Convert external systems into connector events.                                       | [internal/source](../internal/source/README.md)                 | Production connectors must be idempotent, replay-safe, and provenance-rich.                                       |
+| Ingestion      | Fan source requests through registered connectors and preserve source traceability.   | [internal/ingestion](../internal/ingestion/README.md)           | Production ingestion needs stable event IDs, durable raw capture, and retry semantics.                            |
+| Normalization  | Convert event envelopes into normalized documents.                                    | [internal/normalization](../internal/normalization/README.md)   | Production normalization must be deterministic and reproducible from raw source data.                             |
+| Classification | Assign routing classification, confidence, and evidence.                              | [internal/classification](../internal/classification/README.md) | Production classification must include explainable rule/model evidence.                                           |
+| Extraction     | Extract candidate domain entities from text and structured payloads.                  | [internal/extraction](../internal/extraction/README.md)         | Production extraction must preserve offsets, source spans, and extraction confidence.                             |
+| Identity       | Merge candidate entities into canonical identities.                                   | [internal/identity](../internal/identity/README.md)             | Core domain. Production identity resolution must handle aliases, multilingual names, conflicts, and human review. |
+| Relationship   | Build evidence-backed links between resolved entities.                                | [internal/relationship](../internal/relationship/README.md)     | Production relationships need typed edge vocabulary, confidence, and provenance.                                  |
+| Graph          | Materialize canonical entities and relationships as persistent organizational memory. | [internal/graph](../internal/graph/README.md)                   | Production graph needs durable storage, history, replay, and query support.                                       |
+| Reasoning      | Detect misalignment and produce explainable findings.                                 | [internal/reasoning](../internal/reasoning/README.md)           | Findings must include confidence, impact, evidence, severity, and recommended action.                             |
+| Execution      | Provide local hidden AI orchestration boundary.                                       | [internal/execution](../internal/execution/README.md)           | Execution results are assistive evidence and must be auditable.                                                   |
+| Presentation   | Render role-specific outputs.                                                         | [internal/presentation](../internal/presentation/README.md)     | PMO, presentation layer, service layer, QA, and architecture views must preserve evidence and actionability.      |
 
 ## Domain Contracts
 
 The stable domain layer is split by contract type.
 
-| Package | Purpose |
-| --- | --- |
+| Package                                           | Purpose                                                                            |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | [domain/contracts](../domain/contracts/README.md) | Source connector capabilities, request envelope, and MCPSourceConnector interface. |
-| [domain/entities](../domain/entities/README.md) | Canonical entity wrapper with confidence and human-review state. |
-| [domain/events](../domain/events/README.md) | Event envelope and pipeline event type constants. |
-| [domain/pipelines](../domain/pipelines/README.md) | Current orchestration boundary and production pipeline contract direction. |
-| [domain/types](../domain/types/README.md) | Documents, classifications, entities, relationships, and mismatches. |
+| [domain/entities](../domain/entities/README.md)   | Canonical entity wrapper with confidence and human-review state.                   |
+| [domain/events](../domain/events/README.md)       | Event envelope and pipeline event type constants.                                  |
+| [domain/pipelines](../domain/pipelines/README.md) | Current orchestration boundary and production pipeline contract direction.         |
+| [domain/types](../domain/types/README.md)         | Documents, classifications, entities, relationships, and mismatches.               |
 
 ## Dependency Direction
 
 ```mermaid
 flowchart TD
-  contracts[domain/contracts]
-  events[domain/events]
-  types[domain/types]
-  entities[domain/entities]
-  pipeline[domain/pipelines]
+  subgraph INT[Internal Layer — stage implementations]
+    direction LR
+    source[source]
+    ingestion[ingestion]
+    normalization[normalization]
+    classification[classification]
+    extraction[extraction]
+    identity[identity]
+    relationship[relationship]
+    ctxgraph[graph]
+    reasoning[reasoning]
+    execution[execution]
+    presentation[presentation]
+  end
 
-  source[internal/source]
-  ingestion[internal/ingestion]
-  normalization[internal/normalization]
-  classification[internal/classification]
-  extraction[internal/extraction]
-  identity[internal/identity]
-  relationship[internal/relationship]
-  graph[internal/graph]
-  reasoning[internal/reasoning]
-  execution[internal/execution]
-  presentation[internal/presentation]
-
-  contracts --> events
-  entities --> types
-  pipeline --> contracts
-  pipeline --> types
+  subgraph DOM[Domain Layer — stable contracts]
+    direction LR
+    contracts[contracts]
+    events[events]
+    types[types]
+    entities[entities]
+    pipeline[pipelines]
+  end
 
   source --> contracts
   source --> events
@@ -130,9 +131,9 @@ flowchart TD
   identity --> types
   relationship --> entities
   relationship --> types
-  graph --> entities
-  graph --> types
-  reasoning --> graph
+  ctxgraph --> entities
+  ctxgraph --> types
+  reasoning --> ctxgraph
   reasoning --> types
   presentation --> types
   pipeline --> ingestion
@@ -141,18 +142,38 @@ flowchart TD
   pipeline --> extraction
   pipeline --> identity
   pipeline --> relationship
-  pipeline --> graph
+  pipeline --> ctxgraph
   pipeline --> reasoning
 ```
 
-Domain packages define portable contracts and primitives. Internal packages implement behavior. Keep new behavior on the internal side unless it changes the shared contract intentionally.
+**Rules:**
+
+- Internal packages import from domain only — domain never imports internal.
+- No internal stage imports another internal stage directly.
+- `pipelines` is the only orchestrator; it wires all stages together.
+
+**What each internal package imports from domain:**
+
+| Internal package | Imports                                   |
+| ---------------- | ----------------------------------------- |
+| source           | contracts, events                         |
+| ingestion        | contracts, events                         |
+| normalization    | events, types                             |
+| classification   | types                                     |
+| extraction       | types                                     |
+| identity         | entities, types                           |
+| relationship     | entities, types                           |
+| graph            | entities, types                           |
+| reasoning        | types (plus graph as a dependency)        |
+| presentation     | types                                     |
+| pipelines        | contracts, types, and all internal stages |
 
 ## Data Shape Through The Pipeline
 
 ```mermaid
 flowchart LR
   req[SourceRequest]
-  event[events.Event]
+  ev[events.Event]
   doc[NormalizedDocument]
   classified[ClassifiedDocument]
   entity[Entity]
@@ -161,7 +182,7 @@ flowchart LR
   cg[ContextGraph]
   mismatch[Mismatch]
 
-  req --> event --> doc --> classified --> entity --> canonical --> rel --> cg --> mismatch
+  req --> ev --> doc --> classified --> entity --> canonical --> rel --> cg --> mismatch
   canonical --> cg
 ```
 
@@ -169,22 +190,22 @@ flowchart LR
 
 Production readiness means the system can be replayed, audited, and trusted locally without hiding uncertain inference behind vague summaries.
 
-| Area | Production Requirement |
-| --- | --- |
-| Idempotency | Replaying the same source artifact must not create duplicate canonical facts. |
-| Provenance | Every document, entity, relationship, and mismatch must trace back to source artifacts. |
-| Confidence | Classification, extraction, identity, relationship, and reasoning outputs must expose confidence. |
-| Evidence | Findings must include evidence references, not only generated summaries. |
-| Impact | Mismatches must explain likely delivery impact for FE, BE, PMO, QA, and architecture. |
-| Replay | Pipeline stages must support deterministic replay from raw or normalized artifacts. |
-| Local-first | The default path must work without SaaS-only dependencies. |
-| Human review | Ambiguous identity merges and high-impact findings must support manual review state. |
+| Area         | Production Requirement                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Idempotency  | Replaying the same source artifact must not create duplicate canonical facts.                                                 |
+| Provenance   | Every document, entity, relationship, and mismatch must trace back to source artifacts.                                       |
+| Confidence   | Classification, extraction, identity, relationship, and reasoning outputs must expose confidence.                             |
+| Evidence     | Findings must include evidence references, not only generated summaries.                                                      |
+| Impact       | Mismatches must explain likely delivery impact for all knowledge participants (presentation, service, PMO, QA, architecture). |
+| Replay       | Pipeline stages must support deterministic replay from raw or normalized artifacts.                                           |
+| Local-first  | The default path must work without SaaS-only dependencies.                                                                    |
+| Human review | Ambiguous identity merges and high-impact findings must support manual review state.                                          |
 
 ## Current Implementation Status
 
 - Source connectors emit `document.ingested` events with connector metadata.
 - Normalization trims title and body and records a fresh UTC normalization timestamp.
-- Classification uses deterministic keyword ordering; blocker and decision terms win before risk or FE/BE/API routing terms.
+- Classification uses deterministic keyword ordering; blocker and decision terms win before risk or presentation/service/API routing terms.
 - Extraction finds alphanumeric tokens and infers entity type from suffixes, token content, and document classification.
 - Identity resolution canonicalizes by lowercasing and removing non-alphanumeric separators.
 - Relationship building links adjacent canonical entities that came from the same source document.

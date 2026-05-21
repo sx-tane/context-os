@@ -29,16 +29,16 @@ func Classify(doc types.NormalizedDocument) types.ClassifiedDocument
 
 The classifier lowercases `Title + " " + Body` and applies the first matching rule.
 
-| Match | Classification | Confidence |
-| --- | --- | --- |
-| `blocker`, `blocked` | `Blocker` | `0.9` |
-| `decision`, `decided` | `Decision` | `0.85` |
-| `risk`, `delay` | `PMORisk` | `0.8` |
-| `frontend`, `fe`, `screen` | `FEConcern` | `0.75` |
-| `backend`, `be`, `database` | `BEConcern` | `0.75` |
-| `api`, `endpoint` | `APIDiscussion` | `0.75` |
-| `requirement`, `business logic` | `BusinessLogic` | `0.75` |
-| no match | `Unknown` | `0.4` |
+| Match                                            | Classification    | Confidence |
+| ------------------------------------------------ | ----------------- | ---------- |
+| `blocker`, `blocked`                             | `Blocker`         | `0.9`      |
+| `decision`, `decided`                            | `Decision`        | `0.85`     |
+| `risk`, `delay`                                  | `PMORisk`         | `0.8`      |
+| `frontend`, `fe`, `screen`, `presentation layer` | `ConsumerConcern` | `0.75`     |
+| `backend`, `be`, `database`, `service layer`     | `ProducerConcern` | `0.75`     |
+| `api`, `endpoint`                                | `APIDiscussion`   | `0.75`     |
+| `requirement`, `business logic`                  | `BusinessLogic`   | `0.75`     |
+| no match                                         | `Unknown`         | `0.4`      |
 
 ## Dependencies
 

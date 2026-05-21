@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "esbenp.prettier-vscode",
+    "svelte.svelte-vscode",
+    "golang.go",
+    "dbaeumer.vscode-eslint",
+    "mhutchie.git-graph",
+    "ms-azuretools.vscode-containers",
+    "ms-python.python",
+    "ms-python.black-formatter",
+    "bierner.markdown-mermaid",
+    "tomoki1207.pdf"
+  ]
+}

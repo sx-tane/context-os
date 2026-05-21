@@ -1,0 +1,30 @@
+# Stage 1: build the Go binary from the repo root module
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /build
+
+# Copy module definition first so the layer is cached when only source changes
+COPY go.mod ./
+
+# Copy only the source directories needed to compile the api binary
+COPY apps/api/   ./apps/api/
+COPY domain/     ./domain/
+COPY internal/   ./internal/
+
+# Produce a statically linked binary safe to run on scratch/alpine
+RUN CGO_ENABLED=0 GOOS=linux go build -o api ./apps/api/
+
+# Stage 2: minimal runtime image
+FROM alpine:3.20
+
+RUN addgroup -S appgroup && adduser -S -G appgroup appuser
+
+WORKDIR /app
+
+COPY --from=builder /build/api .
+
+USER appuser
+
+EXPOSE 8080
+
+CMD ["./api"]
