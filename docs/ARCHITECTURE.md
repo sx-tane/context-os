@@ -25,22 +25,6 @@ flowchart TD
   execution -. analysis evidence .-> reasoning
 ```
 
-**What each stage does:**
-
-| Stage                   | Responsibility                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Source**              | Connects to GitHub, Jira, Slack, OpenAPI, Excel, and Filesystem and emits raw events                          |
-| **Ingestion**           | Receives connector events and captures raw source data with source traceability                               |
-| **Normalization**       | Converts raw events into a consistent canonical document schema                                               |
-| **Classification**      | Identifies the content type and routes the document to the right extraction path                              |
-| **Extraction**          | Pulls out candidate entities, intents, and business rules from document text                                  |
-| **Identity Resolution** | Merges duplicate entity names from different sources into single canonical identities                         |
-| **Relationship**        | Links related canonical entities into typed, evidence-backed graph edges                                      |
-| **Context Graph**       | Materializes all entities and relationships into a queryable in-memory structure                              |
-| **Reasoning**           | Analyzes the graph and detects cross-layer context misalignment, produces findings with evidence              |
-| **Execution**           | Runs optional local AI tasks that generate supporting evidence for reasoning                                  |
-| **Presentation**        | Shapes findings into role-specific summaries for PMO, presentation layer, service layer, QA, and architecture |
-
 ## Production Runtime Flow
 
 The current orchestration entry point is `Run`, and the target architecture is production-grade and event-driven. The runtime must preserve stable identifiers, provenance, replay safety, and explainable findings from source ingestion through presentation.

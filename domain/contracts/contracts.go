@@ -16,6 +16,7 @@ const (
 	CapabilityAPISpec     Capability = "api_spec"     // connector can read API specifications
 	CapabilitySpreadsheet Capability = "spreadsheet" // connector can read spreadsheets
 	CapabilityFiles       Capability = "files"        // connector can read filesystem files
+	CapabilityDocs        Capability = "docs"          // connector can read documentation pages
 )
 
 // SourceRequest carries the input a connector needs to locate and read a source artifact.

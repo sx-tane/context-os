@@ -34,34 +34,38 @@ Every stage-specific issue should satisfy these gates before it is considered pr
 
 ## Issue Map
 
-| Issue                                                  | Production Acceptance                                                                                                         |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| #3 Main Group: Foundation and Contracts                | Contracts are stable, versionable, and documented with ownership boundaries.                                                  |
-| #4 Issue 1: Scaffold ContextOS repository structure    | Repository structure maps cleanly to source, pipeline, graph, reasoning, execution, and presentation domains.                 |
-| #5 Issue 2: Define domain event contracts              | Event contracts include stable IDs, source provenance, timestamps, metadata, replay semantics, and migration guidance.        |
-| #6 Issue 3: Build MCP source connector interface       | Connector interface supports capabilities, idempotent ingestion, source cursors, cancellation, and structured errors.         |
-| #24 Main Group: MCP Source Connectors                  | All connectors follow the shared contract, expose stable artifact IDs, and support replay without duplication.                |
-| #7 Issue 4: Build GitHub MCP connector                 | GitHub connector ingests repositories, issues, PRs, and relevant metadata with stable external IDs.                           |
-| #8 Issue 5: Build Slack MCP connector                  | Slack connector ingests messages, threads, channels, timestamps, and participants with replay-safe cursors.                   |
-| #9 Issue 6: Build Jira MCP connector                   | Jira connector ingests issues, comments, status, fields, links, and history with stable keys.                                 |
-| #10 Issue 7: Build OpenAPI MCP connector               | OpenAPI connector extracts endpoints, schemas, fields, enums, versions, and contract provenance.                              |
-| #11 Issue 8: Build Excel MCP connector                 | Excel connector preserves workbook, sheet, row, column, and cell provenance for requirements and planning data.               |
-| #12 Issue 9: Build filesystem MCP connector            | Filesystem connector ingests files with content hashes, paths, modified times, and replay-safe snapshots.                     |
-| #25 Main Group: Core Intelligence Pipeline             | Normalization, classification, extraction, and identity resolution are deterministic, explainable, and tested together.       |
-| #13 Issue 10: Build normalization pipeline             | Normalization preserves source metadata, content hashes, canonical text, and reproducible document IDs.                       |
-| #14 Issue 11: Build classification engine              | Classification returns category, confidence, evidence, and rule/model provenance.                                             |
-| #15 Issue 12: Build extraction engine                  | Extraction returns typed entities with source spans, confidence, and metadata for structured and unstructured inputs.         |
-| #16 Issue 13: Build identity resolution engine         | Identity resolution supports aliases, naming conventions, multilingual names, confidence, conflicts, and human-review state.  |
-| #26 Main Group: Context Graph and Reasoning            | Graph and reasoning produce auditable findings with impact, evidence, confidence, and recommendation quality checks.          |
-| #17 Issue 14: Build relationship graph                 | Relationships use typed edge vocabulary, source evidence, confidence, and deterministic IDs.                                  |
-| #18 Issue 15: Build persistent context graph storage   | Graph storage supports snapshots, replay, history, querying, and local-first persistence.                                     |
-| #19 Issue 16: Build mismatch detection                 | Mismatch detection reports evidence, confidence, impact, severity, affected roles, and recommended action.                    |
-| #27 Main Group: Outputs and Execution                  | Execution and outputs preserve auditability and do not hide uncertain inference.                                              |
-| #20 Issue 17: Build PMO summary output                 | PMO summaries separate facts, risk, impact, confidence, and recommended decisions.                                            |
-| #21 Issue 18: Build hidden Codex execution integration | Codex execution is local-first, cancellable, traceable, and treated as assistive evidence.                                    |
-| #22 Issue 19: Build presentation layer                 | Presentation keeps role-specific views consistent with underlying evidence and graph state.                                   |
-| #28 Main Group: Production Validation                  | Validation proves the first production feature: cross-layer misalignment detection with evidence and low false-positive risk. |
-| #23 Issue 20: Validate first killer feature            | Validation uses real or realistic cross-layer artifacts, expected findings, false-positive tracking, and regression tests.    |
+| Issue                                                  | Production Acceptance                                                                                                                                |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #3 Main Group: Foundation and Contracts                | Contracts are stable, versionable, and documented with ownership boundaries.                                                                         |
+| #4 Issue 1: Scaffold ContextOS repository structure    | Repository structure maps cleanly to source, pipeline, graph, reasoning, execution, and presentation domains.                                        |
+| #5 Issue 2: Define domain event contracts              | Event contracts include stable IDs, source provenance, timestamps, metadata, replay semantics, and migration guidance.                               |
+| #6 Issue 3: Build MCP source connector interface       | Connector interface supports capabilities, idempotent ingestion, source cursors, cancellation, and structured errors.                                |
+| #24 Main Group: MCP Source Connectors                  | All connectors follow the shared contract, expose stable artifact IDs, and support replay without duplication.                                       |
+| #7 Issue 4: Build GitHub MCP connector                 | GitHub connector ingests repositories, issues, PRs, and relevant metadata with stable external IDs.                                                  |
+| #8 Issue 5: Build Slack MCP connector                  | Slack connector ingests messages, threads, channels, timestamps, and participants with replay-safe cursors.                                          |
+| #9 Issue 6: Build Jira MCP connector                   | Jira connector ingests issues, comments, status, fields, links, and history with stable keys.                                                        |
+| #10 Issue 7: Build OpenAPI MCP connector               | OpenAPI connector extracts endpoints, schemas, fields, enums, versions, and contract provenance.                                                     |
+| #11 Issue 8: Build Excel MCP connector                 | Excel connector preserves workbook, sheet, row, column, and cell provenance for requirements and planning data.                                      |
+| #12 Issue 9: Build filesystem MCP connector            | Filesystem connector ingests files with content hashes, paths, modified times, and replay-safe snapshots. Extracts text from .docx, .pdf, and .pptx. |
+| #30 Build Google Drive MCP connector                   | Google Drive connector ingests Docs, Sheets, and Slides with stable Drive file IDs and OAuth 2.0 credential isolation.                               |
+| #31 Build SharePoint / OneDrive MCP connector          | SharePoint connector ingests files via Microsoft Graph with MSAL auth, delta sync, and replay-safe item IDs.                                         |
+| #32 Build Confluence MCP connector                     | Confluence connector ingests pages from spaces with stable page IDs, version-based change detection, and HTML-to-text extraction.                    |
+| #33 Build Notion MCP connector                         | Notion connector ingests pages and database entries with stable page IDs, integration token auth, and recursive block extraction.                    |
+| #25 Main Group: Core Intelligence Pipeline             | Normalization, classification, extraction, and identity resolution are deterministic, explainable, and tested together.                              |
+| #13 Issue 10: Build normalization pipeline             | Normalization preserves source metadata, content hashes, canonical text, and reproducible document IDs.                                              |
+| #14 Issue 11: Build classification engine              | Classification returns category, confidence, evidence, and rule/model provenance.                                                                    |
+| #15 Issue 12: Build extraction engine                  | Extraction returns typed entities with source spans, confidence, and metadata for structured and unstructured inputs.                                |
+| #16 Issue 13: Build identity resolution engine         | Identity resolution supports aliases, naming conventions, multilingual names, confidence, conflicts, and human-review state.                         |
+| #26 Main Group: Context Graph and Reasoning            | Graph and reasoning produce auditable findings with impact, evidence, confidence, and recommendation quality checks.                                 |
+| #17 Issue 14: Build relationship graph                 | Relationships use typed edge vocabulary, source evidence, confidence, and deterministic IDs.                                                         |
+| #18 Issue 15: Build persistent context graph storage   | Graph storage supports snapshots, replay, history, querying, and local-first persistence.                                                            |
+| #19 Issue 16: Build mismatch detection                 | Mismatch detection reports evidence, confidence, impact, severity, affected roles, and recommended action.                                           |
+| #27 Main Group: Outputs and Execution                  | Execution and outputs preserve auditability and do not hide uncertain inference.                                                                     |
+| #20 Issue 17: Build PMO summary output                 | PMO summaries separate facts, risk, impact, confidence, and recommended decisions.                                                                   |
+| #21 Issue 18: Build hidden Codex execution integration | Codex execution is local-first, cancellable, traceable, and treated as assistive evidence.                                                           |
+| #22 Issue 19: Build presentation layer                 | Presentation keeps role-specific views consistent with underlying evidence and graph state.                                                          |
+| #28 Main Group: Production Validation                  | Validation proves the first production feature: cross-layer misalignment detection with evidence and low false-positive risk.                        |
+| #23 Issue 20: Validate first killer feature            | Validation uses real or realistic cross-layer artifacts, expected findings, false-positive tracking, and regression tests.                           |
 
 ## Stage Readiness Matrix
 
@@ -83,10 +87,11 @@ Every stage-specific issue should satisfy these gates before it is considered pr
 
 1. Stabilize contracts and event identity: #3, #5, #6.
 2. Make source ingestion replay-safe before expanding reasoning: #24, #7, #8, #9, #10, #11, #12.
-3. Upgrade core intelligence outputs to include evidence and confidence: #25, #13, #14, #15, #16.
-4. Persist graph and produce explainable findings: #26, #17, #18, #19.
-5. Add execution and presentation outputs without losing provenance: #27, #20, #21, #22.
-6. Validate the first production feature using real cross-layer misalignment cases: #28, #23.
+3. Implement cloud and knowledge-base connectors: #30, #31, #32, #33.
+4. Upgrade core intelligence outputs to include evidence and confidence: #25, #13, #14, #15, #16.
+5. Persist graph and produce explainable findings: #26, #17, #18, #19.
+6. Add execution and presentation outputs without losing provenance: #27, #20, #21, #22.
+7. Validate the first production feature using real cross-layer misalignment cases: #28, #23.
 
 ## Documentation Rule
 

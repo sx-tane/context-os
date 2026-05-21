@@ -44,40 +44,7 @@ ContextOS is not a generic chatbot, coding assistant, or issue tracker replaceme
 
 ## System Architecture
 
-For the detailed implementation reference, domain diagrams, and per-stage guides, start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-### Layered Processing Pipeline
-
-```mermaid
-flowchart TB
-  subgraph R1[Collect and Parse]
-    direction LR
-    SRC[Source Connectors] --> P1[Ingestion] --> P2[Normalization] --> P3[Classification] --> P4[Extraction]
-  end
-
-  subgraph R2[Understand and Deliver]
-    direction RL
-    P5[Identity Resolution] --> P6[Relationship] --> P7[Context Graph] --> P8[Reasoning] --> OUT[Intelligence Outputs]
-  end
-
-  P4 --> P5
-```
-
-### Pipeline Stages and Domain Modules
-
-| Stage                   | What it does                                                                | Domain module                                                          |
-| ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Source**              | Connects to external tools and emits raw events and documents               | `internal/source` — connector abstraction and source-specific adapters |
-| **Ingestion**           | Receives raw events and captures metadata at intake                         | `internal/ingestion` — raw event/document intake and metadata capture  |
-| **Normalization**       | Converts raw input into a consistent canonical document schema              | `internal/normalization` — canonical schema and text normalization     |
-| **Classification**      | Identifies content type and routes it to extraction rules                   | `internal/classification` — content typing and signal routing          |
-| **Extraction**          | Pulls out candidate entities, intents, and business rules                   | `internal/extraction` — entity, intent, and rule extraction            |
-| **Identity Resolution** | Merges duplicate entity names into single canonical identities with aliases | `internal/identity` — canonical identity resolution and alias merging  |
-| **Relationship**        | Links canonical entities together as scored graph edges                     | `internal/relationship` — cross-entity linkage and edge scoring        |
-| **Context Graph**       | Materializes entities and relationships into a queryable structure          | `internal/graph` — graph materialization and traversal views           |
-| **Reasoning**           | Detects cross-layer context misalignment across knowledge participants      | `internal/reasoning` — detection logic and explanation assembly        |
-| **Execution**           | Orchestrates asynchronous intelligence tasks                                | `internal/execution` — async task orchestration                        |
-| **Presentation**        | Shapes outputs for API and UI consumption                                   | `internal/presentation` — output shaping for API and UI                |
+The pipeline processes source events through eleven deterministic stages from ingestion to presentation. For domain diagrams, stage contracts, dependency rules, and per-stage implementation guides, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Runtime Component Architecture
 
@@ -102,7 +69,7 @@ flowchart TD
   AW --> ST
 ```
 
-## Data Contracts and Storage Model
+## Storage Model
 
 Data is persisted across processing maturity levels:
 
@@ -111,7 +78,7 @@ Data is persisted across processing maturity levels:
 - snapshots: reproducible point-in-time context states
 - embeddings: vectorized semantic representations
 
-Domain contracts and primitives live in [domain/contracts](domain/contracts), [domain/entities](domain/entities), [domain/events](domain/events), [domain/pipelines](domain/pipelines), and [domain/types](domain/types).
+Domain contracts and package structure are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tech Stack
 
