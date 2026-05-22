@@ -55,8 +55,10 @@ type Event struct {
 
 // New creates an Event with replay-stable identity and provenance defaults.
 func New(eventType Type, source, subject, content string, metadata map[string]string) Event {
+	// Copy metadata so callers can mutate their input map without changing the event.
 	metadata = cloneMetadata(metadata)
 
+	// Prefer an explicit upstream source identifier, then fall back to subject/source.
 	sourceID := strings.TrimSpace(metadata[MetadataSourceID])
 	if sourceID == "" {
 		sourceID = strings.TrimSpace(subject)
@@ -65,11 +67,13 @@ func New(eventType Type, source, subject, content string, metadata map[string]st
 		sourceID = strings.TrimSpace(source)
 	}
 
+	// Reuse durable upstream event IDs when provided; otherwise derive deterministically.
 	id := strings.TrimSpace(metadata[MetadataEventID])
 	if id == "" {
 		id = stableID(eventType, source, sourceID, subject)
 	}
 
+	// Keep trace IDs stable by default so a replay is easy to correlate downstream.
 	traceID := strings.TrimSpace(metadata[MetadataTraceID])
 	if traceID == "" {
 		traceID = id
@@ -90,6 +94,7 @@ func New(eventType Type, source, subject, content string, metadata map[string]st
 }
 
 func cloneMetadata(metadata map[string]string) map[string]string {
+	// Always return a non-nil map to keep downstream usage simple.
 	out := make(map[string]string, len(metadata))
 	for key, value := range metadata {
 		out[key] = value
@@ -104,6 +109,7 @@ func stableID(eventType Type, source, sourceID, subject string) string {
 		strings.TrimSpace(sourceID),
 		strings.TrimSpace(subject),
 	}
+	// Use an unambiguous delimiter before hashing so part boundaries stay stable.
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "event:" + hex.EncodeToString(sum[:])
 }
