@@ -1,23 +1,24 @@
+// Package source provides shared MCP source connector behavior for concrete adapters.
 package source
 
 import (
-	"context" // provides cancellation and deadline for each ingestion call
-	"errors"  // used to construct a descriptive validation error
-	"strings" // used to check whether the request content or URI is blank
+	"context"
+	"errors"
+	"strings"
 
-	"context-os/domain/contracts" // Capability and SourceRequest types
-	"context-os/domain/events"    // Event type emitted after successful ingestion
+	"context-os/domain/contracts"
+	"context-os/domain/events"
 )
 
 // MCPConnector is the shared base connector all source adapters are built on.
 type MCPConnector struct {
-	name         string               // human-readable identifier for this connector
-	capabilities []contracts.Capability // list of data categories this connector supports
+	name         string
+	capabilities []contracts.Capability
 }
 
 // NewMCPConnector creates a connector with the given name and set of capabilities.
 func NewMCPConnector(name string, capabilities ...contracts.Capability) MCPConnector {
-	return MCPConnector{name: name, capabilities: capabilities} // store name and capabilities for later use
+	return MCPConnector{name: name, capabilities: capabilities}
 }
 
 // Name returns the connector's identifier so the pipeline can trace events back to their source.
@@ -25,26 +26,51 @@ func (c MCPConnector) Name() string { return c.name }
 
 // Capabilities returns a copy of the capability list so callers cannot mutate the internal slice.
 func (c MCPConnector) Capabilities() []contracts.Capability {
-	out := make([]contracts.Capability, len(c.capabilities)) // allocate a new slice the same length
-	copy(out, c.capabilities)                                 // copy values so the original slice is protected
+	out := make([]contracts.Capability, len(c.capabilities))
+	copy(out, c.capabilities)
 	return out
 }
 
 // Ingest validates the request and emits a single DocumentIngested event.
 func (c MCPConnector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]events.Event, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err // respect cancellation before doing any work
+		return nil, c.connectorError(req, contracts.ErrorKindCanceled, errors.Is(err, context.DeadlineExceeded), err)
 	}
 	if strings.TrimSpace(req.Content) == "" && strings.TrimSpace(req.URI) == "" {
-		return nil, errors.New("mcp source request requires content or uri") // reject empty requests immediately
+		err := errors.New("source request requires content or uri")
+		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, err)
 	}
-	metadata := map[string]string{"connector": c.name, "mcp": "true"} // seed metadata with connector identity
+
+	metadata := map[string]string{
+		contracts.MetadataConnector: c.name,
+		contracts.MetadataMCP:       "true",
+	}
+	if req.URI != "" {
+		metadata[contracts.MetadataSourceURI] = req.URI
+	}
+	if req.Cursor != "" {
+		metadata[contracts.MetadataSourceCursor] = req.Cursor
+	}
 	for key, value := range req.Metadata {
-		metadata[key] = value // merge any caller-supplied metadata on top
+		metadata[key] = value
 	}
-	subject := req.URI // prefer the URI as the event subject because it is more stable than content
+
+	subject := req.URI
 	if subject == "" {
-		subject = c.name // fall back to the connector name when no URI is provided
+		subject = c.name
 	}
-	return []events.Event{events.New(events.DocumentIngested, c.name, subject, req.Content, metadata)}, nil // wrap everything in a single ingestion event
+
+	return []events.Event{events.New(events.DocumentIngested, c.name, subject, req.Content, metadata)}, nil
+}
+
+func (c MCPConnector) connectorError(req contracts.SourceRequest, kind contracts.ErrorKind, retryable bool, err error) error {
+	return &contracts.ConnectorError{
+		Connector:  c.name,
+		URI:        req.URI,
+		ObjectType: req.Metadata[contracts.MetadataObjectType],
+		ObjectID:   req.Metadata[contracts.MetadataObjectID],
+		Kind:       kind,
+		Retryable:  retryable,
+		Err:        err,
+	}
 }
