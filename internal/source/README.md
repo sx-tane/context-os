@@ -47,16 +47,33 @@ func (c MCPConnector) Ingest(ctx context.Context, req contracts.SourceRequest) (
 - Emits a single `document.ingested` event.
 - Returns structured `contracts.ConnectorError` values for cancellation and validation failures.
 
+### Cursor Meaning
+
+`Cursor` is connector replay state. It is close to a snapshot marker, but it should not be treated as the full source snapshot or document body. The source content still comes from `Content`, `URI`, or the real API call. The cursor only records the source position used for incremental reads and safe retries.
+
+Practical examples:
+
+- GitHub: the last API page cursor or latest processed event/issue update marker.
+- Slack: the last message timestamp read from a channel or thread.
+- Jira: the latest processed issue update timestamp or search pagination token.
+- Filesystem: a file version, modification watermark, or content hash used to detect whether rereading is needed.
+
+When the same `SourceRequest` is replayed with the same URI, content, cursor, and stable metadata, the connector should produce the same logical ingestion event. When a source has no cursor yet, keep it empty rather than inventing unstable values.
+
 ## Connector Wrappers
 
-| Package                                | Name         | Capability    |
-| -------------------------------------- | ------------ | ------------- |
-| [github](github/github.go)             | `github`     | `repository`  |
-| [slack](slack/slack.go)                | `slack`      | `messages`    |
-| [jira](jira/jira.go)                   | `jira`       | `issues`      |
-| [openapi](openapi/openapi.go)          | `openapi`    | `api_spec`    |
-| [excel](excel/excel.go)                | `excel`      | `spreadsheet` |
-| [filesystem](filesystem/filesystem.go) | `filesystem` | `files`       |
+| Package                                      | Name          | Capability    |
+| -------------------------------------------- | ------------- | ------------- |
+| [github](github/github.go)                   | `github`      | `repository`  |
+| [slack](slack/slack.go)                      | `slack`       | `messages`    |
+| [jira](jira/jira.go)                         | `jira`        | `issues`      |
+| [openapi](openapi/openapi.go)                | `openapi`     | `api_spec`    |
+| [excel](excel/excel.go)                      | `excel`       | `spreadsheet` |
+| [filesystem](filesystem/filesystem.go)       | `filesystem`  | `files`       |
+| [confluence](confluence/confluence.go)       | `confluence`  | `docs`        |
+| [googledrive](googledrive/googledrive.go)    | `googledrive` | `files`       |
+| [notion](notion/notion.go)                   | `notion`      | `docs`        |
+| [sharepoint](sharepoint/sharepoint.go)       | `sharepoint`  | `files`       |
 
 Each wrapper currently exposes:
 
