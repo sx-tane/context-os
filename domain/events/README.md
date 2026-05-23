@@ -37,6 +37,29 @@ type Event struct {
 }
 ```
 
+`Event` is the common envelope each pipeline stage reads or emits. It should preserve enough identity and provenance for replay, debugging, and downstream evidence bundles.
+
+| Property | Meaning | Example |
+| --- | --- | --- |
+| `ID` | Stable logical event identity. Prefer a durable upstream event ID through metadata; otherwise `New` derives one deterministically from type, source, source ID, and subject. | `event:...`, GitHub webhook delivery ID |
+| `TraceID` | Correlation ID for all events that belong to the same ingestion or pipeline run. Defaults to `ID` when no trace is provided. | `trace-local-run-2026-05-23`, same value across related events |
+| `Type` | Pipeline vocabulary value that tells the next stage what happened. | `document.ingested`, `mismatch.detected` |
+| `SchemaVersion` | Version of the event envelope contract. It is currently `v1`; breaking field changes should use a new version. | `v1` |
+| `Source` | Connector or stage that produced the event. This is the producer name, not necessarily the external artifact ID. | `github`, `normalization`, `reasoning` |
+| `SourceID` | Stable upstream artifact identity used for replay and provenance. If metadata does not provide it, `New` falls back to `Subject`, then `Source`. | `github:issue:42`, `slack:C123:1716400000.000100` |
+| `Subject` | Human-readable event subject for display, debugging, and routing context. It should point to what the event is about. | `repo://context-os/issues/42`, `Refund API mismatch` |
+| `Content` | Event body passed to the next stage. For source events this is the captured text; for later stages it can be the stage output summary or payload. | Issue body, normalized document text, mismatch summary |
+| `Metadata` | Extra provenance and correlation values that should travel with the event without changing the event contract. Keep it factual and source/stage-specific. | `event_id`, `source_id`, `trace_id`, `source_uri`, `source_cursor` |
+| `OccurredAt` | UTC time when this event envelope was created locally. It is for ordering/audit and is not part of stable replay identity. | `2026-05-23T01:06:23Z` |
+
+## Metadata Keys
+
+| Key | Purpose |
+| --- | --- |
+| `event_id` | Optional durable upstream event identity. When present, it becomes `Event.ID`. |
+| `source_id` | Optional stable upstream artifact identity. When present, it becomes `Event.SourceID`. |
+| `trace_id` | Optional correlation identity shared by related events. When present, it becomes `Event.TraceID`. |
+
 ## Constructor
 
 ```go
