@@ -1,4 +1,4 @@
-// Package contracts defines source connector contracts shared across pipeline stages.
+// Package contracts defines source connector contracts in the domain layer.
 package contracts
 
 import (

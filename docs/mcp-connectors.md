@@ -1,6 +1,6 @@
 # MCP Connector Architecture
 
-All external source integrations in ContextOS are MCP-first connectors. Each connector implements the shared `MCPSourceConnector` contract and converts source-specific input into `document.ingested` events.
+All external source integrations in ContextOS are MCP-first connectors. Each connector implements the domain `MCPSourceConnector` contract and converts source-specific input into `document.ingested` events.
 
 ## Phase 1 — local-first connectors
 

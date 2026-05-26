@@ -40,7 +40,7 @@ Every stage-specific issue should satisfy these gates before it is considered pr
 | #4 Issue 1: Scaffold ContextOS repository structure    | Repository structure maps cleanly to source, pipeline, graph, reasoning, execution, and presentation domains.                                        |
 | #5 Issue 2: Define domain event contracts              | Event contracts include stable IDs, source provenance, timestamps, metadata, replay semantics, and migration guidance.                               |
 | #6 Issue 3: Build MCP source connector interface       | Connector interface supports capabilities, idempotent ingestion, source cursors, cancellation, and structured errors.                                |
-| #24 Main Group: MCP Source Connectors                  | All connectors follow the shared contract, expose stable artifact IDs, and support replay without duplication.                                       |
+| #24 Main Group: MCP Source Connectors                  | All connectors follow the domain contract, expose stable artifact IDs, and support replay without duplication.                                       |
 | #7 Issue 4: Build GitHub MCP connector                 | GitHub connector ingests repositories, issues, PRs, and relevant metadata with stable external IDs.                                                  |
 | #8 Issue 5: Build Slack MCP connector                  | Slack connector ingests messages, threads, channels, timestamps, and participants with replay-safe cursors.                                          |
 | #9 Issue 6: Build Jira MCP connector                   | Jira connector ingests issues, comments, status, fields, links, and history with stable keys.                                                        |
