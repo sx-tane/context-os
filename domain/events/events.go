@@ -1,4 +1,4 @@
-// Package events defines the serializable event envelope shared by pipeline stages.
+// Package events defines the serializable domain event envelope used by pipeline stages.
 package events
 
 import (
