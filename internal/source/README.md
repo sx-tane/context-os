@@ -81,6 +81,31 @@ Each wrapper currently exposes:
 func NewConnector() contracts.MCPSourceConnector
 ```
 
+### GitHub Connector Metadata Mapping
+
+The GitHub connector enriches ingestion metadata from common GitHub URIs (`repo://`, `github://`, `https://github.com`, and `https://api.github.com/repos/...`).
+
+- repository artifact
+  - `object_type=repository`
+  - `object_id=<owner>/<repo>`
+  - `source_id=github:repository:<owner>/<repo>`
+- issue artifact
+  - `object_type=issue`
+  - `object_id=<owner>/<repo>#<number>`
+  - `source_id=github:issue:<owner>/<repo>#<number>`
+- pull request artifact
+  - `object_type=pull_request`
+  - `object_id=<owner>/<repo>#<number>`
+  - `source_id=github:pull_request:<owner>/<repo>#<number>`
+
+Additional enriched metadata keys:
+
+- `github_owner`
+- `github_repo`
+- `github_number` (issue/PR only)
+
+If request metadata already provides `object_type`, `object_id`, or `source_id`, the connector preserves those explicit values.
+
 ## Dependencies
 
 ```mermaid
