@@ -9,6 +9,7 @@ import (
 	githubsource "context-os/internal/source/github"
 )
 
+// TestNewConnectorExposesGitHubCapability verifies the GitHub connector exposes its expected identity and capability.
 func TestNewConnectorExposesGitHubCapability(t *testing.T) {
 	connector := githubsource.NewConnector()
 
@@ -22,6 +23,7 @@ func TestNewConnectorExposesGitHubCapability(t *testing.T) {
 	}
 }
 
+// TestIngestDerivesRepositoryMetadataFromURI verifies repository URIs produce stable GitHub repository metadata.
 func TestIngestDerivesRepositoryMetadataFromURI(t *testing.T) {
 	connector := githubsource.NewConnector()
 	req := contracts.SourceRequest{
@@ -59,6 +61,7 @@ func TestIngestDerivesRepositoryMetadataFromURI(t *testing.T) {
 	}
 }
 
+// TestIngestDerivesIssueAndPullRequestMetadata verifies issue and pull request URIs map to stable artifact metadata.
 func TestIngestDerivesIssueAndPullRequestMetadata(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -121,6 +124,7 @@ func TestIngestDerivesIssueAndPullRequestMetadata(t *testing.T) {
 	}
 }
 
+// TestIngestPreservesExplicitMetadataOverrides verifies caller-provided metadata takes precedence over derived values.
 func TestIngestPreservesExplicitMetadataOverrides(t *testing.T) {
 	connector := githubsource.NewConnector()
 	req := contracts.SourceRequest{

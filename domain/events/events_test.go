@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestEventVocabularyIncludesPipelineStages verifies all pipeline event constants keep their stable vocabulary values.
 func TestEventVocabularyIncludesPipelineStages(t *testing.T) {
 	// This table protects the event names other stages will publish and consume.
 	want := map[Type]string{
@@ -24,6 +25,7 @@ func TestEventVocabularyIncludesPipelineStages(t *testing.T) {
 	}
 }
 
+// TestNewCreatesReplayStableEnvelope verifies New preserves provenance and replay-stable IDs for the same input.
 func TestNewCreatesReplayStableEnvelope(t *testing.T) {
 	// Metadata can provide upstream provenance that should be copied into the envelope.
 	metadata := map[string]string{
@@ -66,6 +68,7 @@ func TestNewCreatesReplayStableEnvelope(t *testing.T) {
 	}
 }
 
+// TestNewDefaultsReplayIdentifiers verifies New generates fallback replay identifiers when metadata is absent.
 func TestNewDefaultsReplayIdentifiers(t *testing.T) {
 	// When callers do not pass metadata, New still creates stable IDs and a usable map.
 	event := New(DocumentNormalized, "normalization", "document-1", "body", nil)
@@ -85,6 +88,7 @@ func TestNewDefaultsReplayIdentifiers(t *testing.T) {
 	}
 }
 
+// TestNewAcceptsExplicitEventID verifies New honors upstream-provided durable event IDs.
 func TestNewAcceptsExplicitEventID(t *testing.T) {
 	// Connectors may already have a durable event ID from the upstream system.
 	event := New(EntityExtracted, "extraction", "document-1", "entity", map[string]string{

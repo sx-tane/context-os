@@ -17,6 +17,7 @@ import (
 	slacksource "context-os/internal/source/slack"
 )
 
+// TestMCPConnectorExposesIdentityAndCapabilities verifies connector name and capability exposure are stable and defensive.
 func TestMCPConnectorExposesIdentityAndCapabilities(t *testing.T) {
 	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
 
@@ -35,6 +36,7 @@ func TestMCPConnectorExposesIdentityAndCapabilities(t *testing.T) {
 	}
 }
 
+// TestMCPConnectorIngestEmitsDocumentIngestedEventWithProvenance verifies ingest emits a provenance-rich document.ingested event.
 func TestMCPConnectorIngestEmitsDocumentIngestedEventWithProvenance(t *testing.T) {
 	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
 	req := contracts.SourceRequest{
@@ -88,6 +90,7 @@ func TestMCPConnectorIngestEmitsDocumentIngestedEventWithProvenance(t *testing.T
 	}
 }
 
+// TestMCPConnectorIngestRejectsEmptyRequestWithStructuredError verifies validation failures return actionable ConnectorError values.
 func TestMCPConnectorIngestRejectsEmptyRequestWithStructuredError(t *testing.T) {
 	connector := source.NewMCPConnector("slack", contracts.CapabilityMessages)
 	req := contracts.SourceRequest{
@@ -115,6 +118,7 @@ func TestMCPConnectorIngestRejectsEmptyRequestWithStructuredError(t *testing.T) 
 	}
 }
 
+// TestMCPConnectorIngestRespectsCancellationWithStructuredError verifies context cancellation returns retryable canceled ConnectorError values.
 func TestMCPConnectorIngestRespectsCancellationWithStructuredError(t *testing.T) {
 	deadline := time.Now().Add(-time.Second)
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
@@ -138,6 +142,7 @@ func TestMCPConnectorIngestRespectsCancellationWithStructuredError(t *testing.T)
 	}
 }
 
+// TestRequiredSourceConnectorsImplementMCPContract verifies required connectors satisfy the MCP contract and emit ingestion events.
 func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 	tests := []struct {
 		name       string
