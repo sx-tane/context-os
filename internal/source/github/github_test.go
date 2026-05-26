@@ -2,6 +2,10 @@ package github_test
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"context-os/domain/contracts"
@@ -151,5 +155,87 @@ func TestIngestPreservesExplicitMetadataOverrides(t *testing.T) {
 	}
 	if event.SourceID != "custom-source-id" {
 		t.Fatalf("expected source_id override to be preserved, got %q", event.SourceID)
+	}
+}
+
+// TestIngestFetchesArtifactContentFromGitHubAPI verifies empty-content requests hydrate from GitHub API with replay metadata.
+func TestIngestFetchesArtifactContentFromGitHubAPI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/sx-tane/context-os/issues/7" {
+			t.Fatalf("unexpected api path %q", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
+			t.Fatalf("unexpected auth header %q", got)
+		}
+		if got := r.Header.Get("Accept"); !strings.Contains(got, "application/vnd.github+json") {
+			t.Fatalf("unexpected accept header %q", got)
+		}
+		w.Header().Set("ETag", "\"etag-1\"")
+		w.Header().Set("Last-Modified", "Mon, 26 May 2026 00:00:00 GMT")
+		_, _ = w.Write([]byte(`{"id":7,"updated_at":"2026-05-26T00:00:00Z","title":"issue","body":"real content"}`))
+	}))
+	defer server.Close()
+
+	connector := githubsource.NewConnector()
+	ingested, err := connector.Ingest(context.Background(), contracts.SourceRequest{
+		URI: "repo://sx-tane/context-os/issues/7",
+		Metadata: map[string]string{
+			"github_api_base_url": server.URL,
+			"github_token":        "token-123",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ingest returned error: %v", err)
+	}
+	if len(ingested) != 1 {
+		t.Fatalf("expected one ingestion event, got %d", len(ingested))
+	}
+
+	event := ingested[0]
+	if !strings.Contains(event.Content, `"id":7`) {
+		t.Fatalf("expected raw payload content, got %q", event.Content)
+	}
+	if event.Metadata["github_api_status"] != "200" {
+		t.Fatalf("expected github_api_status metadata, got %q", event.Metadata["github_api_status"])
+	}
+	if event.Metadata["github_etag"] != `"etag-1"` {
+		t.Fatalf("expected github_etag metadata, got %q", event.Metadata["github_etag"])
+	}
+	if event.Metadata[contracts.MetadataSourceCursor] != "2026-05-26T00:00:00Z" {
+		t.Fatalf("expected source cursor from updated_at, got %q", event.Metadata[contracts.MetadataSourceCursor])
+	}
+}
+
+// TestIngestReturnsStructuredErrorWhenGitHubAPIFails verifies API failures include actionable object provenance.
+func TestIngestReturnsStructuredErrorWhenGitHubAPIFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("upstream unavailable"))
+	}))
+	defer server.Close()
+
+	connector := githubsource.NewConnector()
+	_, err := connector.Ingest(context.Background(), contracts.SourceRequest{
+		URI: "repo://sx-tane/context-os/pulls/12",
+		Metadata: map[string]string{
+			"github_api_base_url": server.URL,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected structured connector error")
+	}
+
+	var connectorErr *contracts.ConnectorError
+	if !errors.As(err, &connectorErr) {
+		t.Fatalf("expected ConnectorError, got %T", err)
+	}
+	if connectorErr.ObjectType != "pull_request" {
+		t.Fatalf("expected pull_request object type, got %q", connectorErr.ObjectType)
+	}
+	if connectorErr.ObjectID != "sx-tane/context-os#12" {
+		t.Fatalf("expected pull request object ID, got %q", connectorErr.ObjectID)
+	}
+	if connectorErr.Kind != contracts.ErrorKindTemporary || !connectorErr.Retryable {
+		t.Fatalf("expected retryable temporary error, got %#v", connectorErr)
 	}
 }
