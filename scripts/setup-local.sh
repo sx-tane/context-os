@@ -38,7 +38,7 @@ append_if_missing() {
 install_base_packages() {
   info "Installing base utilities"
   sudo apt update
-  sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates
+  sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs npm
 }
 
 install_go() {
@@ -84,12 +84,56 @@ install_uv() {
   export PATH="$HOME/.local/bin:$PATH"
 }
 
+# Returns 0 (true) when running inside a headless, remote, or SSH environment.
+is_headless() {
+  [[ -n "${CODESPACES:-}" ]]                        && return 0
+  [[ -n "${VSCODE_REMOTE_CONTAINERS_SESSION:-}" ]]  && return 0
+  [[ -n "${SSH_TTY:-}" ]]                            && return 0
+  [[ -n "${SSH_CONNECTION:-}" ]]                     && return 0
+  [[ -z "${DISPLAY:-}" ]]                            && return 0
+  return 1
+}
+
+install_codex() {
+  info "Installing Codex CLI"
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "npm is required to install Codex CLI." >&2
+    exit 1
+  fi
+
+  if npm root -g >/dev/null 2>&1 && [[ -w "$(npm root -g)" ]]; then
+    npm install -g @openai/codex
+  else
+    sudo npm install -g @openai/codex
+  fi
+
+  info "Installing Codex GitHub and Slack plugins"
+  codex plugin add github@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install GitHub Codex plugin." >&2
+  codex plugin add slack@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Slack Codex plugin." >&2
+
+  if ! codex login status >/dev/null 2>&1; then
+    if is_headless; then
+      info "Headless/remote environment detected — starting Codex device auth login..."
+      echo "     Visit the URL shown below to approve access in your browser."
+      codex login --device-auth
+    else
+      info "Starting Codex login — your browser will open the authorization page..."
+      codex login
+    fi
+  else
+    info "Codex CLI already logged in."
+  fi
+}
+
 verify_tools() {
   info "Verifying installed tool versions"
   go version
   bun --version
   python3.12 --version
   uv --version
+  codex --version
 }
 
 validate_repo() {
@@ -121,6 +165,7 @@ main() {
   install_bun
   install_python
   install_uv
+  install_codex
   verify_tools
   validate_repo
 

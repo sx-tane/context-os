@@ -3,6 +3,7 @@ package request
 
 // GithubIngest is the JSON body accepted by POST /github/ingest.
 type GithubIngest struct {
-	URI   string `json:"uri"`
-	Token string `json:"token"`
+	URI      string `json:"uri"`
+	Token    string `json:"token"`
+	Provider string `json:"provider"`
 }

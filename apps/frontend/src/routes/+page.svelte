@@ -25,6 +25,7 @@
       probe(API_URL),
       probe(WORKER_URL),
     ]);
+    await Promise.all([checkGithubStatus(), checkSlackStatus()]);
   });
 
   const label: Record<ServiceStatus, string> = {
@@ -40,10 +41,16 @@
   };
 
   // GitHub MCP connector tester ----------------------------------------------
+  type IngestProvider = "token" | "codex";
+
   let uri = "https://github.com/sx-tane/context-os/issues/1";
   let token = "";
+  let githubProvider: IngestProvider = "token";
   let loading = false;
   let errorMessage = "";
+  let githubConnected = false;
+  let githubLogin = "";
+  let githubName = "";
   let result: {
     connector: string;
     capabilities: string[];
@@ -59,6 +66,20 @@
     metadata: Record<string, string>;
   } | null = null;
 
+  async function checkGithubStatus() {
+    try {
+      const res = await fetch(`${API_URL}/github/status`);
+      if (res.ok) {
+        const body = await res.json();
+        githubConnected = body?.connected === true;
+        githubLogin = body?.login ?? "";
+        githubName = body?.name ?? "";
+      }
+    } catch {
+      // ignore — connector falls back gracefully
+    }
+  }
+
   async function runIngest() {
     loading = true;
     errorMessage = "";
@@ -67,7 +88,11 @@
       const res = await fetch(`${API_URL}/github/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uri, token: token || undefined }),
+        body: JSON.stringify({
+          uri,
+          token: token || undefined,
+          provider: githubProvider,
+        }),
       });
       const body = await res.json();
       if (!res.ok) {
@@ -80,6 +105,72 @@
       errorMessage = err instanceof Error ? err.message : String(err);
     } finally {
       loading = false;
+    }
+  }
+
+  // Slack MCP connector tester -----------------------------------------------
+  let slackURI = "slack://C1234567890";
+  let slackToken = "";
+  let slackProvider: IngestProvider = "token";
+  let slackLoading = false;
+  let slackError = "";
+  let slackConnected = false;
+  let slackSource = "none"; // "env" | "oauth" | "none"
+  let slackTeamName = "";
+  let slackResult: {
+    connector: string;
+    capabilities: string[];
+    event: {
+      id: string;
+      type: string;
+      source: string;
+      source_id: string;
+      subject: string;
+      occurred_at: string;
+    };
+    preview: string;
+    metadata: Record<string, string>;
+  } | null = null;
+
+  async function checkSlackStatus() {
+    try {
+      const res = await fetch(`${API_URL}/slack/status`);
+      if (res.ok) {
+        const body = await res.json();
+        slackConnected = body?.connected === true;
+        slackSource = body?.source ?? "none";
+        slackTeamName = body?.team_name ?? "";
+      }
+    } catch {
+      // ignore — connector falls back gracefully
+    }
+  }
+
+  async function runSlackIngest() {
+    slackLoading = true;
+    slackError = "";
+    slackResult = null;
+    try {
+      const res = await fetch(`${API_URL}/slack/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uri: slackURI,
+          token: slackToken || undefined,
+          provider: slackProvider,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        slackError =
+          body?.message ?? `Request failed with status ${res.status}`;
+        return;
+      }
+      slackResult = body;
+    } catch (err) {
+      slackError = err instanceof Error ? err.message : String(err);
+    } finally {
+      slackLoading = false;
     }
   }
 </script>
@@ -118,6 +209,27 @@
       <code>repo://owner/repo/...</code> URIs.
     </p>
 
+    {#if githubConnected}
+      <div class="connected-badge">
+        &#10003; Connected as
+        <strong>{githubLogin}{githubName ? ` (${githubName})` : ""}</strong>
+        via <code>GITHUB_TOKEN</code>
+      </div>
+    {/if}
+
+    <div class="mode-toggle" aria-label="GitHub ingestion provider">
+      <button
+        type="button"
+        class:active={githubProvider === "token"}
+        on:click={() => (githubProvider = "token")}>Token / env</button
+      >
+      <button
+        type="button"
+        class:active={githubProvider === "codex"}
+        on:click={() => (githubProvider = "codex")}>Codex CLI plugin</button
+      >
+    </div>
+
     <label>
       <span>URI</span>
       <input
@@ -127,33 +239,48 @@
       />
     </label>
 
-    <label>
-      <span
-        >GitHub token <span class="optional"
-          >(optional — needed for private repos or if rate-limited)</span
-        ></span
-      >
-      <input type="password" bind:value={token} placeholder="ghp_..." />
-    </label>
-    <details class="token-help">
-      <summary>How to get a GitHub token</summary>
-      <ol>
-        <li>
-          Go to <a
-            href="https://github.com/settings/tokens/new?scopes=repo&description=ContextOS"
-            target="_blank"
-            rel="noopener">github.com/settings/tokens</a
-          >
-        </li>
-        <li>Click <strong>Generate new token (classic)</strong></li>
-        <li>Tick the <strong>repo</strong> scope</li>
-        <li>Click <strong>Generate token</strong>, copy it, paste above</li>
-      </ol>
-      <p class="token-note">
-        Inside a Codespace you can leave this blank — <code>GITHUB_TOKEN</code> is
-        already set to your account automatically.
-      </p>
-    </details>
+    {#if githubProvider === "token"}
+      <label>
+        <span
+          >GitHub token <span class="optional"
+            >(optional — needed for private repos or if rate-limited)</span
+          ></span
+        >
+        <input type="password" bind:value={token} placeholder="ghp_..." />
+      </label>
+      <details class="token-help">
+        <summary>How to get a GitHub token</summary>
+        <ol>
+          <li>
+            Go to <a
+              href="https://github.com/settings/tokens/new?scopes=repo&description=ContextOS"
+              target="_blank"
+              rel="noopener">github.com/settings/tokens</a
+            >
+          </li>
+          <li>Click <strong>Generate new token (classic)</strong></li>
+          <li>Tick the <strong>repo</strong> scope</li>
+          <li>Click <strong>Generate token</strong>, copy it, paste above</li>
+        </ol>
+        <p class="token-note">
+          Inside a Codespace you can leave this blank — <code>GITHUB_TOKEN</code
+          > is already set to your account automatically.
+        </p>
+      </details>
+    {:else}
+      <div class="plugin-note">
+        Codex account required — run <code>codex login</code> once.
+      </div>
+      <label>
+        <span
+          >GitHub token <span class="optional"
+            >(optional — overrides the logged-in Codex account; lets you use a
+            different GitHub account per request)</span
+          ></span
+        >
+        <input type="password" bind:value={token} placeholder="ghp_..." />
+      </label>
+    {/if}
 
     <button on:click={runIngest} disabled={loading || !uri.trim()}>
       {loading ? "Ingesting..." : "Run ingest"}
@@ -194,6 +321,13 @@
           <pre>{JSON.stringify(result.metadata, null, 2)}</pre>
         </details>
 
+        {#if githubProvider === "codex" && result.metadata?.codex_log}
+          <details open>
+            <summary>Codex log</summary>
+            <pre>{result.metadata.codex_log}</pre>
+          </details>
+        {/if}
+
         <details>
           <summary>Content</summary>
           <pre>{(() => {
@@ -201,6 +335,157 @@
                 return JSON.stringify(JSON.parse(result.preview), null, 2);
               } catch {
                 return result.preview;
+              }
+            })()}</pre>
+        </details>
+      </div>
+    {/if}
+  </section>
+
+  <section class="card">
+    <h2>Slack MCP Connector</h2>
+    <p class="hint">
+      Ingest a Slack channel or message. Use <code>slack://CHANNEL_ID</code> for
+      a channel or <code>slack://CHANNEL_ID/TIMESTAMP</code> for a message.
+    </p>
+
+    <div class="mode-toggle" aria-label="Slack ingestion provider">
+      <button
+        type="button"
+        class:active={slackProvider === "token"}
+        on:click={() => (slackProvider = "token")}>Token / env</button
+      >
+      <button
+        type="button"
+        class:active={slackProvider === "codex"}
+        on:click={() => (slackProvider = "codex")}>Codex CLI plugin</button
+      >
+    </div>
+
+    {#if slackProvider === "token"}
+      {#if slackConnected && slackSource === "oauth"}
+        <div class="connected-badge">
+          &#10003; Connected to <strong>{slackTeamName}</strong> via saved token
+        </div>
+      {:else if slackConnected}
+        <div class="connected-badge">
+          &#10003; Connected via <code>SLACK_BOT_TOKEN</code>
+        </div>
+      {/if}
+      <details class="token-help">
+        <summary>How to get a Slack bot token</summary>
+        <ol>
+          <li>
+            Go to <a
+              href="https://api.slack.com/apps"
+              target="_blank"
+              rel="noopener">api.slack.com/apps</a
+            >
+            → <strong>Create New App → From scratch</strong>
+          </li>
+          <li>
+            Under <strong>OAuth &amp; Permissions</strong>, add Bot Token
+            Scopes:
+            <code>channels:history</code>,
+            <code>channels:read</code>
+          </li>
+          <li>Install the app to your workspace</li>
+          <li>Copy the Bot User OAuth Token and paste it below</li>
+        </ol>
+        <p class="token-note">
+          You can also set <code>SLACK_BOT_TOKEN</code> before starting the API.
+        </p>
+      </details>
+      <label>
+        <span
+          >Slack token <span class="optional"
+            >(optional when env token is set)</span
+          ></span
+        >
+        <input type="password" bind:value={slackToken} placeholder="xoxb-..." />
+      </label>
+    {:else}
+      <div class="plugin-note">
+        Codex account required — run <code>codex login</code> once.
+      </div>
+      <label>
+        <span
+          >Slack bot token <span class="optional"
+            >(optional — overrides the logged-in Codex account; lets you use a
+            different Slack workspace per request)</span
+          ></span
+        >
+        <input type="password" bind:value={slackToken} placeholder="xoxb-..." />
+      </label>
+    {/if}
+
+    <label style="margin-top:0.75rem">
+      <span>URI</span>
+      <input
+        type="text"
+        bind:value={slackURI}
+        placeholder="slack://C1234567890"
+      />
+    </label>
+
+    <button
+      on:click={runSlackIngest}
+      disabled={slackLoading || !slackURI.trim()}
+    >
+      {slackLoading ? "Ingesting..." : "Run ingest"}
+    </button>
+
+    {#if slackError}
+      <div class="error">{slackError}</div>
+    {/if}
+
+    {#if slackResult}
+      <div class="result">
+        <div class="kv">
+          <strong>Connector</strong><span>{slackResult.connector}</span>
+        </div>
+        <div class="kv">
+          <strong>Capabilities</strong><span
+            >{slackResult.capabilities.join(", ")}</span
+          >
+        </div>
+        <div class="kv">
+          <strong>Event ID</strong><span>{slackResult.event.id}</span>
+        </div>
+        <div class="kv">
+          <strong>Event type</strong><span>{slackResult.event.type}</span>
+        </div>
+        <div class="kv">
+          <strong>Source ID</strong><span>{slackResult.event.source_id}</span>
+        </div>
+        <div class="kv">
+          <strong>Subject</strong><span>{slackResult.event.subject}</span>
+        </div>
+        <div class="kv">
+          <strong>Occurred at</strong><span
+            >{slackResult.event.occurred_at}</span
+          >
+        </div>
+
+        <details open>
+          <summary>Metadata</summary>
+          <pre>{JSON.stringify(slackResult.metadata, null, 2)}</pre>
+        </details>
+
+        {#if slackProvider === "codex" && slackResult.metadata?.codex_log}
+          <details open>
+            <summary>Codex log</summary>
+            <pre>{slackResult.metadata.codex_log}</pre>
+          </details>
+        {/if}
+
+        <details>
+          <summary>Content</summary>
+          <pre>{(() => {
+              try {
+                return JSON.stringify(JSON.parse(slackResult.preview), null, 2);
+              } catch {
+                return slackResult.preview;
               }
             })()}</pre>
         </details>
@@ -308,6 +593,40 @@
     color: #9ca3af;
   }
 
+  .mode-toggle {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    margin: 0 0 0.75rem;
+    background: #f9fafb;
+  }
+
+  .mode-toggle button {
+    background: transparent;
+    color: #374151;
+    border: 0;
+    padding: 0.4rem 0.65rem;
+    border-radius: 4px;
+  }
+
+  .mode-toggle button.active {
+    background: #111827;
+    color: white;
+  }
+
+  .plugin-note {
+    margin: 0 0 0.75rem;
+    padding: 0.75rem 0.9rem;
+    background: #eff6ff;
+    color: #1e3a8a;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
   input {
     width: 100%;
     padding: 0.5rem 0.6rem;
@@ -382,5 +701,17 @@
     background: #f3f4f6;
     padding: 0.1rem 0.3rem;
     border-radius: 4px;
+  }
+
+  .connected-badge {
+    display: inline-block;
+    margin-bottom: 0.75rem;
+    padding: 0.3rem 0.75rem;
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
   }
 </style>

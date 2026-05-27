@@ -33,6 +33,60 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v codex >/dev/null 2>&1; then
+  if command -v npm >/dev/null 2>&1; then
+    echo "Codex CLI not found; installing @openai/codex globally..."
+    npm install -g @openai/codex
+  else
+    echo "[warn] Codex CLI is not installed and npm is unavailable."
+    echo "       Codex plugin ingestion will be disabled until codex is on PATH."
+  fi
+fi
+
+# Returns 0 (true) when running inside a headless, remote, or SSH environment.
+is_headless() {
+  [[ -n "${CODESPACES:-}" ]]                        && return 0
+  [[ -n "${VSCODE_REMOTE_CONTAINERS_SESSION:-}" ]]  && return 0
+  [[ -n "${SSH_TTY:-}" ]]                            && return 0
+  [[ -n "${SSH_CONNECTION:-}" ]]                     && return 0
+  [[ -z "${DISPLAY:-}" ]]                            && return 0
+  return 1
+}
+
+if command -v codex >/dev/null 2>&1; then
+  echo "Codex CLI: $(codex --version)"
+  echo "Ensuring Codex GitHub and Slack plugins are installed..."
+  codex plugin add github@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install GitHub Codex plugin."
+  codex plugin add slack@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Slack Codex plugin."
+  if ! codex login status >/dev/null 2>&1; then
+    if is_headless; then
+      echo
+      echo "╔══════════════════════════════════════════════════════════════╗"
+      echo "║  Codex CLI login required (remote / headless environment)   ║"
+      echo "║  Run this command in your terminal, then restart:           ║"
+      echo "║                                                              ║"
+      echo "║    codex login --device-auth                                ║"
+      echo "║                                                              ║"
+      echo "║  You will be shown a URL + code to approve in your browser. ║"
+      echo "╚══════════════════════════════════════════════════════════════╝"
+      echo
+    else
+      echo
+      echo "╔══════════════════════════════════════════════════════════════╗"
+      echo "║  Codex CLI login required                                   ║"
+      echo "║  Run this command in your terminal, then restart:           ║"
+      echo "║                                                              ║"
+      echo "║    codex login                                              ║"
+      echo "║                                                              ║"
+      echo "║  Your browser will open the Codex authorization page.       ║"
+      echo "╚══════════════════════════════════════════════════════════════╝"
+      echo
+    fi
+  fi
+fi
+
 if command -v uv >/dev/null 2>&1; then
   echo "Preparing AI worker environment..."
   (
@@ -58,6 +112,16 @@ fi
 echo "Starting API on current terminal session..."
 (
   cd "$ROOT_DIR"
+  if command -v swag >/dev/null 2>&1; then
+    echo "Regenerating Swagger docs..."
+    swag init -g apps/api/main.go -o apps/api/docs --quiet
+    if command -v npx >/dev/null 2>&1; then
+      npx --yes @redocly/cli build-docs apps/api/docs/swagger.json --output apps/api/docs/api.html 2>/dev/null \
+        && echo "HTML docs: apps/api/docs/api.html"
+    fi
+  else
+    echo "[warn] swag not found; skipping doc generation. Install with: go install github.com/swaggo/swag/cmd/swag@latest"
+  fi
   go run ./apps/api
 ) &
 API_PID=$!

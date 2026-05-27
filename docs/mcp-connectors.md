@@ -29,3 +29,40 @@ These connectors require OAuth or API token credentials and target cloud-hosted 
 ## Connector output
 
 Each connector emits raw ingestion events that are then normalized, classified, extracted, resolved, related, stored in the context graph, and analyzed for delivery mismatches.
+
+## HTTP API surface
+
+Connectors are exposed via the Go API (`apps/api`). Each connector has a dedicated endpoint under `/<connector>/ingest`.
+
+| Method | Path             | Connector | Description                        |
+| ------ | ---------------- | --------- | ---------------------------------- |
+| POST   | `/github/ingest` | GitHub    | Ingest a repo, issue, or PR by URI |
+| POST   | `/slack/ingest`  | Slack     | Ingest a channel or message by URI |
+
+Request body:
+
+```json
+{ "uri": "https://github.com/owner/repo/issues/1", "token": "ghp_..." }
+```
+
+- `uri` — required. Accepts `https://github.com/owner/repo`, `.../issues/N`, `.../pull/N`, or `repo://owner/repo/...`.
+- `token` — optional. Falls back to `GITHUB_TOKEN` env var.
+
+Response: a `document.ingested` event with full provenance metadata (connector, object_type, object_id, source_id, source_uri, ETag, cursor).
+
+### Slack
+
+Request body:
+
+```json
+{ "uri": "slack://CHANNEL_ID", "token": "xoxb-..." }
+```
+
+- `uri` — required. `slack://CHANNEL_ID` for a channel; `slack://CHANNEL_ID/TIMESTAMP` for a specific message.
+- `token` — optional Bot User OAuth Token. Falls back to `SLACK_BOT_TOKEN` env var.
+
+Required OAuth scopes: `channels:history`, `channels:read`.
+
+Response: same `document.ingested` envelope with Slack-specific metadata (`slack_channel_id`, `slack_ts`, `slack_api_status`) and the raw Slack API JSON as content.
+
+New connector endpoints follow the same pattern: add `request/`, `response/`, and `handler/` files and register the route in `main.go`.
