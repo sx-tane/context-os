@@ -7,6 +7,10 @@ services:
       - "8080:8080"
     environment:
       API_ADDR: ":8080"
+      # Pass your local GITHUB_TOKEN into the container so the GitHub connector
+      # can authenticate. Set it in your shell before running docker compose up:
+      #   export GITHUB_TOKEN=ghp_...
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 10s

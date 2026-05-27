@@ -50,6 +50,11 @@ else
   echo "uv not found; skipping AI worker environment sync" >&2
 fi
 
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "[warn] GITHUB_TOKEN is not set — the GitHub connector will only reach public repos."
+  echo "       To authenticate: export GITHUB_TOKEN=ghp_... then re-run this script."
+fi
+
 echo "Starting API on current terminal session..."
 (
   cd "$ROOT_DIR"

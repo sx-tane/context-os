@@ -38,6 +38,50 @@
     ok: "#22c55e",
     unreachable: "#ef4444",
   };
+
+  // GitHub MCP connector tester ----------------------------------------------
+  let uri = "https://github.com/sx-tane/context-os/issues/1";
+  let token = "";
+  let loading = false;
+  let errorMessage = "";
+  let result: {
+    connector: string;
+    capabilities: string[];
+    event: {
+      id: string;
+      type: string;
+      source: string;
+      source_id: string;
+      subject: string;
+      occurred_at: string;
+    };
+    preview: string;
+    metadata: Record<string, string>;
+  } | null = null;
+
+  async function runIngest() {
+    loading = true;
+    errorMessage = "";
+    result = null;
+    try {
+      const res = await fetch(`${API_URL}/github/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uri, token: token || undefined }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        errorMessage =
+          body?.message ?? `Request failed with status ${res.status}`;
+        return;
+      }
+      result = body;
+    } catch (err) {
+      errorMessage = err instanceof Error ? err.message : String(err);
+    } finally {
+      loading = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -64,25 +108,126 @@
       >
     </div>
   </section>
+
+  <section class="card">
+    <h2>GitHub MCP Connector</h2>
+    <p class="hint">
+      Ingest a GitHub repository, issue, or pull request via the MCP source
+      connector. Accepts <code>https://github.com/owner/repo</code>,
+      <code>.../issues/N</code>, <code>.../pull/N</code>, or
+      <code>repo://owner/repo/...</code> URIs.
+    </p>
+
+    <label>
+      <span>URI</span>
+      <input
+        type="text"
+        bind:value={uri}
+        placeholder="https://github.com/owner/repo/issues/1"
+      />
+    </label>
+
+    <label>
+      <span
+        >GitHub token <span class="optional"
+          >(optional — needed for private repos or if rate-limited)</span
+        ></span
+      >
+      <input type="password" bind:value={token} placeholder="ghp_..." />
+    </label>
+    <details class="token-help">
+      <summary>How to get a GitHub token</summary>
+      <ol>
+        <li>
+          Go to <a
+            href="https://github.com/settings/tokens/new?scopes=repo&description=ContextOS"
+            target="_blank"
+            rel="noopener">github.com/settings/tokens</a
+          >
+        </li>
+        <li>Click <strong>Generate new token (classic)</strong></li>
+        <li>Tick the <strong>repo</strong> scope</li>
+        <li>Click <strong>Generate token</strong>, copy it, paste above</li>
+      </ol>
+      <p class="token-note">
+        Inside a Codespace you can leave this blank — <code>GITHUB_TOKEN</code> is
+        already set to your account automatically.
+      </p>
+    </details>
+
+    <button on:click={runIngest} disabled={loading || !uri.trim()}>
+      {loading ? "Ingesting..." : "Run ingest"}
+    </button>
+
+    {#if errorMessage}
+      <div class="error">{errorMessage}</div>
+    {/if}
+
+    {#if result}
+      <div class="result">
+        <div class="kv">
+          <strong>Connector</strong><span>{result.connector}</span>
+        </div>
+        <div class="kv">
+          <strong>Capabilities</strong><span
+            >{result.capabilities.join(", ")}</span
+          >
+        </div>
+        <div class="kv">
+          <strong>Event ID</strong><span>{result.event.id}</span>
+        </div>
+        <div class="kv">
+          <strong>Event type</strong><span>{result.event.type}</span>
+        </div>
+        <div class="kv">
+          <strong>Source ID</strong><span>{result.event.source_id}</span>
+        </div>
+        <div class="kv">
+          <strong>Subject</strong><span>{result.event.subject}</span>
+        </div>
+        <div class="kv">
+          <strong>Occurred at</strong><span>{result.event.occurred_at}</span>
+        </div>
+
+        <details open>
+          <summary>Metadata</summary>
+          <pre>{JSON.stringify(result.metadata, null, 2)}</pre>
+        </details>
+
+        <details>
+          <summary>Content</summary>
+          <pre>{(() => {
+              try {
+                return JSON.stringify(JSON.parse(result.preview), null, 2);
+              } catch {
+                return result.preview;
+              }
+            })()}</pre>
+        </details>
+      </div>
+    {/if}
+  </section>
 </main>
 
 <style>
   main {
     font-family: system-ui, sans-serif;
-    max-width: 480px;
-    margin: 4rem auto;
+    max-width: 720px;
+    margin: 3rem auto;
     padding: 0 1rem;
   }
 
   h1 {
     font-size: 1.75rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
   }
 
-  .status {
+  .status,
+  .card {
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
   }
 
   h2 {
@@ -114,5 +259,128 @@
 
   .value {
     font-weight: 600;
+  }
+
+  .hint {
+    color: #6b7280;
+    font-size: 0.85rem;
+    margin: 0 0 1rem;
+  }
+
+  label {
+    display: block;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  label > span {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #374151;
+  }
+
+  .optional {
+    font-weight: 400;
+    color: #9ca3af;
+    font-size: 0.8rem;
+  }
+
+  .token-help {
+    margin: -0.25rem 0 0.75rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+  }
+
+  .token-help summary {
+    cursor: pointer;
+    color: #2563eb;
+    user-select: none;
+  }
+
+  .token-help ol {
+    margin: 0.5rem 0 0.5rem 1.25rem;
+    padding: 0;
+    line-height: 1.8;
+  }
+
+  .token-note {
+    margin: 0.25rem 0 0;
+    color: #9ca3af;
+  }
+
+  input {
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font: inherit;
+    box-sizing: border-box;
+  }
+
+  button {
+    background: #111827;
+    color: white;
+    border: 0;
+    padding: 0.55rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .error {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+  }
+
+  .result {
+    margin-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 1rem;
+  }
+
+  .kv {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    font-size: 0.85rem;
+    word-break: break-all;
+  }
+
+  .kv strong {
+    color: #374151;
+    min-width: 8rem;
+  }
+
+  details {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  pre {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    padding: 0.75rem;
+    border-radius: 6px;
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  code {
+    background: #f3f4f6;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
   }
 </style>

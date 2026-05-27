@@ -9,11 +9,15 @@ import (
 	"context-os/domain/contracts"
 	"context-os/domain/events"
 	"context-os/internal/source"
+	confluencesource "context-os/internal/source/confluence"
 	excelsource "context-os/internal/source/excel"
 	filesystemsource "context-os/internal/source/filesystem"
 	githubsource "context-os/internal/source/github"
+	googledrivesource "context-os/internal/source/googledrive"
 	jirasource "context-os/internal/source/jira"
+	notionsource "context-os/internal/source/notion"
 	openapisource "context-os/internal/source/openapi"
+	sharepointsource "context-os/internal/source/sharepoint"
 	slacksource "context-os/internal/source/slack"
 )
 
@@ -155,6 +159,10 @@ func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 		{name: "openapi", connector: openapisource.NewConnector(), capability: contracts.CapabilityAPISpec},
 		{name: "excel", connector: excelsource.NewConnector(), capability: contracts.CapabilitySpreadsheet},
 		{name: "filesystem", connector: filesystemsource.NewConnector(), capability: contracts.CapabilityFiles},
+		{name: "confluence", connector: confluencesource.NewConnector(), capability: contracts.CapabilityDocs},
+		{name: "googledrive", connector: googledrivesource.NewConnector(), capability: contracts.CapabilityFiles},
+		{name: "notion", connector: notionsource.NewConnector(), capability: contracts.CapabilityDocs},
+		{name: "sharepoint", connector: sharepointsource.NewConnector(), capability: contracts.CapabilityFiles},
 	}
 
 	for _, tt := range tests {
@@ -177,5 +185,35 @@ func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 				t.Fatalf("expected one document.ingested event, got %#v", ingested)
 			}
 		})
+	}
+}
+
+func TestMCPConnectorIngestReservedMetadataKeysCannotBeOverriddenByCaller(t *testing.T) {
+	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
+	req := contracts.SourceRequest{
+		URI:     "repo://context-os/issues/5",
+		Content: "mcp contract enforcement",
+		Metadata: map[string]string{
+			contracts.MetadataConnector:    "attacker",
+			contracts.MetadataMCP:          "false",
+			contracts.MetadataSourceURI:    "evil://uri",
+			contracts.MetadataSourceCursor: "evil-cursor",
+		},
+	}
+
+	ingested, err := connector.Ingest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ingest returned error: %v", err)
+	}
+
+	meta := ingested[0].Metadata
+	if meta[contracts.MetadataConnector] != "github" {
+		t.Errorf("connector overridden: got %q, want %q", meta[contracts.MetadataConnector], "github")
+	}
+	if meta[contracts.MetadataMCP] != "true" {
+		t.Errorf("mcp overridden: got %q, want %q", meta[contracts.MetadataMCP], "true")
+	}
+	if meta[contracts.MetadataSourceURI] != req.URI {
+		t.Errorf("source_uri overridden: got %q, want %q", meta[contracts.MetadataSourceURI], req.URI)
 	}
 }
