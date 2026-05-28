@@ -1,27 +1,18 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { ServiceStatus, CodexPlugin } from "$lib/types";
+  import { API_URL, probeService, streamCodexLogin } from "$lib/api";
   import StatusSection from "$lib/components/StatusSection.svelte";
   import GitHubConnector from "$lib/components/GitHubConnector.svelte";
   import SlackConnector from "$lib/components/SlackConnector.svelte";
 
-  const API_URL = "/api";
   const WORKER_URL = "/worker";
 
   let apiStatus: ServiceStatus = "checking";
   let workerStatus: ServiceStatus = "checking";
 
-  async function probe(url: string): Promise<ServiceStatus> {
-    try {
-      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
-      return res.ok ? "ok" : "unreachable";
-    } catch {
-      return "unreachable";
-    }
-  }
-
   onMount(async () => {
-    [apiStatus, workerStatus] = await Promise.all([probe(API_URL), probe(WORKER_URL)]);
+    [apiStatus, workerStatus] = await Promise.all([probeService(API_URL), probeService(WORKER_URL)]);
     await checkCodexStatus();
   });
 
@@ -54,22 +45,9 @@
     codexLoginLog = "";
     codexLoginRunning = true;
     try {
-      const res = await fetch(`${API_URL}/codex/login`, { method: "POST" });
-      if (!res.body) throw new Error("No response body");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const blocks = buf.split("\n\n");
-        buf = blocks.pop() ?? "";
-        for (const block of blocks) {
-          const dataLine = block.split("\n").find((l) => l.startsWith("data:"));
-          if (dataLine) codexLoginLog += dataLine.slice(5).trim() + "\n";
-        }
-      }
+      await streamCodexLogin((line) => {
+        codexLoginLog += line + "\n";
+      });
     } catch (e) {
       codexLoginLog += String(e) + "\n";
     } finally {

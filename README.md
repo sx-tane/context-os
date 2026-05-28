@@ -98,14 +98,17 @@ Domain contracts and package structure are documented in [docs/ARCHITECTURE.md](
 ./scripts/setup-local.sh
 ```
 
-Installs Go, Bun, Python 3.12, and `uv` on Linux. Run once on a fresh machine.
+Installs Go, Bun, Python 3.12, `uv`, Codex CLI, and the GitHub/Slack Codex plugins on Linux. Run once on a fresh machine.
 
 ### 2) Validate the repository
 
 ```bash
+go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g apps/api/main.go -o apps/api/docs
 go mod tidy
 go test ./...
 ```
+
+API docs are generated locally under `apps/api/docs/` and are ignored by git. `scripts/start-all.sh` regenerates them automatically when `swag` is installed.
 
 ### 3) Start all services
 
@@ -114,6 +117,8 @@ go test ./...
 ```
 
 Starts the API, context UI dev server, and AI worker together. Press `Ctrl+C` to stop all processes. If `uv` is not found, the AI worker is skipped automatically.
+
+Local connector UI is served from `apps/frontend` and includes GitHub, Slack, and Codex CLI status/login flows.
 
 ## Production Delivery Plan
 

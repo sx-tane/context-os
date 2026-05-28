@@ -10,13 +10,15 @@ Installs all required tools on Ubuntu/Linux and validates the repository. Run th
 
 What it does:
 
-1. Installs system packages (`curl`, `wget`, `build-essential`, etc.)
-2. Installs Go 1.24.13
+1. Installs system packages (`curl`, `wget`, `build-essential`, `nodejs`, `npm`, etc.)
+2. Installs Go 1.24.13 and goimports
 3. Installs Bun (UI runtime)
 4. Installs Python 3.12 and pip
 5. Installs `uv` (Python environment manager)
-6. Verifies all tool versions
-7. Runs `go mod tidy`, `go test ./...`, UI check, and `uv sync`
+6. Installs Codex CLI and GitHub/Slack plugins
+7. Performs Codex CLI authentication (with device auth support)
+8. Verifies all tool versions
+9. Runs `go mod tidy`, `go test ./...`, SvelteKit UI check, and `uv sync`
 
 ```bash
 chmod +x scripts/setup-local.sh
@@ -39,6 +41,8 @@ What it does:
 - Starts the Go API (`go run ./apps/api`) in the background
 - Starts the SvelteKit context UI dev server (`bun run dev`) in the background
 - Shuts down both processes cleanly when you press `Ctrl+C`
+
+The files under `apps/api/docs/` are generated local artifacts and are ignored by git. If `swag` is missing, generate them with `go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g apps/api/main.go -o apps/api/docs` before `go test ./...` or API startup.
 
 ```bash
 chmod +x scripts/start-all.sh

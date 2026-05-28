@@ -34,19 +34,33 @@ Each connector emits raw ingestion events that are then normalized, classified, 
 
 Connectors are exposed via the Go API (`apps/api`). Each connector has a dedicated endpoint under `/<connector>/ingest`.
 
-| Method | Path             | Connector | Description                        |
-| ------ | ---------------- | --------- | ---------------------------------- |
-| POST   | `/github/ingest` | GitHub    | Ingest a repo, issue, or PR by URI |
-| POST   | `/slack/ingest`  | Slack     | Ingest a channel or message by URI |
+| Method | Path                    | Connector | Description                                 |
+| ------ | ----------------------- | --------- | ------------------------------------------- |
+| GET    | `/github/status`        | GitHub    | Report configured token/account status      |
+| POST   | `/github/ingest`        | GitHub    | Ingest a repo, issue, PR, or commit by URI  |
+| POST   | `/github/ingest/stream` | GitHub    | Stream Codex-backed GitHub ingest over SSE  |
+| GET    | `/slack/status`         | Slack     | Report env/OAuth token status               |
+| GET    | `/slack/connect`        | Slack     | Start Slack OAuth flow                      |
+| GET    | `/slack/callback`       | Slack     | Slack OAuth callback; stores token locally  |
+| POST   | `/slack/ingest`         | Slack     | Ingest a channel or message by URI          |
+| POST   | `/slack/ingest/stream`  | Slack     | Stream Codex-backed Slack ingest over SSE   |
+| GET    | `/codex/status`         | Codex     | Report CLI login and plugin status          |
+| POST   | `/codex/login`          | Codex     | Stream device-auth login output over SSE    |
+| POST   | `/codex/plugin-reauth`  | Codex     | Re-auth `github` or `slack` plugin over SSE |
 
 Request body:
 
 ```json
-{ "uri": "https://github.com/owner/repo/issues/1", "token": "ghp_..." }
+{
+  "uri": "https://github.com/owner/repo/issues/1",
+  "token": "ghp_...",
+  "provider": "token"
+}
 ```
 
 - `uri` — required. Accepts `https://github.com/owner/repo`, `.../issues/N`, `.../pull/N`, or `repo://owner/repo/...`.
 - `token` — optional. Falls back to `GITHUB_TOKEN` env var.
+- `provider` — optional. Omit or set `token` for direct GitHub API ingest. Set `codex` to delegate to the Codex CLI GitHub plugin; use `/github/ingest/stream` for live progress.
 
 Response: a `document.ingested` event with full provenance metadata (connector, object_type, object_id, source_id, source_uri, ETag, cursor).
 
@@ -55,11 +69,12 @@ Response: a `document.ingested` event with full provenance metadata (connector, 
 Request body:
 
 ```json
-{ "uri": "slack://CHANNEL_ID", "token": "xoxb-..." }
+{ "uri": "slack://CHANNEL_ID", "token": "xoxb-...", "provider": "token" }
 ```
 
 - `uri` — required. `slack://CHANNEL_ID` for a channel; `slack://CHANNEL_ID/TIMESTAMP` for a specific message.
-- `token` — optional Bot User OAuth Token. Falls back to `SLACK_BOT_TOKEN` env var.
+- `token` — optional Bot User OAuth Token. Falls back to saved OAuth token, then `SLACK_BOT_TOKEN` env var.
+- `provider` — optional. Omit or set `token` for direct Slack API ingest. Set `codex` to delegate to the Codex CLI Slack plugin; use `/slack/ingest/stream` for live progress.
 
 Required OAuth scopes: `channels:history`, `channels:read`.
 

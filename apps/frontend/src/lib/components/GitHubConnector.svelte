@@ -1,10 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { IngestProvider, IngestResult, CodexPlugin } from "$lib/types";
+  import { API_URL, getJSON, postIngest, streamCodexIngest, streamCodexReauth } from "$lib/api";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "./IngestResult.svelte";
-
-  const API_URL = "/api";
 
   // Shared Codex state from parent page
   export let codexLoggedIn: boolean;
@@ -35,17 +34,10 @@
   onMount(checkStatus);
 
   async function checkStatus() {
-    try {
-      const res = await fetch(`${API_URL}/github/status`);
-      if (res.ok) {
-        const body = await res.json();
-        connected = body?.connected === true;
-        login = body?.login ?? "";
-        name = body?.name ?? "";
-      }
-    } catch {
-      // ignore — connector falls back gracefully
-    }
+    const body = await getJSON<{ connected?: boolean; login?: string; name?: string }>("/github/status");
+    connected = body?.connected === true;
+    login = body?.login ?? "";
+    name = body?.name ?? "";
   }
 
   async function runReauth(plugin: string) {
@@ -53,22 +45,9 @@
     reauthLog = "";
     reauthRunning = true;
     try {
-      const res = await fetch(`${API_URL}/codex/plugin-reauth?plugin=${plugin}`, { method: "POST" });
-      if (!res.body) throw new Error("No response body");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const blocks = buf.split("\n\n");
-        buf = blocks.pop() ?? "";
-        for (const block of blocks) {
-          const dataLine = block.split("\n").find((l) => l.startsWith("data:"));
-          if (dataLine) reauthLog += dataLine.slice(5).trim() + "\n";
-        }
-      }
+      await streamCodexReauth(plugin, (line) => {
+        reauthLog += line + "\n";
+      });
     } catch (e) {
       reauthLog += String(e) + "\n";
     } finally {
@@ -88,40 +67,20 @@
     if (provider === "codex") {
       _timer = setInterval(() => { elapsed += 1; }, 1000);
       try {
-        const res = await fetch(`${API_URL}/github/ingest/stream`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uri, token: token || undefined, provider: "codex" }),
+        await streamCodexIngest("github", { uri, token: token || undefined, provider: "codex" }, {
+          onLog: (line) => {
+            liveLog += line + "\n";
+          },
+          onStatus: (seconds) => {
+            elapsed = seconds;
+          },
+          onResult: (body) => {
+            result = body;
+          },
+          onError: (message) => {
+            errorMessage = message;
+          },
         });
-        if (!res.body) throw new Error("No response body");
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const blocks = buf.split("\n\n");
-          buf = blocks.pop() ?? "";
-          for (const block of blocks) {
-            const eventLine = block.split("\n").find((l) => l.startsWith("event:"));
-            const dataLine = block.split("\n").find((l) => l.startsWith("data:"));
-            if (!eventLine || !dataLine) continue;
-            const evType = eventLine.slice(6).trim();
-            const data = dataLine.slice(5).trim();
-            if (evType === "log") {
-              liveLog += data + "\n";
-            } else if (evType === "status") {
-              const s = JSON.parse(data);
-              if (s?.elapsed !== undefined) elapsed = s.elapsed;
-            } else if (evType === "result") {
-              result = JSON.parse(data);
-            } else if (evType === "error") {
-              const parsed = JSON.parse(data);
-              errorMessage = parsed.message ?? data;
-            }
-          }
-        }
       } catch (err) {
         errorMessage = err instanceof Error ? err.message : String(err);
       } finally {
@@ -132,17 +91,12 @@
     }
 
     try {
-      const res = await fetch(`${API_URL}/github/ingest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uri, token: token || undefined, provider }),
-      });
-      const body = await res.json();
+      const res = await postIngest("github", { uri, token: token || undefined, provider });
       if (!res.ok) {
-        errorMessage = body?.message ?? `Request failed with status ${res.status}`;
+        errorMessage = res.body?.message ?? `Request failed with status ${res.status}`;
         return;
       }
-      result = body;
+      result = res.body;
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : String(err);
     } finally {

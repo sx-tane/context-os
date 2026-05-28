@@ -62,24 +62,27 @@ When the same `SourceRequest` is replayed with the same URI, content, cursor, an
 
 ## Connector Wrappers
 
-| Package                                      | Name          | Capability    |
-| -------------------------------------------- | ------------- | ------------- |
-| [github](github/github.go)                   | `github`      | `repository`  |
-| [slack](slack/slack.go)                      | `slack`       | `messages`    |
-| [jira](jira/jira.go)                         | `jira`        | `issues`      |
-| [openapi](openapi/openapi.go)                | `openapi`     | `api_spec`    |
-| [excel](excel/excel.go)                      | `excel`       | `spreadsheet` |
-| [filesystem](filesystem/filesystem.go)       | `filesystem`  | `files`       |
-| [confluence](confluence/confluence.go)       | `confluence`  | `docs`        |
-| [googledrive](googledrive/googledrive.go)    | `googledrive` | `files`       |
-| [notion](notion/notion.go)                   | `notion`      | `docs`        |
-| [sharepoint](sharepoint/sharepoint.go)       | `sharepoint`  | `files`       |
+| Package                                   | Name          | Capability    |
+| ----------------------------------------- | ------------- | ------------- |
+| [codex](codex/codex.go)                   | `codex-cli`   | plugin-based  |
+| [github](github/github.go)                | `github`      | `repository`  |
+| [slack](slack/slack.go)                   | `slack`       | `messages`    |
+| [jira](jira/jira.go)                      | `jira`        | `issues`      |
+| [openapi](openapi/openapi.go)             | `openapi`     | `api_spec`    |
+| [excel](excel/excel.go)                   | `excel`       | `spreadsheet` |
+| [filesystem](filesystem/filesystem.go)    | `filesystem`  | `files`       |
+| [confluence](confluence/confluence.go)    | `confluence`  | `docs`        |
+| [googledrive](googledrive/googledrive.go) | `googledrive` | `files`       |
+| [notion](notion/notion.go)                | `notion`      | `docs`        |
+| [sharepoint](sharepoint/sharepoint.go)    | `sharepoint`  | `files`       |
 
 Each wrapper currently exposes:
 
 ```go
 func NewConnector() contracts.MCPSourceConnector
 ```
+
+The Codex wrapper is a provider connector used by the API when a request sets `provider=codex`. It delegates GitHub or Slack ingestion to the installed Codex CLI plugin and preserves the prompt, command path, and run log in event metadata for audit and replay.
 
 ### GitHub Connector Metadata Mapping
 

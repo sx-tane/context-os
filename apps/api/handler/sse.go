@@ -101,6 +101,81 @@ func streamWithHeartbeat(ctx context.Context, w http.ResponseWriter, f http.Flus
 	}
 }
 
+type codexStreamRequest interface {
+	request.GithubIngest | request.SlackIngest
+}
+
+func streamCodexIngest[T codexStreamRequest](
+	w http.ResponseWriter,
+	r *http.Request,
+	plugin string,
+	capabilities []string,
+	decode func(*json.Decoder) (T, error),
+	uri func(T) string,
+	provider func(T) string,
+	token func(T) string,
+) {
+	if r.Method != http.MethodPost {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+		return
+	}
+
+	f, ok := sseHeaders(w)
+	if !ok {
+		return
+	}
+	sw := &sseWriter{w: w, f: f}
+
+	req, err := decode(json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)))
+	if err != nil {
+		sseError(w, f, "invalid_json", err.Error())
+		return
+	}
+	requestURI := strings.TrimSpace(uri(req))
+	if requestURI == "" {
+		sseError(w, f, "invalid_request", "uri is required")
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(provider(req)), "codex") {
+		sseError(w, f, "invalid_request", "streaming is only supported for provider=codex")
+		return
+	}
+
+	metadata := map[string]string{
+		codexsource.MetadataPlugin: plugin,
+	}
+	if tok := strings.TrimSpace(token(req)); tok != "" {
+		metadata[codexsource.MetadataTokenOverride] = tok
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+
+	// Codex CLI buffers its stdout/stderr when running non-interactively.
+	// streamWithHeartbeat sends live "status" SSE events every 2 s so the
+	// browser shows elapsed time while waiting for the final output.
+	resultEvents, err := streamWithHeartbeat(ctx, w, f, func() ([]events.Event, error) {
+		return codexsource.IngestStream(ctx, newSourceRequest(requestURI, metadata), sw)
+	})
+	if err != nil {
+		sseError(w, f, "ingest_error", err.Error())
+		return
+	}
+	if len(resultEvents) == 0 {
+		sseError(w, f, "empty_result", "connector returned no events")
+		return
+	}
+
+	ev := resultEvents[0]
+	sseResult(w, f, response.Ingest{
+		Connector:    "codex-cli",
+		Capabilities: capabilities,
+		Event:        ev,
+		Preview:      preview(ev.Content),
+		Metadata:     ev.Metadata,
+	})
+}
+
 // GithubIngestStream handles POST /github/ingest/stream.
 // It streams Codex CLI log lines as SSE "log" events while the process runs,
 // then emits a single "result" event with the final ingest payload.
@@ -117,64 +192,20 @@ func streamWithHeartbeat(ctx context.Context, w http.ResponseWriter, f http.Flus
 // @Failure      405   {object}  map[string]string
 // @Router       /github/ingest/stream [post]
 func GithubIngestStream(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
-		return
-	}
-
-	f, ok := sseHeaders(w)
-	if !ok {
-		return
-	}
-	sw := &sseWriter{w: w, f: f}
-
-	var req request.GithubIngest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
-		sseError(w, f, "invalid_json", err.Error())
-		return
-	}
-	if strings.TrimSpace(req.URI) == "" {
-		sseError(w, f, "invalid_request", "uri is required")
-		return
-	}
-	if !strings.EqualFold(strings.TrimSpace(req.Provider), "codex") {
-		sseError(w, f, "invalid_request", "streaming is only supported for provider=codex")
-		return
-	}
-
-	metadata := map[string]string{
-		codexsource.MetadataPlugin: codexsource.PluginGitHub,
-	}
-	if tok := strings.TrimSpace(req.Token); tok != "" {
-		metadata[codexsource.MetadataTokenOverride] = tok
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
-	defer cancel()
-
-	// Codex CLI buffers its stdout/stderr when running non-interactively.
-	// streamWithHeartbeat sends live "status" SSE events every 2 s so the
-	// browser shows elapsed time while waiting for the final output.
-	resultEvents, err := streamWithHeartbeat(ctx, w, f, func() ([]events.Event, error) {
-		return codexsource.IngestStream(ctx, newSourceRequest(req.URI, metadata), sw)
-	})
-	if err != nil {
-		sseError(w, f, "ingest_error", err.Error())
-		return
-	}
-	if len(resultEvents) == 0 {
-		sseError(w, f, "empty_result", "connector returned no events")
-		return
-	}
-
-	ev := resultEvents[0]
-	sseResult(w, f, map[string]any{
-		"connector":    "codex-cli",
-		"capabilities": []string{"repository", "issues"},
-		"event":        ev,
-		"preview":      preview(ev.Content),
-		"metadata":     ev.Metadata,
-	})
+	streamCodexIngest(
+		w,
+		r,
+		codexsource.PluginGitHub,
+		[]string{"repository", "issues"},
+		func(dec *json.Decoder) (request.GithubIngest, error) {
+			var req request.GithubIngest
+			err := dec.Decode(&req)
+			return req, err
+		},
+		func(req request.GithubIngest) string { return req.URI },
+		func(req request.GithubIngest) string { return req.Provider },
+		func(req request.GithubIngest) string { return req.Token },
+	)
 }
 
 // newSourceRequest constructs a contracts.SourceRequest with the given URI and metadata.
@@ -191,7 +222,7 @@ func preview(content string) string {
 	return content
 }
 
-// SlackIngestStream handles POST /slack/ingest/stream.// It streams Codex CLI log lines as SSE "log" events while the process runs,
+// SlackIngestStream handles POST /slack/ingest/stream. It streams Codex CLI log lines as SSE "log" events while the process runs,
 // then emits a single "result" event with the final ingest payload.
 //
 // @Summary      Stream Slack Codex ingest
@@ -205,60 +236,18 @@ func preview(content string) string {
 // @Failure      405   {object}  map[string]string
 // @Router       /slack/ingest/stream [post]
 func SlackIngestStream(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
-		return
-	}
-
-	f, ok := sseHeaders(w)
-	if !ok {
-		return
-	}
-	sw := &sseWriter{w: w, f: f}
-
-	var req request.SlackIngest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
-		sseError(w, f, "invalid_json", err.Error())
-		return
-	}
-	if strings.TrimSpace(req.URI) == "" {
-		sseError(w, f, "invalid_request", "uri is required")
-		return
-	}
-	if !strings.EqualFold(strings.TrimSpace(req.Provider), "codex") {
-		sseError(w, f, "invalid_request", "streaming is only supported for provider=codex")
-		return
-	}
-
-	metadata := map[string]string{
-		codexsource.MetadataPlugin: codexsource.PluginSlack,
-	}
-	if tok := strings.TrimSpace(req.Token); tok != "" {
-		metadata[codexsource.MetadataTokenOverride] = tok
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
-	defer cancel()
-
-	// Same heartbeat wrapper — see GithubIngestStream for explanation.
-	resultEvents, err := streamWithHeartbeat(ctx, w, f, func() ([]events.Event, error) {
-		return codexsource.IngestStream(ctx, newSourceRequest(req.URI, metadata), sw)
-	})
-	if err != nil {
-		sseError(w, f, "ingest_error", err.Error())
-		return
-	}
-	if len(resultEvents) == 0 {
-		sseError(w, f, "empty_result", "connector returned no events")
-		return
-	}
-
-	ev := resultEvents[0]
-	sseResult(w, f, map[string]any{
-		"connector":    "codex-cli",
-		"capabilities": []string{"messages"},
-		"event":        ev,
-		"preview":      preview(ev.Content),
-		"metadata":     ev.Metadata,
-	})
+	streamCodexIngest(
+		w,
+		r,
+		codexsource.PluginSlack,
+		[]string{"messages"},
+		func(dec *json.Decoder) (request.SlackIngest, error) {
+			var req request.SlackIngest
+			err := dec.Decode(&req)
+			return req, err
+		},
+		func(req request.SlackIngest) string { return req.URI },
+		func(req request.SlackIngest) string { return req.Provider },
+		func(req request.SlackIngest) string { return req.Token },
+	)
 }

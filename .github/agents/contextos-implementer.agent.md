@@ -38,6 +38,7 @@ If the skill is unavailable, fall back to this inline spec:
 
 - Keep changes scoped to requested behavior.
 - Add or update tests for behavior changes.
+- Whenever updating code, contracts, behavior, setup, or workflows, update all relevant Markdown documentation in the same change so docs stay synchronized with implementation.
 - Every reasoning output struct must include an `Evidence []string` field (source artifact references) and a `Confidence float64` in [0,1], populated by the producing stage. Never omit these fields when touching reasoning outputs.
 - If the user request conflicts with a Constraint or Go Code Quality rule, stop and ask for confirmation before proceeding; do not silently violate constraints.
 - If a change modifies an exported contract, document the breaking-change impact in the summary and propose a deprecation path before editing callers.
@@ -47,13 +48,15 @@ If the skill is unavailable, fall back to this inline spec:
 1. Confirm target domain stage and contract impact. If the target stage or contract cannot be determined from the request and codebase search, ask the user a clarifying question before editing files.
 2. Limit edits to files directly required for the requested behavior; do not refactor unrelated code unless it blocks the change.
 3. Add or update tests for all behavior changes.
-4. Run `go test ./...` and `go vet ./...` on every package touched by the change. If `golangci-lint` is available, also run `golangci-lint run` on those packages.
-5. If checks fail, iterate on the implementation until they pass, or stop and report the failure with diagnostics if the cause is outside the requested scope.
-6. Summarize risks and follow-ups.
+4. Review and update all relevant `.md` files affected by the change, including package READMEs, architecture docs, setup docs, and workflow docs.
+5. Run `go test ./...` and `go vet ./...` on every package touched by the change. If `golangci-lint` is available, also run `golangci-lint run` on those packages.
+6. If checks fail, iterate on the implementation until they pass, or stop and report the failure with diagnostics if the cause is outside the requested scope.
+7. Summarize risks and follow-ups.
 
 ## Output
 
 - Files changed and purpose
 - Behavior change summary
+- Markdown documentation updated
 - Test results
 - Remaining risk or debt
