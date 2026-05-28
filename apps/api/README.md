@@ -19,8 +19,8 @@ apps/api/
     github.go      — POST /github/ingest
     slack.go       — POST /slack/ingest, GET /slack/status, GET /slack/connect, GET /slack/callback
   request/
-    github.go      — GithubIngest request struct (URI, Token, Provider)
-    slack.go       — SlackIngest request struct (URI, Token, Provider)
+    github.go      — GithubIngest request struct (URI, Token)
+    slack.go       — SlackIngest request struct (URI, Token)
   response/
     error.go       — WriteJSON, WriteError, WriteConnectorError helpers
     github.go      — GithubIngest response struct
@@ -44,74 +44,39 @@ apps/api/
 
 ## Endpoints
 
-| Method | Path              | Description                                            |
-| ------ | ----------------- | ------------------------------------------------------ |
-| GET    | `/health`         | Liveness check — returns `{"status":"ok"}`             |
-| POST   | `/github/ingest`  | Ingest a GitHub repo, issue, or PR via MCP             |
-| POST   | `/slack/ingest`   | Ingest a Slack channel or message via MCP              |
-| GET    | `/slack/status`   | Token availability, source (env/oauth/none), readiness |
-| GET    | `/slack/connect`  | Initiates Slack OAuth flow (browser redirect)          |
-| GET    | `/slack/callback` | OAuth callback — exchanges code, stores token locally  |
-| GET    | `/swagger/`       | Interactive Swagger UI                                 |
+| Method | Path               | Description                                           |
+| ------ | ------------------ | ----------------------------------------------------- |
+| GET    | `/health`          | Liveness check — returns `{"status":"ok"}`            |
+| POST   | `/github/ingest`   | Ingest a GitHub repo, issue, or PR via MCP            |
+| POST   | `/slack/ingest`    | Ingest a Slack channel or message via MCP             |
+| GET    | `/slack/status`    | Token availability, source (env/oauth/none), readiness |
+| GET    | `/slack/connect`   | Initiates Slack OAuth flow (browser redirect)         |
+| GET    | `/slack/callback`  | OAuth callback — exchanges code, stores token locally  |
+| GET    | `/swagger/`        | Interactive Swagger UI                                |
 
-## Ingestion providers
-
-Both `/github/ingest` and `/slack/ingest` accept an optional `provider` field:
-
-| Value     | Behaviour                                                                  |
-| --------- | -------------------------------------------------------------------------- |
-| `"token"` | Default. Uses the direct API connector with the supplied token or env var. |
-| `"codex"` | Delegates to the local Codex CLI plugin (requires `codex login`).          |
-
-**Token provider** request:
-
-```json
-{ "uri": "https://github.com/owner/repo/issues/1", "token": "ghp_..." }
-```
-
-**Codex CLI provider** request (no token needed — Codex handles auth):
-
-```json
-{ "uri": "https://github.com/owner/repo/issues/1", "provider": "codex" }
-```
-
-When `provider` is `"codex"`, the response `metadata` object includes:
-
-- `codex_log` — full stdout/stderr from the Codex exec run
-- `codex_prompt` — the prompt sent to Codex for audit/replay
-- `provider` — `"codex_cli"`
-
-**Prerequisites for the Codex provider:**
-
-1. Codex CLI installed: `npm install -g @openai/codex` (done automatically by `start-all.sh`)
-2. Plugins enabled: `codex plugin add github@openai-curated` / `slack@openai-curated` (also automatic)
-3. Logged in once: `codex login` (local) or `codex login --device-auth` (remote/headless)
+Full request/response schemas are in the interactive docs — see below.
 
 ## API documentation
 
 The docs are generated automatically from swag annotations in each handler file.
 
 **Interactive UI** (requires API running):
-
 ```
 http://localhost:8080/swagger/index.html
 ```
 
 **Standalone HTML** (no server needed — open directly in browser):
-
 ```
 apps/api/docs/api.html
 ```
 
 To regenerate after changing a handler or type:
-
 ```sh
 swag init -g apps/api/main.go -o apps/api/docs
 npx @redocly/cli build-docs apps/api/docs/swagger.json --output apps/api/docs/api.html
 ```
 
 Install `swag` once with:
-
 ```sh
 go install github.com/swaggo/swag/cmd/swag@latest
 ```

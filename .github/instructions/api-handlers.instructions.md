@@ -60,11 +60,11 @@ go install github.com/swaggo/swag/cmd/swag@latest
 
 **Outputs after regeneration:**
 
-| File                         | Use                                                         |
-| ---------------------------- | ----------------------------------------------------------- |
-| `apps/api/docs/swagger.json` | Machine-readable OpenAPI spec                               |
-| `apps/api/docs/swagger.yaml` | YAML version of the spec                                    |
-| `apps/api/docs/api.html`     | **Standalone HTML — open in any browser, no server needed** |
+| File | Use |
+|------|-----|
+| `apps/api/docs/swagger.json` | Machine-readable OpenAPI spec |
+| `apps/api/docs/swagger.yaml` | YAML version of the spec |
+| `apps/api/docs/api.html` | **Standalone HTML — open in any browser, no server needed** |
 
 To view the HTML doc immediately: `open apps/api/docs/api.html` (macOS) or just double-click it.
 When the API is running, the interactive UI is also at `http://localhost:8080/swagger/`.

@@ -103,6 +103,43 @@ info:
   title: ContextOS API
   version: "1.0"
 paths:
+  /codex/login:
+    post:
+      description: Runs `codex login --device-auth` and streams log lines as SSE events.
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Trigger Codex device login
+      tags:
+      - codex
+  /codex/status:
+    get:
+      description: Returns Codex CLI version, login status, and installed plugin list.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Codex CLI status
+      tags:
+      - codex
   /github/ingest:
     post:
       consumes:
@@ -142,6 +179,61 @@ paths:
               type: string
             type: object
       summary: Ingest a GitHub artifact
+      tags:
+      - github
+  /github/ingest/stream:
+    post:
+      consumes:
+      - application/json
+      description: Streams Codex CLI progress via SSE, then emits a result event.
+      parameters:
+      - description: GitHub ingest request (provider must be codex)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.GithubIngest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stream GitHub Codex ingest
+      tags:
+      - github
+  /github/status:
+    get:
+      description: Returns token availability, source (env/none), and the authenticated
+        GitHub login.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: GitHub connection status
       tags:
       - github
   /health:
@@ -255,6 +347,40 @@ paths:
               type: string
             type: object
       summary: Ingest a Slack channel or message
+      tags:
+      - slack
+  /slack/ingest/stream:
+    post:
+      consumes:
+      - application/json
+      description: Streams Codex CLI progress via SSE, then emits a result event.
+      parameters:
+      - description: Slack ingest request (provider must be codex)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.SlackIngest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stream Slack Codex ingest
       tags:
       - slack
   /slack/status:

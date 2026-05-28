@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,37 @@ import (
 	"context-os/domain/events"
 	"context-os/internal/source"
 )
+
+// knownNvmPaths lists common nvm bin directories to check when "codex" is not
+// on the process PATH (common when the binary is installed via nvm and the API
+// server process inherits a stripped environment).
+var knownNvmPaths = []string{
+	// dev container default
+	"/home/codespace/nvm/current/bin/codex",
+	// generic nvm layout
+	"${HOME}/nvm/current/bin/codex",
+	"/usr/local/share/nvm/current/bin/codex",
+}
+
+// resolveCodexBinary returns the absolute path to the codex executable.
+// It first asks exec.LookPath so any PATH entry wins, then falls back to
+// the common nvm installation directories used in dev containers.
+func resolveCodexBinary() string {
+	if p, err := exec.LookPath(defaultCommand); err == nil {
+		return p
+	}
+	home := os.Getenv("HOME")
+	candidates := make([]string, 0, len(knownNvmPaths)+1)
+	for _, c := range knownNvmPaths {
+		candidates = append(candidates, strings.ReplaceAll(c, "${HOME}", home))
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return defaultCommand // will produce a clear exec error if still missing
+}
 
 const (
 	// MetadataPlugin selects which installed Codex plugin should handle the request.
@@ -52,7 +84,7 @@ type connector struct {
 func NewConnector() contracts.MCPSourceConnector {
 	return connector{
 		base:      source.NewMCPConnector("codex-cli", contracts.CapabilityRepository, contracts.CapabilityIssues, contracts.CapabilityMessages, contracts.CapabilityDocs),
-		command:   defaultCommand,
+		command:   resolveCodexBinary(),
 		workspace: ".",
 	}
 }
@@ -70,6 +102,64 @@ func (c connector) Name() string { return c.base.Name() }
 
 // Capabilities returns the connector capabilities supported by this adapter.
 func (c connector) Capabilities() []contracts.Capability { return c.base.Capabilities() }
+
+// IngestStream runs ingestion with a Codex CLI plugin and writes log lines to
+// progress as they arrive from the process stdout/stderr, so callers can stream
+// feedback to the user in real time. progress may be nil to suppress streaming.
+// The returned events are identical to what Ingest() returns.
+func IngestStream(ctx context.Context, req contracts.SourceRequest, progress io.Writer) ([]events.Event, error) {
+	c := connector{
+		base:      source.NewMCPConnector("codex-cli", contracts.CapabilityRepository, contracts.CapabilityIssues, contracts.CapabilityMessages, contracts.CapabilityDocs),
+		command:   defaultCommand,
+		workspace: ".",
+	}
+	return c.ingestWithProgress(ctx, req, progress)
+}
+
+// ingestWithProgress is the shared implementation used by both Ingest and IngestStream.
+func (c connector) ingestWithProgress(ctx context.Context, req contracts.SourceRequest, progress io.Writer) ([]events.Event, error) {
+	req.Metadata = cloneMetadata(req.Metadata)
+	plugin := strings.TrimSpace(req.Metadata[MetadataPlugin])
+	if plugin == "" {
+		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, errors.New("codex_plugin metadata is required"))
+	}
+	if plugin != PluginGitHub && plugin != PluginSlack {
+		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, fmt.Errorf("unsupported codex plugin %q", plugin))
+	}
+
+	uri := strings.TrimSpace(req.URI)
+	if uri == "" {
+		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, errors.New("uri is required"))
+	}
+
+	prompt := promptFor(plugin, uri)
+
+	var envOverrides []string
+	if tok := strings.TrimSpace(req.Metadata[MetadataTokenOverride]); tok != "" {
+		switch plugin {
+		case PluginGitHub:
+			envOverrides = append(envOverrides, "GITHUB_TOKEN="+tok)
+		case PluginSlack:
+			envOverrides = append(envOverrides, "SLACK_BOT_TOKEN="+tok)
+		}
+	}
+
+	content, log, err := c.runCodex(ctx, prompt, envOverrides, progress)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Content = content
+	req.Metadata[MetadataProvider] = "codex_cli"
+	req.Metadata[MetadataPrompt] = prompt
+	req.Metadata[MetadataCommand] = c.command
+	req.Metadata[MetadataLog] = log
+	req.Metadata[contracts.MetadataObjectType] = plugin
+	req.Metadata[contracts.MetadataObjectID] = uri
+	req.Metadata[events.MetadataSourceID] = "codex:" + plugin + ":" + uri
+
+	return c.base.Ingest(ctx, req)
+}
 
 // Ingest invokes Codex CLI with the selected plugin and emits the final response as source content.
 func (c connector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]events.Event, error) {
@@ -101,7 +191,7 @@ func (c connector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]e
 		}
 	}
 
-	content, log, err := c.runCodex(ctx, prompt, envOverrides)
+	content, log, err := c.runCodex(ctx, prompt, envOverrides, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -121,9 +211,10 @@ func (c connector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]e
 // runCodex invokes codex exec non-interactively and returns (content, log, error).
 // It kills the entire process group on context cancellation so child processes
 // spawned by the Codex agent cannot keep the stdout/stderr pipes open.
-// envOverrides are KEY=VALUE pairs appended after os.Environ() so callers can
-// inject account-specific tokens without modifying the global environment.
-func (c connector) runCodex(ctx context.Context, prompt string, envOverrides []string) (string, string, error) {
+// envOverrides are KEY=VALUE pairs appended after os.Environ().
+// progress, when non-nil, receives each byte of stdout+stderr as it is written
+// so callers can stream feedback to users in real time.
+func (c connector) runCodex(ctx context.Context, prompt string, envOverrides []string, progress io.Writer) (string, string, error) {
 	command := strings.TrimSpace(c.command)
 	if command == "" {
 		command = defaultCommand
@@ -152,8 +243,13 @@ func (c connector) runCodex(ctx context.Context, prompt string, envOverrides []s
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	if progress != nil {
+		cmd.Stdout = io.MultiWriter(&stdoutBuf, progress)
+		cmd.Stderr = io.MultiWriter(&stderrBuf, progress)
+	} else {
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+	}
 
 	if err := cmd.Start(); err != nil {
 		return "", "", c.commandError(err, "")

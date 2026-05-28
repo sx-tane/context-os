@@ -228,14 +228,8 @@ func SlackIngest(w http.ResponseWriter, r *http.Request) {
 
 	connector := contracts.MCPSourceConnector(slacksource.NewConnector())
 	if strings.EqualFold(strings.TrimSpace(req.Provider), "codex") {
-		cancel()
-		ctx, cancel = context.WithTimeout(r.Context(), 120*time.Second)
-		defer cancel()
 		connector = codexsource.NewConnector()
 		metadata[codexsource.MetadataPlugin] = codexsource.PluginSlack
-		if tok := strings.TrimSpace(req.Token); tok != "" {
-			metadata[codexsource.MetadataTokenOverride] = tok
-		}
 	}
 
 	ingested, err := connector.Ingest(ctx, contracts.SourceRequest{URI: uri, Metadata: metadata})
