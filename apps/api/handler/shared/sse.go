@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"context-os/apps/api/request"
@@ -14,12 +15,14 @@ import (
 	codexsource "context-os/internal/source/codex"
 )
 
-// SSEWriter wraps an http.ResponseWriter+http.Flusher and writes SSE-formatted
-// log lines as Codex stdout/stderr bytes arrive.  Each newline-terminated chunk
-// is emitted as a "log" event so the browser can append it to the live log panel.
+// SSEWriter serialises all server-sent events written to a single
+// http.ResponseWriter.  Codex stdout/stderr bytes arrive via Write while
+// heartbeat, error, and result events may be emitted from another goroutine;
+// the embedded mutex guarantees those writes never interleave on the wire.
 type SSEWriter struct {
-	w http.ResponseWriter
-	f http.Flusher
+	mu sync.Mutex
+	w  http.ResponseWriter
+	f  http.Flusher
 }
 
 // NewSSEWriter creates an SSEWriter backed by w and f.
@@ -30,6 +33,8 @@ func NewSSEWriter(w http.ResponseWriter, f http.Flusher) *SSEWriter {
 // Write satisfies io.Writer.  Each call emits a "log" SSE event per non-empty
 // line and flushes immediately so the browser receives it without buffering.
 func (s *SSEWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -41,6 +46,32 @@ func (s *SSEWriter) Write(p []byte) (int, error) {
 	}
 	s.f.Flush()
 	return len(p), nil
+}
+
+// Event writes a single SSE event with the given name and pre-formatted data
+// payload.  It is safe to call concurrently with Write.
+func (s *SSEWriter) Event(name, data string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, _ = fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", name, data)
+	s.f.Flush()
+}
+
+// Log writes a single "log" SSE event with the given message.
+func (s *SSEWriter) Log(msg string) {
+	s.Event("log", msg)
+}
+
+// Error writes an "error" SSE event carrying the given code and message.
+func (s *SSEWriter) Error(code, msg string) {
+	b, _ := json.Marshal(map[string]string{"error": code, "message": msg})
+	s.Event("error", string(b))
+}
+
+// Result writes a "result" SSE event with v serialised as JSON.
+func (s *SSEWriter) Result(v any) {
+	b, _ := json.Marshal(v)
+	s.Event("result", string(b))
 }
 
 // SSEHeaders sets SSE response headers on w and returns the http.Flusher.
@@ -59,20 +90,6 @@ func SSEHeaders(w http.ResponseWriter) (http.Flusher, bool) {
 	return f, true
 }
 
-// SSEError writes an SSE error event with the given code and message.
-func SSEError(w http.ResponseWriter, f http.Flusher, code, msg string) {
-	b, _ := json.Marshal(map[string]string{"error": code, "message": msg})
-	_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", b)
-	f.Flush()
-}
-
-// SSEResult writes an SSE result event with v serialised as JSON.
-func SSEResult(w http.ResponseWriter, f http.Flusher, v any) {
-	b, _ := json.Marshal(v)
-	_, _ = fmt.Fprintf(w, "event: result\ndata: %s\n\n", b)
-	f.Flush()
-}
-
 // ingestResult carries the outcome of a background IngestStream call.
 type ingestResult struct {
 	events []events.Event
@@ -82,7 +99,9 @@ type ingestResult struct {
 // StreamWithHeartbeat runs fn in a goroutine and sends SSE "status" events
 // every 2 seconds so the client knows the connection is alive and how long
 // Codex has been running.  It returns when fn completes or ctx is cancelled.
-func StreamWithHeartbeat(ctx context.Context, w http.ResponseWriter, f http.Flusher, fn func() ([]events.Event, error)) ([]events.Event, error) {
+// All status events are written through sw so they never interleave with the
+// log events fn streams from its own goroutine.
+func StreamWithHeartbeat(ctx context.Context, sw *SSEWriter, fn func() ([]events.Event, error)) ([]events.Event, error) {
 	resultCh := make(chan ingestResult, 1)
 	go func() {
 		evs, err := fn()
@@ -102,8 +121,7 @@ func StreamWithHeartbeat(ctx context.Context, w http.ResponseWriter, f http.Flus
 		case <-ticker.C:
 			elapsed := int(time.Since(start).Seconds())
 			b, _ := json.Marshal(map[string]any{"elapsed": elapsed, "status": "running"})
-			_, _ = fmt.Fprintf(w, "event: status\ndata: %s\n\n", b)
-			f.Flush()
+			sw.Event("status", string(b))
 		}
 	}
 }
@@ -139,16 +157,16 @@ func StreamCodexIngest[T CodexStreamRequest](
 
 	req, err := decode(json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)))
 	if err != nil {
-		SSEError(w, f, "invalid_json", err.Error())
+		sw.Error("invalid_json", err.Error())
 		return
 	}
 	requestURI := strings.TrimSpace(uri(req))
 	if requestURI == "" {
-		SSEError(w, f, "invalid_request", "uri is required")
+		sw.Error("invalid_request", "uri is required")
 		return
 	}
 	if !strings.EqualFold(strings.TrimSpace(provider(req)), "codex") {
-		SSEError(w, f, "invalid_request", "streaming is only supported for provider=codex")
+		sw.Error("invalid_request", "streaming is only supported for provider=codex")
 		return
 	}
 
@@ -162,17 +180,17 @@ func StreamCodexIngest[T CodexStreamRequest](
 	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
 
-	resultEvents, err := StreamWithHeartbeat(ctx, w, f, func() ([]events.Event, error) {
+	resultEvents, err := StreamWithHeartbeat(ctx, sw, func() ([]events.Event, error) {
 		return codexsource.IngestStream(ctx, NewSourceRequest(requestURI, metadata), sw)
 	})
 	if err != nil {
-		SSEError(w, f, "ingest_error", err.Error())
+		sw.Error("ingest_error", err.Error())
 		return
 	}
 	if len(resultEvents) == 0 {
-		SSEError(w, f, "empty_result", "connector returned no events")
+		sw.Error("empty_result", "connector returned no events")
 		return
 	}
 
-	SSEResult(w, f, NewIngestResponse("codex-cli", capabilities, resultEvents))
+	sw.Result(NewIngestResponse("codex-cli", capabilities, resultEvents))
 }

@@ -165,51 +165,9 @@ func (c connector) ingestWithProgress(ctx context.Context, req contracts.SourceR
 }
 
 // Ingest invokes Codex CLI with the selected plugin and emits the final response as source content.
+// It is the synchronous, non-streaming entry point and shares its implementation with IngestStream.
 func (c connector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]events.Event, error) {
-	req.Metadata = cloneMetadata(req.Metadata)
-	plugin := strings.TrimSpace(req.Metadata[MetadataPlugin])
-	if plugin == "" {
-		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, errors.New("codex_plugin metadata is required"))
-	}
-	if !isSupportedPlugin(plugin) {
-		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, fmt.Errorf("unsupported codex plugin %q", plugin))
-	}
-
-	uri := strings.TrimSpace(req.URI)
-	if uri == "" {
-		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, errors.New("uri is required"))
-	}
-
-	prompt := promptFor(plugin, uri)
-
-	// Allow per-request account override: inject the token as the platform env
-	// var so the plugin uses a specific account rather than the Codex login session.
-	var envOverrides []string
-	if tok := strings.TrimSpace(req.Metadata[MetadataTokenOverride]); tok != "" {
-		switch plugin {
-		case PluginGitHub:
-			envOverrides = append(envOverrides, "GITHUB_TOKEN="+tok)
-		case PluginSlack:
-			envOverrides = append(envOverrides, "SLACK_BOT_TOKEN="+tok)
-		}
-	}
-
-	content, log, err := c.runCodex(ctx, prompt, envOverrides, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Content = content
-	req.Metadata[MetadataProvider] = "codex_cli"
-	req.Metadata[MetadataPrompt] = prompt
-	req.Metadata[MetadataCommand] = c.command
-	req.Metadata[MetadataLog] = log
-	objectType := objectTypeForPlugin(plugin)
-	req.Metadata[contracts.MetadataObjectType] = objectType
-	req.Metadata[contracts.MetadataObjectID] = uri
-	req.Metadata[events.MetadataSourceID] = "codex:" + objectType + ":" + uri
-
-	return c.base.Ingest(ctx, req)
+	return c.ingestWithProgress(ctx, req, nil)
 }
 
 // runCodex invokes codex exec non-interactively and returns (content, log, error).
