@@ -17,6 +17,7 @@ import (
 	handlercodex "context-os/apps/api/handler/codex"
 	"context-os/apps/api/handler/filesystem"
 	"context-os/apps/api/handler/github"
+	googledrive "context-os/apps/api/handler/googledrive"
 	"context-os/apps/api/handler/health"
 	"context-os/apps/api/handler/jira"
 	"context-os/apps/api/handler/slack"
@@ -44,6 +45,8 @@ func main() {
 	registerRoutes(mux, []route{
 		{pattern: "/health", handler: http.HandlerFunc(health.Health), cors: true},
 		{pattern: "/github/ingest", handler: http.HandlerFunc(github.Ingest), cors: true},
+		{pattern: "/googledrive/status", handler: http.HandlerFunc(googledrive.Status), cors: true},
+		{pattern: "/googledrive/ingest", handler: http.HandlerFunc(googledrive.Ingest), cors: true},
 		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(github.IngestStream), cors: true},
 		{pattern: "/github/status", handler: http.HandlerFunc(github.Status), cors: true},
 		{pattern: "/jira/status", handler: http.HandlerFunc(jira.Status), cors: true},

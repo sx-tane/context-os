@@ -12,6 +12,7 @@ These connectors ingest from local paths or authenticated APIs with no hosted in
 | Slack      | Messages, threads, channels                                                                                                     | `messages`   | #8    |
 | Jira/Rovo  | Jira issues, comments, status history, fields, and links through the Atlassian Rovo Codex plugin by default                     | `issues`     | #9    |
 | Filesystem | Local files and folders, including text/code/config, OpenAPI JSON/YAML specs, spreadsheets, Word, PDF, and PowerPoint documents | `files`      | #12   |
+| Google Drive | Google Docs, Sheets, Slides via OAuth 2.0 or service-account credentials | `files` | #30 |
 
 ## Phase 2 — cloud and knowledge-base connector candidates
 
@@ -19,7 +20,6 @@ These connectors require OAuth or API token credentials and target cloud-hosted 
 
 | Connector             | Source                                                | Capability | Issue |
 | --------------------- | ----------------------------------------------------- | ---------- | ----- |
-| Google Drive          | Google Docs, Sheets, Slides                           | `files`    | #30   |
 | SharePoint / OneDrive | Word, Excel, PowerPoint, PDF via Microsoft Graph      | `files`    | #31   |
 | Confluence            | Deferred; use Jira/Rovo for current Atlassian context | `docs`     | #32   |
 | Notion                | Pages and database entries                            | `docs`     | #33   |
@@ -35,6 +35,8 @@ Connectors are exposed via the Go API (`apps/api`). Each connector has a dedicat
 | Method | Path                    | Connector  | Description                                                    |
 | ------ | ----------------------- | ---------- | -------------------------------------------------------------- |
 | GET    | `/github/status`        | GitHub     | Report configured token/account status                         |
+| GET    | `/googledrive/status`   | Google Drive | Report local OAuth/service-account/folder configuration     |
+| POST   | `/googledrive/ingest`   | Google Drive | Ingest Docs, Sheets, and Slides from a Drive folder         |
 | POST   | `/github/ingest`        | GitHub     | Ingest a repo, issue, PR, or commit by URI                     |
 | POST   | `/github/ingest/stream` | GitHub     | Stream Codex-backed GitHub ingest over SSE                     |
 | GET    | `/jira/status`          | Jira       | Report Jira env configuration status                           |
@@ -147,3 +149,22 @@ Supported file extraction:
 Response metadata includes original path, extension, extracted format, content hash, modified time, size, spreadsheet summary fields including formula count when applicable, OpenAPI summary fields when a JSON/YAML file is an API spec, and `filesystem_upload_*` keys for browser uploads. Folder responses preserve the existing first-event fields and add `events`, `previews`, `metadata_items`, and `event_count`; each child event has `filesystem_ingest_mode=folder`, `filesystem_root`, `filesystem_relative_path`, emitted file count, skipped count, and first skipped path metadata.
 
 New connector endpoints follow the same pattern: add `request/`, `response/`, and `handler/` files and register the route in `main.go`.
+
+### Google Drive
+
+Request body:
+
+```json
+{
+  "uri": "https://drive.google.com/drive/folders/1234567890",
+  "credential_path": "/Users/name/.config/context-os/google-authorized-user.json"
+}
+```
+
+- `uri` or `folder_id` selects the Drive folder to scan. `GOOGLE_DRIVE_FOLDER_ID` is the local fallback when the request omits both.
+- `credential_path` points to a local Google `authorized_user` OAuth JSON file containing `client_id`, `client_secret`, and `refresh_token`.
+- `service_account_path` points to a local Google `service_account` JSON file. Either credential path is enough.
+- `access_token` is an optional already-issued bearer token override for local automation.
+- `cursor` is an optional RFC3339 modified-time watermark; only files newer than the cursor are listed.
+
+Response metadata includes the stable Drive file ID, modified time, export format, credential type, and `url=https://drive.google.com/file/d/<file-id>/view`. Replay of an unchanged file reuses the same event ID because the connector hashes file ID and `modifiedTime`.

@@ -12,6 +12,7 @@ Shared plumbing lives in `shared/`.
 | [`health/`](health/README.md)         | `/health`       | `Health`                                                  |
 | [`codex/`](codex/README.md)           | `/codex/*`      | `Status`, `Login`, `PluginReauth`                         |
 | [`github/`](github/README.md)         | `/github/*`     | `Status`, `Ingest`, `IngestStream`                        |
+| [`googledrive/`](googledrive/README.md) | `/googledrive/*` | `Status`, `Ingest`                                      |
 | [`jira/`](jira/README.md)             | `/jira/*`       | `Status`, `Ingest`, `IngestStream`                        |
 | [`slack/`](slack/README.md)           | `/slack/*`      | `Status`, `Connect`, `Callback`, `Ingest`, `IngestStream` |
 | [`filesystem/`](filesystem/README.md) | `/filesystem/*` | `Ingest`, `Upload`                                        |

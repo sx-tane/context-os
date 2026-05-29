@@ -28,6 +28,17 @@ type JiraIngest struct {
 	Metadata   map[string]string `json:"metadata"`
 }
 
+// GoogleDriveIngest is the JSON body accepted by POST /googledrive/ingest.
+type GoogleDriveIngest struct {
+	URI                string            `json:"uri"                  example:"https://drive.google.com/drive/folders/1234567890"`
+	FolderID           string            `json:"folder_id"            example:"1234567890"`
+	CredentialPath     string            `json:"credential_path"      example:"/Users/name/.config/context-os/google-authorized-user.json"`
+	ServiceAccountPath string            `json:"service_account_path" example:"/Users/name/.config/context-os/google-service-account.json"`
+	AccessToken        string            `json:"access_token"         example:"ya29.a0AfH6SMD..."`
+	Cursor             string            `json:"cursor"               example:"2026-05-29T10:00:00Z"`
+	Metadata           map[string]string `json:"metadata"`
+}
+
 // FilesystemIngest is the JSON body accepted by POST /filesystem/ingest for local files or folders.
 type FilesystemIngest struct {
 	URI      string            `json:"uri"     example:"storage/raw/README.md"`

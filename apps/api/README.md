@@ -30,6 +30,7 @@ apps/api/
     shared/               — shared ingest plumbing + SSE infrastructure (used by all domain packages)
     health/               — GET /health
     github/               — GitHub status, direct/token ingest, and Codex stream ingest
+    googledrive/          — Google Drive status and folder ingest
     jira/                 — Jira status, direct/token ingest, and Codex/Rovo stream ingest
     filesystem/           — filesystem path ingest and browser upload staging
     slack/                — Slack status, OAuth, direct/token ingest, and Codex stream ingest
@@ -65,6 +66,8 @@ apps/api/
 | ------ | ----------------------- | ------------------------------------------------------ |
 | GET    | `/health`               | Liveness check — returns `{"status":"ok"}`             |
 | GET    | `/github/status`        | Checks `GITHUB_TOKEN` and returns account identity     |
+| GET    | `/googledrive/status`   | Checks Google Drive OAuth/service-account/folder setup |
+| POST   | `/googledrive/ingest`   | Ingest Docs, Sheets, and Slides from a Drive folder    |
 | POST   | `/github/ingest`        | Ingest a GitHub repo, issue, PR, or commit via MCP     |
 | POST   | `/github/ingest/stream` | Stream Codex-backed GitHub ingest progress over SSE    |
 | GET    | `/jira/status`          | Checks Jira environment base URL/token/email readiness |
@@ -83,6 +86,10 @@ apps/api/
 | GET    | `/swagger/`             | Interactive Swagger UI (served from generated docs)    |
 
 GitHub, Jira, and Slack ingest requests accept `provider`. Use `"token"` or omit it for direct API-token ingestion. Use `"codex"` for Codex CLI plugin ingestion; streaming clients should call the matching `/ingest/stream` endpoint.
+
+Google Drive, Jira, and filesystem direct request fields:
+
+- Google Drive accepts `uri`, `folder_id`, `credential_path`, `service_account_path`, `access_token`, `cursor`, and `metadata`. `uri` may be a `drive.google.com/drive/folders/...` URL or `googledrive://folder/<id>`. The handler falls back to `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_OAUTH_CREDENTIALS_PATH`, `GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH`, and `GOOGLE_DRIVE_ACCESS_TOKEN` when request fields are omitted. One response event is emitted per supported file in the folder, and unchanged files replay with the same event ID based on Drive file ID plus `modifiedTime`.
 
 Jira and filesystem direct request fields:
 
