@@ -55,8 +55,9 @@ export PATH="$HOME/.local/bin:$PATH"
 ```bash
 sudo npm install -g @openai/codex
 
-# Install GitHub and Slack plugins
+# Install GitHub, Atlassian Rovo, and Slack plugins
 codex plugin add github@openai-curated
+codex plugin add atlassian-rovo@openai-curated
 codex plugin add slack@openai-curated
 
 # Log in (opens browser; use --device-auth in headless/SSH environments)

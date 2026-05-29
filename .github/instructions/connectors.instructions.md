@@ -1,7 +1,8 @@
 ---
-description: "Use when creating or changing source connectors for GitHub, Jira, Slack, OpenAPI, Excel, or filesystem. Covers idempotent ingestion and replay-safe behavior."
+description: "Use when creating or changing source connectors for GitHub, Jira, Slack, filesystem, or filesystem-supported OpenAPI/spreadsheet formats. Covers idempotent ingestion and replay-safe behavior."
 applyTo: "internal/source/**/*.go"
 ---
+
 # Connector Reliability Instruction
 
 - Preserve immutable raw payload capture.

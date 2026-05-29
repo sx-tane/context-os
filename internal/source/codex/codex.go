@@ -63,13 +63,15 @@ const (
 	// MetadataTokenOverride injects a token as the platform env var so the Codex
 	// plugin authenticates as a specific account instead of the default login.
 	// Value is the raw token; the connector maps it to GITHUB_TOKEN or SLACK_BOT_TOKEN
-	// based on the plugin in use.
+	// for plugins that support token environment overrides.
 	MetadataTokenOverride = "codex_token_override"
 
 	// PluginGitHub routes the request through the GitHub Codex plugin.
 	PluginGitHub = "github"
 	// PluginSlack routes the request through the Slack Codex plugin.
 	PluginSlack = "slack"
+	// PluginAtlassianRovo routes Jira requests through the Atlassian Rovo Codex plugin.
+	PluginAtlassianRovo = "atlassian-rovo"
 
 	defaultCommand = "codex"
 )
@@ -110,7 +112,7 @@ func (c connector) Capabilities() []contracts.Capability { return c.base.Capabil
 func IngestStream(ctx context.Context, req contracts.SourceRequest, progress io.Writer) ([]events.Event, error) {
 	c := connector{
 		base:      source.NewMCPConnector("codex-cli", contracts.CapabilityRepository, contracts.CapabilityIssues, contracts.CapabilityMessages, contracts.CapabilityDocs),
-		command:   defaultCommand,
+		command:   resolveCodexBinary(),
 		workspace: ".",
 	}
 	return c.ingestWithProgress(ctx, req, progress)
@@ -123,7 +125,7 @@ func (c connector) ingestWithProgress(ctx context.Context, req contracts.SourceR
 	if plugin == "" {
 		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, errors.New("codex_plugin metadata is required"))
 	}
-	if plugin != PluginGitHub && plugin != PluginSlack {
+	if !isSupportedPlugin(plugin) {
 		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, fmt.Errorf("unsupported codex plugin %q", plugin))
 	}
 
@@ -154,9 +156,10 @@ func (c connector) ingestWithProgress(ctx context.Context, req contracts.SourceR
 	req.Metadata[MetadataPrompt] = prompt
 	req.Metadata[MetadataCommand] = c.command
 	req.Metadata[MetadataLog] = log
-	req.Metadata[contracts.MetadataObjectType] = plugin
+	objectType := objectTypeForPlugin(plugin)
+	req.Metadata[contracts.MetadataObjectType] = objectType
 	req.Metadata[contracts.MetadataObjectID] = uri
-	req.Metadata[events.MetadataSourceID] = "codex:" + plugin + ":" + uri
+	req.Metadata[events.MetadataSourceID] = "codex:" + objectType + ":" + uri
 
 	return c.base.Ingest(ctx, req)
 }
@@ -168,7 +171,7 @@ func (c connector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]e
 	if plugin == "" {
 		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, errors.New("codex_plugin metadata is required"))
 	}
-	if plugin != PluginGitHub && plugin != PluginSlack {
+	if !isSupportedPlugin(plugin) {
 		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, fmt.Errorf("unsupported codex plugin %q", plugin))
 	}
 
@@ -201,9 +204,10 @@ func (c connector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]e
 	req.Metadata[MetadataPrompt] = prompt
 	req.Metadata[MetadataCommand] = c.command
 	req.Metadata[MetadataLog] = log
-	req.Metadata[contracts.MetadataObjectType] = plugin
+	objectType := objectTypeForPlugin(plugin)
+	req.Metadata[contracts.MetadataObjectType] = objectType
 	req.Metadata[contracts.MetadataObjectID] = uri
-	req.Metadata[events.MetadataSourceID] = "codex:" + plugin + ":" + uri
+	req.Metadata[events.MetadataSourceID] = "codex:" + objectType + ":" + uri
 
 	return c.base.Ingest(ctx, req)
 }
@@ -315,9 +319,27 @@ func promptFor(plugin, uri string) string {
 		return "Use the Slack Codex plugin to read the Slack context identified by " + uri + ". Return the relevant channel or message content with source identifiers, timestamps, participants, and links when available. Do not modify Slack."
 	case PluginGitHub:
 		return "Use the GitHub Codex plugin to read the GitHub artifact identified by " + uri + ". Return the relevant repository, issue, pull request, or commit content with source identifiers, timestamps, authors, and links when available. Do not modify GitHub."
+	case PluginAtlassianRovo:
+		return "Use the Atlassian Rovo Codex plugin to read the Jira context identified by " + uri + ". Return the relevant issue or project content with issue keys, summaries, statuses, descriptions, comments, links, fields, changelog entries, timestamps, authors, and source URLs when available. Do not modify Jira or Atlassian data."
 	default:
 		return "Read source context for " + uri + " using the installed Codex plugin."
 	}
+}
+
+func isSupportedPlugin(plugin string) bool {
+	switch plugin {
+	case PluginGitHub, PluginSlack, PluginAtlassianRovo:
+		return true
+	default:
+		return false
+	}
+}
+
+func objectTypeForPlugin(plugin string) string {
+	if plugin == PluginAtlassianRovo {
+		return "jira"
+	}
+	return plugin
 }
 
 func (c connector) connectorError(req contracts.SourceRequest, kind contracts.ErrorKind, retryable bool, err error) error {

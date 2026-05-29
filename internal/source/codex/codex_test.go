@@ -82,6 +82,31 @@ func TestConnectorCapturesLog(t *testing.T) {
 	}
 }
 
+func TestConnectorSupportsAtlassianRovoPlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fake command is unix-only")
+	}
+
+	connector := newConnector(fakeCodexCommand(t, fakeExecScript), t.TempDir())
+
+	events, err := connector.Ingest(context.Background(), contracts.SourceRequest{
+		URI:      "https://example.atlassian.net/browse/CTX-42",
+		Metadata: map[string]string{MetadataPlugin: PluginAtlassianRovo},
+	})
+	if err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	if events[0].Metadata[contracts.MetadataObjectType] != "jira" {
+		t.Fatalf("object_type = %q, want jira", events[0].Metadata[contracts.MetadataObjectType])
+	}
+	if events[0].SourceID != "codex:jira:https://example.atlassian.net/browse/CTX-42" {
+		t.Fatalf("source_id = %q, want Jira Codex source", events[0].SourceID)
+	}
+	if !strings.Contains(events[0].Metadata[MetadataPrompt], "Atlassian Rovo") {
+		t.Fatalf("expected Rovo prompt, got %q", events[0].Metadata[MetadataPrompt])
+	}
+}
+
 func TestConnectorPassesEphemeralAndColorFlags(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")

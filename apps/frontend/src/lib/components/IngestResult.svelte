@@ -11,19 +11,69 @@
       return raw;
     }
   }
+
+  $: events = result.events?.length ? result.events : [result.event];
+  $: previews = result.previews?.length ? result.previews : [result.preview];
+  $: metadataItems = result.metadata_items?.length
+    ? result.metadata_items
+    : [result.metadata];
+  $: eventCount = result.event_count ?? events.length;
 </script>
 
 <div class="result">
-  <div class="kv"><strong>Connector</strong><span>{result.connector}</span></div>
-  <div class="kv"><strong>Capabilities</strong><span>{result.capabilities.join(", ")}</span></div>
+  <div class="kv">
+    <strong>Connector</strong><span>{result.connector}</span>
+  </div>
+  <div class="kv">
+    <strong>Capabilities</strong><span>{result.capabilities.join(", ")}</span>
+  </div>
+  {#if eventCount > 1}
+    <div class="kv"><strong>Event count</strong><span>{eventCount}</span></div>
+  {/if}
   <div class="kv"><strong>Event ID</strong><span>{result.event.id}</span></div>
-  <div class="kv"><strong>Event type</strong><span>{result.event.type}</span></div>
-  <div class="kv"><strong>Source ID</strong><span>{result.event.source_id}</span></div>
-  <div class="kv"><strong>Subject</strong><span>{result.event.subject}</span></div>
-  <div class="kv"><strong>Occurred at</strong><span>{result.event.occurred_at}</span></div>
+  <div class="kv">
+    <strong>Event type</strong><span>{result.event.type}</span>
+  </div>
+  <div class="kv">
+    <strong>Source ID</strong><span>{result.event.source_id}</span>
+  </div>
+  <div class="kv">
+    <strong>Subject</strong><span>{result.event.subject}</span>
+  </div>
+  <div class="kv">
+    <strong>Occurred at</strong><span>{result.event.occurred_at}</span>
+  </div>
+
+  {#if eventCount > 1}
+    <details open>
+      <summary>Events</summary>
+      <div class="event-table-wrap">
+        <table class="event-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Subject</th>
+              <th>Format</th>
+              <th>Source ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each events as event, index}
+              <tr>
+                <td>{index + 1}</td>
+                <td>{event.subject}</td>
+                <td>{metadataItems[index]?.filesystem_format ?? ""}</td>
+                <td>{event.source_id}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  {/if}
 
   <details open>
-    <summary>Metadata</summary>
+    <summary>{eventCount > 1 ? "First metadata" : "Metadata"}</summary>
     <pre>{JSON.stringify(result.metadata, null, 2)}</pre>
   </details>
 
@@ -35,9 +85,21 @@
   {/if}
 
   <details>
-    <summary>Content</summary>
+    <summary>{eventCount > 1 ? "First content" : "Content"}</summary>
     <pre>{prettyPreview(result.preview)}</pre>
   </details>
+
+  {#if eventCount > 1}
+    <details>
+      <summary>Previews</summary>
+      {#each previews as item, index}
+        <div class="preview-heading">
+          {events[index]?.subject ?? `Event ${index + 1}`}
+        </div>
+        <pre>{prettyPreview(item)}</pre>
+      {/each}
+    </details>
+  {/if}
 </div>
 
 <style>
@@ -63,6 +125,38 @@
   details {
     margin-top: 0.75rem;
     font-size: 0.85rem;
+  }
+
+  .event-table-wrap {
+    overflow-x: auto;
+  }
+
+  .event-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .event-table th,
+  .event-table td {
+    border: 1px solid #e5e7eb;
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+    word-break: break-all;
+  }
+
+  .event-table th {
+    background: #f9fafb;
+    color: #374151;
+  }
+
+  .preview-heading {
+    color: #374151;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-top: 0.75rem;
+    word-break: break-all;
   }
 
   pre {

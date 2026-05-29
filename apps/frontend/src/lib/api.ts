@@ -1,8 +1,12 @@
-import type { IngestProvider, IngestResult, ServiceStatus } from "$lib/types";
+import type {
+  CodexConnectorKind,
+  ConnectorKind,
+  IngestProvider,
+  IngestResult,
+  ServiceStatus,
+} from "$lib/types";
 
 export const API_URL = "/api";
-
-type ConnectorKind = "github" | "slack";
 
 interface StreamHandlers {
   onLog?: (line: string) => void;
@@ -22,7 +26,9 @@ interface SSEMessage {
 
 export async function probeService(url: string): Promise<ServiceStatus> {
   try {
-    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${url}/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
     return res.ok ? "ok" : "unreachable";
   } catch {
     return "unreachable";
@@ -41,7 +47,14 @@ export async function getJSON<T>(path: string): Promise<T | null> {
 
 export async function postIngest(
   connector: ConnectorKind,
-  body: { uri: string; token?: string; provider: IngestProvider },
+  body: {
+    uri: string;
+    token?: string;
+    provider: IngestProvider;
+    content?: string;
+    cursor?: string;
+    metadata?: Record<string, string>;
+  },
   options: RequestOptions = {},
 ): Promise<
   | { ok: true; status: number; body: IngestResult }
@@ -57,11 +70,15 @@ export async function postIngest(
   if (res.ok) {
     return { ok: true, status: res.status, body: responseBody as IngestResult };
   }
-  return { ok: false, status: res.status, body: responseBody as { message?: string } };
+  return {
+    ok: false,
+    status: res.status,
+    body: responseBody as { message?: string },
+  };
 }
 
 export async function streamCodexIngest(
-  connector: ConnectorKind,
+  connector: CodexConnectorKind,
   body: { uri: string; token?: string; provider: "codex" },
   handlers: StreamHandlers,
   options: RequestOptions = {},
@@ -84,7 +101,7 @@ export async function streamCodexIngest(
       if (result) handlers.onResult?.(result);
     } else if (message.event === "error") {
       const parsed = parseJSON<{ message?: string }>(message.data);
-      handlers.onError?.(parsed.message ?? message.data);
+      handlers.onError?.(parsed?.message ?? message.data);
     }
   });
 }
@@ -94,10 +111,13 @@ export async function streamCodexReauth(
   onLog: (line: string) => void,
   options: RequestOptions = {},
 ): Promise<void> {
-  const res = await fetch(`${API_URL}/codex/plugin-reauth?plugin=${encodeURIComponent(plugin)}`, {
-    method: "POST",
-    signal: options.signal,
-  });
+  const res = await fetch(
+    `${API_URL}/codex/plugin-reauth?plugin=${encodeURIComponent(plugin)}`,
+    {
+      method: "POST",
+      signal: options.signal,
+    },
+  );
   await assertStreamResponse(res);
   await readLogStream(res, onLog);
 }
@@ -106,18 +126,27 @@ export async function streamCodexLogin(
   onLog: (line: string) => void,
   options: RequestOptions = {},
 ): Promise<void> {
-  const res = await fetch(`${API_URL}/codex/login`, { method: "POST", signal: options.signal });
+  const res = await fetch(`${API_URL}/codex/login`, {
+    method: "POST",
+    signal: options.signal,
+  });
   await assertStreamResponse(res);
   await readLogStream(res, onLog);
 }
 
-async function readLogStream(res: Response, onLog: (line: string) => void): Promise<void> {
+async function readLogStream(
+  res: Response,
+  onLog: (line: string) => void,
+): Promise<void> {
   await readEventStream(res, (message) => {
     if (message.data) onLog(message.data);
   });
 }
 
-async function readEventStream(res: Response, onMessage: (message: SSEMessage) => void): Promise<void> {
+async function readEventStream(
+  res: Response,
+  onMessage: (message: SSEMessage) => void,
+): Promise<void> {
   if (!res.body) throw new Error("No response body");
 
   const reader = res.body.getReader();
@@ -157,7 +186,8 @@ function parseSSEBlock(block: string): SSEMessage | null {
 async function assertStreamResponse(res: Response): Promise<void> {
   if (res.ok) return;
   const body = await readJSON(res);
-  const message = body.message ?? body.error ?? `Request failed with status ${res.status}`;
+  const message =
+    body.message ?? body.error ?? `Request failed with status ${res.status}`;
   throw new Error(message);
 }
 

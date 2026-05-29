@@ -107,9 +107,11 @@ install_codex() {
     sudo npm install -g @openai/codex
   fi
 
-  info "Installing Codex GitHub and Slack plugins"
+  info "Installing Codex GitHub, Atlassian Rovo, and Slack plugins"
   codex plugin add github@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install GitHub Codex plugin." >&2
+  codex plugin add atlassian-rovo@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Atlassian Rovo Codex plugin." >&2
   codex plugin add slack@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Slack Codex plugin." >&2
 

@@ -2,9 +2,12 @@
   import { onMount } from "svelte";
   import type { ServiceStatus, CodexPlugin } from "$lib/types";
   import { API_URL, probeService, streamCodexLogin } from "$lib/api";
+  import { sourceConnectorConfigs } from "$lib/sourceConnectorConfigs";
   import StatusSection from "$lib/components/StatusSection.svelte";
   import GitHubConnector from "$lib/components/GitHubConnector.svelte";
+  import JiraConnector from "$lib/components/JiraConnector.svelte";
   import SlackConnector from "$lib/components/SlackConnector.svelte";
+  import SourceConnector from "$lib/components/SourceConnector.svelte";
 
   const WORKER_URL = "/worker";
 
@@ -12,7 +15,10 @@
   let workerStatus: ServiceStatus = "checking";
 
   onMount(async () => {
-    [apiStatus, workerStatus] = await Promise.all([probeService(API_URL), probeService(WORKER_URL)]);
+    [apiStatus, workerStatus] = await Promise.all([
+      probeService(API_URL),
+      probeService(WORKER_URL),
+    ]);
     await checkCodexStatus();
   });
 
@@ -89,12 +95,36 @@
     {codexPlugins}
     refreshCodexStatus={checkCodexStatus}
   />
+
+  <JiraConnector
+    {codexLoggedIn}
+    {codexAccount}
+    {codexPlugins}
+    refreshCodexStatus={checkCodexStatus}
+  />
+
+  {#each sourceConnectorConfigs as config}
+    <SourceConnector
+      connector={config.connector}
+      title={config.title}
+      description={config.description}
+      examples={config.examples ?? []}
+      defaultUri={config.defaultUri ?? ""}
+      uriPlaceholder={config.uriPlaceholder ?? ""}
+      tokenLabel={config.tokenLabel ?? ""}
+      tokenPlaceholder={config.tokenPlaceholder ?? ""}
+      contentLabel={config.contentLabel ?? ""}
+      contentPlaceholder={config.contentPlaceholder ?? ""}
+      metadataFields={config.metadataFields ?? []}
+      supportedFormats={config.supportedFormats ?? []}
+    />
+  {/each}
 </main>
 
 <style>
   main {
     font-family: system-ui, sans-serif;
-    max-width: 720px;
+    max-width: 860px;
     margin: 3rem auto;
     padding: 0 1rem;
   }

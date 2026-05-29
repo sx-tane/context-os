@@ -15,7 +15,7 @@ What it does:
 3. Installs Bun (UI runtime)
 4. Installs Python 3.12 and pip
 5. Installs `uv` (Python environment manager)
-6. Installs Codex CLI and GitHub/Slack plugins
+6. Installs Codex CLI and GitHub, Atlassian Rovo, and Slack plugins
 7. Performs Codex CLI authentication (with device auth support)
 8. Verifies all tool versions
 9. Runs `go mod tidy`, `go test ./...`, SvelteKit UI check, and `uv sync`

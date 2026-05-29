@@ -76,11 +76,12 @@ type codexPluginStatus struct {
 	Enabled   bool   `json:"enabled"`
 }
 
-// codexPlugins parses `codex plugin list` and returns GitHub + Slack plugin status.
+// codexPlugins parses `codex plugin list` and returns supported plugin status.
 func codexPlugins() []codexPluginStatus {
 	out, err := runCodexInfo("plugin", "list")
 	plugins := []codexPluginStatus{
 		{Name: "github@openai-curated"},
+		{Name: "atlassian-rovo@openai-curated"},
 		{Name: "slack@openai-curated"},
 	}
 	if err != nil {
@@ -208,7 +209,7 @@ func CodexLogin(w http.ResponseWriter, r *http.Request) {
 	f.Flush()
 }
 
-// CodexPluginReauth handles POST /codex/plugin-reauth?plugin=github|slack.
+// CodexPluginReauth handles POST /codex/plugin-reauth?plugin=github|atlassian-rovo|slack.
 // It removes the plugin and re-adds it, which triggers a fresh OAuth consent
 // flow so the user can connect a different platform account.
 // Progress is streamed as SSE log events.
@@ -217,7 +218,7 @@ func CodexLogin(w http.ResponseWriter, r *http.Request) {
 // @Description  Removes then re-adds the named plugin to trigger a fresh OAuth flow.
 // @Tags         codex
 // @Produce      text/event-stream
-// @Param        plugin  query  string  true  "Plugin short name: github or slack"
+// @Param        plugin  query  string  true  "Plugin short name: github, atlassian-rovo, jira, or slack"
 // @Success      200
 // @Failure      400  {object}  map[string]string
 // @Failure      405  {object}  map[string]string
@@ -233,11 +234,13 @@ func CodexPluginReauth(w http.ResponseWriter, r *http.Request) {
 	switch plugin {
 	case "github":
 		fullName = "github@openai-curated"
+	case "atlassian-rovo", "jira":
+		fullName = "atlassian-rovo@openai-curated"
 	case "slack":
 		fullName = "slack@openai-curated"
 	default:
 		response.WriteError(w, http.StatusBadRequest, "invalid_plugin",
-			"plugin must be github or slack")
+			"plugin must be github, atlassian-rovo, jira, or slack")
 		return
 	}
 
@@ -258,7 +261,7 @@ func CodexPluginReauth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 2: re-add — this triggers the OAuth consent flow.
-	_, _ = fmt.Fprintf(w, "event: log\ndata: Re-adding %s — follow the auth prompt...\n\n", fullName)
+	_, _ = fmt.Fprintf(w, "event: log\ndata: Re-adding %s - follow the auth prompt...\n\n", fullName)
 	f.Flush()
 	if err := runCodexSSE(r.Context(), sw, f, binary, "plugin", "add", fullName); err != nil {
 		_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())

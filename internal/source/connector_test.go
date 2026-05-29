@@ -9,14 +9,11 @@ import (
 	"context-os/domain/contracts"
 	"context-os/domain/events"
 	"context-os/internal/source"
-	confluencesource "context-os/internal/source/confluence"
-	excelsource "context-os/internal/source/excel"
 	filesystemsource "context-os/internal/source/filesystem"
 	githubsource "context-os/internal/source/github"
 	googledrivesource "context-os/internal/source/googledrive"
 	jirasource "context-os/internal/source/jira"
 	notionsource "context-os/internal/source/notion"
-	openapisource "context-os/internal/source/openapi"
 	sharepointsource "context-os/internal/source/sharepoint"
 	slacksource "context-os/internal/source/slack"
 )
@@ -156,10 +153,7 @@ func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 		{name: "github", connector: githubsource.NewConnector(), capability: contracts.CapabilityRepository},
 		{name: "slack", connector: slacksource.NewConnector(), capability: contracts.CapabilityMessages},
 		{name: "jira", connector: jirasource.NewConnector(), capability: contracts.CapabilityIssues},
-		{name: "openapi", connector: openapisource.NewConnector(), capability: contracts.CapabilityAPISpec},
-		{name: "excel", connector: excelsource.NewConnector(), capability: contracts.CapabilitySpreadsheet},
 		{name: "filesystem", connector: filesystemsource.NewConnector(), capability: contracts.CapabilityFiles},
-		{name: "confluence", connector: confluencesource.NewConnector(), capability: contracts.CapabilityDocs},
 		{name: "googledrive", connector: googledrivesource.NewConnector(), capability: contracts.CapabilityFiles},
 		{name: "notion", connector: notionsource.NewConnector(), capability: contracts.CapabilityDocs},
 		{name: "sharepoint", connector: sharepointsource.NewConnector(), capability: contracts.CapabilityFiles},

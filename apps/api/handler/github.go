@@ -72,7 +72,7 @@ func resolveGithubUser(token string) (login, name string) {
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return "", ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	var payload struct {
@@ -85,16 +85,7 @@ func resolveGithubUser(token string) (login, name string) {
 	return payload.Login, payload.Name
 }
 
-// githubTokenFromRequest returns a GitHub token from the request metadata field,
-// falling back to the GITHUB_TOKEN environment variable.
-func githubTokenFromRequest(req request.GithubIngest) string {
-	if t := strings.TrimSpace(req.Token); t != "" {
-		return t
-	}
-	return strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
-}
-
-
+// GithubIngest handles POST /github/ingest by ingesting a GitHub artifact
 // via the MCP source connector and returning a provenance-rich event summary.
 //
 // @Summary      Ingest a GitHub artifact

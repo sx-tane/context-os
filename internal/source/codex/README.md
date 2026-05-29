@@ -12,26 +12,28 @@ Source connector that delegates ingestion to the [Codex CLI](https://github.com/
 
 ## Metadata keys
 
-| Key             | Direction | Description                                                               |
-| --------------- | --------- | ------------------------------------------------------------------------- |
-| `codex_plugin`  | in        | Required. Plugin name: `github@openai-curated` or `slack@openai-curated`. |
-| `provider`      | out       | Set to `"codex_cli"` on successful ingestion.                             |
-| `codex_prompt`  | out       | The exact prompt sent to Codex (for audit/replay).                        |
-| `codex_command` | out       | The Codex executable path used.                                           |
-| `codex_log`     | out       | Combined stdout/stderr from the `codex exec` run.                         |
+| Key             | Direction | Description                                                          |
+| --------------- | --------- | -------------------------------------------------------------------- |
+| `codex_plugin`  | in        | Required. Plugin short name: `github`, `atlassian-rovo`, or `slack`. |
+| `provider`      | out       | Set to `"codex_cli"` on successful ingestion.                        |
+| `codex_prompt`  | out       | The exact prompt sent to Codex (for audit/replay).                   |
+| `codex_command` | out       | The Codex executable path used.                                      |
+| `codex_log`     | out       | Combined stdout/stderr from the `codex exec` run.                    |
 
 ## Supported plugins
 
-| Constant       | Value                   | Use for             |
-| -------------- | ----------------------- | ------------------- |
-| `PluginGitHub` | `github@openai-curated` | GitHub repos/issues |
-| `PluginSlack`  | `slack@openai-curated`  | Slack channels/DMs  |
+| Constant              | Value            | Marketplace plugin              | Use for              |
+| --------------------- | ---------------- | ------------------------------- | -------------------- |
+| `PluginGitHub`        | `github`         | `github@openai-curated`         | GitHub repos/issues  |
+| `PluginAtlassianRovo` | `atlassian-rovo` | `atlassian-rovo@openai-curated` | Jira issues/projects |
+| `PluginSlack`         | `slack`          | `slack@openai-curated`          | Slack channels/DMs   |
 
 ## Prerequisites
 
 ```sh
 npm install -g @openai/codex              # install CLI
 codex plugin add github@openai-curated   # add GitHub plugin
+codex plugin add atlassian-rovo@openai-curated # add Jira/Rovo plugin
 codex plugin add slack@openai-curated    # add Slack plugin
 codex login                              # local
 codex login --device-auth               # remote / headless

@@ -23,6 +23,12 @@ import (
 // defaultAddr is the port the API binds to when API_ADDR is not set.
 const defaultAddr = ":8080"
 
+type route struct {
+	pattern string
+	handler http.Handler
+	cors    bool
+}
+
 func main() {
 	addr := os.Getenv("API_ADDR")
 	if addr == "" {
@@ -30,22 +36,38 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/health", middleware.WithCORS(http.HandlerFunc(handler.Health)))
-	mux.Handle("/github/ingest", middleware.WithCORS(http.HandlerFunc(handler.GithubIngest)))
-	mux.Handle("/github/ingest/stream", middleware.WithCORS(http.HandlerFunc(handler.GithubIngestStream)))
-	mux.Handle("/github/status", middleware.WithCORS(http.HandlerFunc(handler.GithubStatus)))
-	mux.Handle("/codex/status", middleware.WithCORS(http.HandlerFunc(handler.CodexStatus)))
-	mux.Handle("/codex/login", middleware.WithCORS(http.HandlerFunc(handler.CodexLogin)))
-	mux.Handle("/codex/plugin-reauth", middleware.WithCORS(http.HandlerFunc(handler.CodexPluginReauth)))
-	mux.Handle("/slack/ingest", middleware.WithCORS(http.HandlerFunc(handler.SlackIngest)))
-	mux.Handle("/slack/ingest/stream", middleware.WithCORS(http.HandlerFunc(handler.SlackIngestStream)))
-	mux.Handle("/slack/status", middleware.WithCORS(http.HandlerFunc(handler.SlackStatus)))
-	mux.Handle("/slack/connect", middleware.WithCORS(http.HandlerFunc(handler.SlackConnect)))
-	mux.Handle("/slack/callback", http.HandlerFunc(handler.SlackCallback))
-	mux.Handle("/swagger/", httpSwagger.WrapHandler)
+	registerRoutes(mux, []route{
+		{pattern: "/health", handler: http.HandlerFunc(handler.Health), cors: true},
+		{pattern: "/github/ingest", handler: http.HandlerFunc(handler.GithubIngest), cors: true},
+		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(handler.GithubIngestStream), cors: true},
+		{pattern: "/github/status", handler: http.HandlerFunc(handler.GithubStatus), cors: true},
+		{pattern: "/jira/status", handler: http.HandlerFunc(handler.JiraStatus), cors: true},
+		{pattern: "/jira/ingest", handler: http.HandlerFunc(handler.JiraIngest), cors: true},
+		{pattern: "/jira/ingest/stream", handler: http.HandlerFunc(handler.JiraIngestStream), cors: true},
+		{pattern: "/filesystem/ingest", handler: http.HandlerFunc(handler.FilesystemIngest), cors: true},
+		{pattern: "/codex/status", handler: http.HandlerFunc(handler.CodexStatus), cors: true},
+		{pattern: "/codex/login", handler: http.HandlerFunc(handler.CodexLogin), cors: true},
+		{pattern: "/codex/plugin-reauth", handler: http.HandlerFunc(handler.CodexPluginReauth), cors: true},
+		{pattern: "/slack/ingest", handler: http.HandlerFunc(handler.SlackIngest), cors: true},
+		{pattern: "/slack/ingest/stream", handler: http.HandlerFunc(handler.SlackIngestStream), cors: true},
+		{pattern: "/slack/status", handler: http.HandlerFunc(handler.SlackStatus), cors: true},
+		{pattern: "/slack/connect", handler: http.HandlerFunc(handler.SlackConnect), cors: true},
+		{pattern: "/slack/callback", handler: http.HandlerFunc(handler.SlackCallback)},
+		{pattern: "/swagger/", handler: httpSwagger.WrapHandler},
+	})
 
 	log.Printf("context-os api listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("api server error: %v", err)
+	}
+}
+
+func registerRoutes(mux *http.ServeMux, routes []route) {
+	for _, r := range routes {
+		handler := r.handler
+		if r.cors {
+			handler = middleware.WithCORS(handler)
+		}
+		mux.Handle(r.pattern, handler)
 	}
 }

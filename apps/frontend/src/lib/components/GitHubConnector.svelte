@@ -1,7 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import type { IngestProvider, IngestResult, CodexPlugin } from "$lib/types";
-  import { API_URL, getJSON, postIngest, streamCodexIngest, streamCodexReauth } from "$lib/api";
+  import { getJSON } from "$lib/api";
+  import { runConnectorIngest } from "$lib/ingestRunner";
+  import { runCodexReauth } from "$lib/reauthRunner";
+  import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "./IngestResult.svelte";
 
@@ -20,7 +23,10 @@
   let result: IngestResult | null = null;
   let liveLog = "";
   let elapsed = 0;
-  let _timer: ReturnType<typeof setInterval> | null = null;
+  let ingestController: AbortController | null = null;
+  let reauthController: AbortController | null = null;
+  let ingestRunID = 0;
+  let reauthRunID = 0;
 
   let connected = false;
   let login = "";
@@ -32,6 +38,10 @@
   let reauthRunning = false;
 
   onMount(checkStatus);
+  onDestroy(() => {
+    ingestController?.abort();
+    reauthController?.abort();
+  });
 
   async function checkStatus() {
     const body = await getJSON<{ connected?: boolean; login?: string; name?: string }>("/github/status");
@@ -41,100 +51,67 @@
   }
 
   async function runReauth(plugin: string) {
-    reauthPlugin = plugin;
-    reauthLog = "";
-    reauthRunning = true;
-    try {
-      await streamCodexReauth(plugin, (line) => {
-        reauthLog += line + "\n";
-      });
-    } catch (e) {
-      reauthLog += String(e) + "\n";
-    } finally {
-      reauthRunning = false;
-      reauthPlugin = "";
-      await refreshCodexStatus();
-    }
+    reauthController?.abort();
+    reauthController = new AbortController();
+    const runID = ++reauthRunID;
+    await runCodexReauth({
+      plugin,
+      refreshCodexStatus,
+      signal: reauthController.signal,
+      isCurrent: () => runID === reauthRunID,
+      setPlugin: (value) => (reauthPlugin = value),
+      setRunning: (value) => (reauthRunning = value),
+      setLog: (value) => (reauthLog = typeof value === "function" ? value(reauthLog) : value),
+    });
   }
 
   async function runIngest() {
-    loading = true;
-    errorMessage = "";
-    result = null;
-    liveLog = "";
-    elapsed = 0;
-
-    if (provider === "codex") {
-      _timer = setInterval(() => { elapsed += 1; }, 1000);
-      try {
-        await streamCodexIngest("github", { uri, token: token || undefined, provider: "codex" }, {
-          onLog: (line) => {
-            liveLog += line + "\n";
-          },
-          onStatus: (seconds) => {
-            elapsed = seconds;
-          },
-          onResult: (body) => {
-            result = body;
-          },
-          onError: (message) => {
-            errorMessage = message;
-          },
-        });
-      } catch (err) {
-        errorMessage = err instanceof Error ? err.message : String(err);
-      } finally {
-        if (_timer) clearInterval(_timer);
-        loading = false;
-      }
-      return;
-    }
-
-    try {
-      const res = await postIngest("github", { uri, token: token || undefined, provider });
-      if (!res.ok) {
-        errorMessage = res.body?.message ?? `Request failed with status ${res.status}`;
-        return;
-      }
-      result = res.body;
-    } catch (err) {
-      errorMessage = err instanceof Error ? err.message : String(err);
-    } finally {
-      loading = false;
-    }
+    ingestController?.abort();
+    ingestController = new AbortController();
+    const runID = ++ingestRunID;
+    await runConnectorIngest({
+      connector: "github",
+      uri,
+      token,
+      provider,
+      signal: ingestController.signal,
+      isCurrent: () => runID === ingestRunID,
+      setLoading: (value) => (loading = value),
+      setError: (message) => (errorMessage = message),
+      setResult: (value) => (result = value),
+      setLiveLog: (value) => (liveLog = typeof value === "function" ? value(liveLog) : value),
+      setElapsed: (value) => (elapsed = typeof value === "function" ? value(elapsed) : value),
+    });
   }
 </script>
 
-<section class="card">
-  <h2>GitHub MCP Connector</h2>
-  <p class="hint">
-    Ingest a GitHub repository, issue, or pull request via the MCP source connector.
-    Accepts <code>https://github.com/owner/repo</code>, <code>.../issues/N</code>,
-    <code>.../pull/N</code>, or <code>repo://owner/repo/...</code> URIs.
-  </p>
-
+<ConnectorCard
+  title="GitHub MCP Connector"
+  description="Ingest a GitHub repository, issue, or pull request via the MCP source connector."
+  examples={["https://github.com/owner/repo", "https://github.com/owner/repo/issues/1", "repo://owner/repo/..."]}
+>
   {#if connected}
-    <div class="connected-badge">
-      &#10003; Connected as <strong>{login}{name ? ` (${name})` : ""}</strong> via <code>Github</code>
+    <div class="connector-badge">
+      &#10003; Connected as <strong>{login}{name ? ` (${name})` : ""}</strong> via <code class="connector-card-code">Github</code>
     </div>
   {/if}
 
-  <div class="mode-toggle" aria-label="GitHub ingestion provider">
+  <div class="connector-mode-toggle" aria-label="GitHub ingestion provider">
     <button type="button" class:active={provider === "token"} on:click={() => (provider = "token")}>Token / env</button>
     <button type="button" class:active={provider === "codex"} on:click={() => (provider = "codex")}>Codex CLI plugin</button>
   </div>
 
-  <label>
+  <label class="connector-field">
     <span>URI</span>
-    <input type="text" bind:value={uri} placeholder="https://github.com/owner/repo/issues/1" />
+    <input class="connector-input" type="text" bind:value={uri} placeholder="https://github.com/owner/repo/issues/1" />
   </label>
 
   {#if provider === "token"}
-    <label>
-      <span>GitHub token <span class="optional">(optional — needed for private repos or if rate-limited)</span></span>
-      <input type="password" bind:value={token} placeholder="ghp_..." />
+    <label class="connector-field">
+      <span>GitHub token <span class="connector-optional">(optional — needed for private repos or if rate-limited)</span></span>
+      <input class="connector-input" type="password" bind:value={token} placeholder="ghp_..." />
     </label>
-    <details class="token-help">
+    <details class="connector-help">
       <summary>How to get a GitHub token</summary>
       <ol>
         <li>Go to <a href="https://github.com/settings/tokens/new?scopes=repo&description=ContextOS" target="_blank" rel="noopener">github.com/settings/tokens</a></li>
@@ -142,8 +119,8 @@
         <li>Tick the <strong>repo</strong> scope</li>
         <li>Click <strong>Generate token</strong>, copy it, paste above</li>
       </ol>
-      <p class="token-note">
-        Inside a Codespace you can leave this blank — <code>GITHUB_TOKEN</code> is already set to your account automatically.
+      <p class="connector-note">
+        Inside a Codespace you can leave this blank — <code class="connector-card-code">GITHUB_TOKEN</code> is already set to your account automatically.
       </p>
     </details>
   {:else}
@@ -159,173 +136,19 @@
     />
   {/if}
 
-  <button on:click={runIngest} disabled={loading || !uri.trim()}>
+  <button class="connector-button" type="button" on:click={runIngest} disabled={loading || !uri.trim()}>
     {loading ? `Ingesting… (${elapsed}s)` : "Run ingest"}
   </button>
 
   {#if provider === "codex" && (liveLog || loading)}
-    <pre class="live-log">{liveLog || "Waiting for Codex output…"}</pre>
+    <pre class="connector-log">{liveLog || "Waiting for Codex output…"}</pre>
   {/if}
 
   {#if errorMessage}
-    <div class="error">{errorMessage}</div>
+    <div class="connector-error">{errorMessage}</div>
   {/if}
 
   {#if result}
     <ResultPanel {result} {provider} />
   {/if}
-</section>
-
-<style>
-  .card {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  h2 {
-    font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #6b7280;
-    margin: 0 0 1rem;
-  }
-
-  .hint {
-    color: #6b7280;
-    font-size: 0.85rem;
-    margin: 0 0 1rem;
-  }
-
-  .connected-badge {
-    display: inline-block;
-    margin-bottom: 0.75rem;
-    padding: 0.3rem 0.75rem;
-    background: #f0fdf4;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    font-weight: 500;
-  }
-
-  .mode-toggle {
-    display: inline-flex;
-    gap: 0.25rem;
-    padding: 0.25rem;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    margin: 0 0 0.75rem;
-    background: #f9fafb;
-  }
-
-  .mode-toggle button {
-    background: transparent;
-    color: #374151;
-    border: 0;
-    padding: 0.4rem 0.65rem;
-    border-radius: 4px;
-    font-weight: normal;
-  }
-
-  .mode-toggle button.active {
-    background: #111827;
-    color: white;
-  }
-
-  label {
-    display: block;
-    margin-bottom: 0.75rem;
-    font-size: 0.85rem;
-  }
-
-  label > span {
-    display: block;
-    margin-bottom: 0.25rem;
-    color: #374151;
-  }
-
-  .optional {
-    font-weight: 400;
-    color: #9ca3af;
-    font-size: 0.8rem;
-  }
-
-  .token-help {
-    margin: -0.25rem 0 0.75rem;
-    font-size: 0.8rem;
-    color: #6b7280;
-  }
-
-  .token-help summary {
-    cursor: pointer;
-    color: #2563eb;
-    user-select: none;
-  }
-
-  .token-help ol {
-    margin: 0.5rem 0 0.5rem 1.25rem;
-    padding: 0;
-    line-height: 1.8;
-  }
-
-  .token-note {
-    margin: 0.25rem 0 0;
-    color: #9ca3af;
-  }
-
-  input {
-    width: 100%;
-    padding: 0.5rem 0.6rem;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font: inherit;
-    box-sizing: border-box;
-  }
-
-  button {
-    background: #111827;
-    color: white;
-    border: 0;
-    padding: 0.55rem 1rem;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .live-log {
-    margin-top: 0.75rem;
-    padding: 0.6rem 0.8rem;
-    background: #111827;
-    color: #d1fae5;
-    border-radius: 6px;
-    font-size: 0.78rem;
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-
-  .error {
-    margin-top: 1rem;
-    padding: 0.75rem 1rem;
-    background: #fef2f2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    white-space: pre-wrap;
-  }
-
-  code {
-    background: #f3f4f6;
-    padding: 0.1rem 0.3rem;
-    border-radius: 4px;
-  }
-</style>
+</ConnectorCard>

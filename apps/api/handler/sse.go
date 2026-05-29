@@ -102,7 +102,7 @@ func streamWithHeartbeat(ctx context.Context, w http.ResponseWriter, f http.Flus
 }
 
 type codexStreamRequest interface {
-	request.GithubIngest | request.SlackIngest
+	request.GithubIngest | request.JiraIngest | request.SlackIngest
 }
 
 func streamCodexIngest[T codexStreamRequest](
@@ -166,14 +166,7 @@ func streamCodexIngest[T codexStreamRequest](
 		return
 	}
 
-	ev := resultEvents[0]
-	sseResult(w, f, response.Ingest{
-		Connector:    "codex-cli",
-		Capabilities: capabilities,
-		Event:        ev,
-		Preview:      preview(ev.Content),
-		Metadata:     ev.Metadata,
-	})
+	sseResult(w, f, newIngestResponse("codex-cli", capabilities, resultEvents))
 }
 
 // GithubIngestStream handles POST /github/ingest/stream.
@@ -205,6 +198,37 @@ func GithubIngestStream(w http.ResponseWriter, r *http.Request) {
 		func(req request.GithubIngest) string { return req.URI },
 		func(req request.GithubIngest) string { return req.Provider },
 		func(req request.GithubIngest) string { return req.Token },
+	)
+}
+
+// JiraIngestStream handles POST /jira/ingest/stream.
+// It streams Codex CLI log lines from the Atlassian Rovo plugin as SSE "log" events,
+// then emits a single "result" event with the final ingest payload.
+//
+// @Summary      Stream Jira Codex/Rovo ingest
+// @Description  Streams Atlassian Rovo Codex plugin progress via SSE, then emits a result event.
+// @Tags         jira
+// @Accept       json
+// @Produce      text/event-stream
+// @Param        body  body  request.JiraIngest  true  "Jira ingest request (provider must be codex)"
+// @Success      200   {string}  string  "SSE stream"
+// @Failure      400   {object}  map[string]string
+// @Failure      405   {object}  map[string]string
+// @Router       /jira/ingest/stream [post]
+func JiraIngestStream(w http.ResponseWriter, r *http.Request) {
+	streamCodexIngest(
+		w,
+		r,
+		codexsource.PluginAtlassianRovo,
+		[]string{"issues"},
+		func(dec *json.Decoder) (request.JiraIngest, error) {
+			var req request.JiraIngest
+			err := dec.Decode(&req)
+			return req, err
+		},
+		func(req request.JiraIngest) string { return req.URI },
+		func(req request.JiraIngest) string { return req.Provider },
+		func(req request.JiraIngest) string { return req.Token },
 	)
 }
 
