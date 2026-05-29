@@ -136,3 +136,9 @@ flowchart LR
 
   doc --> classified --> entity --> canonical --> relationship --> mismatch
 ```
+
+## Maintenance Checklist
+
+- Keep new shared types stable and JSON-friendly.
+- Preserve `Evidence` and `Confidence` fields for reasoning outputs.
+- Document breaking contract changes before updating downstream stages.

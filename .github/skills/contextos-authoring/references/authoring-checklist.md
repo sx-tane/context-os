@@ -36,7 +36,8 @@ Run before marking any customization primitive complete.
 - [ ] No empty script folders or placeholder scripts were added
 - [ ] Authoring benchmark scripts pass after customization changes
 - [ ] README coverage benchmark passes or exclusions are intentionally updated
-- [ ] README change-sync benchmark passes for the working diff range
+- [ ] README quality benchmark passes for required directories
+- [ ] README change-sync benchmark passes for the working diff range and rejects shallow documentation edits
 
 ### References
 

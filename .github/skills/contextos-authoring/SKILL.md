@@ -199,6 +199,7 @@ Run the authoring benchmarks after adding or changing skills:
 .github/skills/contextos-authoring/scripts/score-skill-routing.sh
 .github/skills/contextos-authoring/scripts/check-mermaid-policy.sh
 .github/skills/contextos-authoring/scripts/score-readme-coverage.sh
+.github/skills/contextos-authoring/scripts/score-readme-quality.sh
 .github/skills/contextos-authoring/scripts/check-readme-sync-on-change.sh
 ```
 
@@ -213,9 +214,10 @@ The structural benchmark scores each skill out of 100 using structural, routing,
 The routing benchmark checks real prompt scenarios against expected skills. The Mermaid policy benchmark verifies explanatory response rules stay wired into repo-wide instructions and docs.
 
 The README coverage benchmark scores tracked directory coverage and lists missing `README.md` folders.
-The change-sync benchmark checks that code edits are accompanied by same-folder README updates in the selected git diff range.
+The README quality benchmark scores folder documentation against the actual code context in that directory: direct child files, sibling folders, high-level architecture paths, and operational entrypoints.
+The change-sync benchmark checks that code edits are accompanied by meaningful nearest-README updates in the selected git diff range. New code files must be reflected by the nearest README, and shallow README edits are rejected.
 
-Passing bar: every structural skill score is at least 90, every routing scenario scores 100, the Mermaid policy score is 100, README coverage reaches 100, and the change-sync benchmark passes for the working diff.
+Passing bar: every structural skill score is at least 90, every routing scenario scores 100, the Mermaid policy score is 100, README coverage reaches 100, every required README quality score is at least 80, and the change-sync benchmark passes for the working diff.
 
 ## References
 
@@ -229,6 +231,7 @@ Passing bar: every structural skill score is at least 90, every routing scenario
 - [Mermaid Policy Script](./scripts/check-mermaid-policy.sh) — validates visual explanation policy wiring.
 - [README Coverage Exclusions](./references/readme-coverage-exclusions.txt) — minimal allowlist for non-doc directories.
 - [README Coverage Script](./scripts/score-readme-coverage.sh) — validates folder README coverage.
+- [README Quality Script](./scripts/score-readme-quality.sh) — validates README content quality against directory-specific code context.
 - [README Change Sync Script](./scripts/check-readme-sync-on-change.sh) — validates README updates are included with code changes.
 
 ---

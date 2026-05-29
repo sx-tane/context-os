@@ -39,3 +39,9 @@ The domain layer should not import internal packages. `domain/pipelines` only de
 - Entity and relationship shape: [types](types/README.md)
 - Canonical identity wrapper: [entities](entities/README.md)
 - Pipeline result: [pipelines](pipelines/README.md)
+
+## Maintenance Checklist
+
+- Keep domain packages implementation-independent and serializable.
+- Update package READMEs when contracts or type meanings change.
+- Do not move stage orchestration logic into the domain layer.

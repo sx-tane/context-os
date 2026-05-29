@@ -28,6 +28,9 @@ jobs:
       - name: README coverage benchmark
         run: bash .github/skills/contextos-authoring/scripts/score-readme-coverage.sh
 
+      - name: README quality benchmark
+        run: bash .github/skills/contextos-authoring/scripts/score-readme-quality.sh
+
       - name: README change-sync benchmark
         run: |
           bash .github/skills/contextos-authoring/scripts/check-readme-sync-on-change.sh \

@@ -56,6 +56,7 @@ Frontend-specific types that have no swagger equivalent (`IngestRequest`, `Sourc
 ## Testing
 
 Frontend utility tests run with Jest and SWC for fast TypeScript compilation.
+The Jest runtime is configured in `jest.config.cjs`, including SWC transformation and `$lib` module mapping.
 
 ```bash
 cd apps/frontend

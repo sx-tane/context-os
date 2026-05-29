@@ -113,11 +113,63 @@ Run the local benchmarks after changing any skill or customization routing:
 .github/skills/contextos-authoring/scripts/score-skill-routing.sh
 .github/skills/contextos-authoring/scripts/check-mermaid-policy.sh
 .github/skills/contextos-authoring/scripts/score-readme-coverage.sh
+.github/skills/contextos-authoring/scripts/score-readme-quality.sh
 .github/skills/contextos-authoring/scripts/check-readme-sync-on-change.sh
 ```
 
-These checks cover structural skill health, prompt-to-skill routing scenarios, Mermaid explanation policy, folder README coverage, and change-level README sync. The pass bar is 90/100 for every skill, 100/100 for every routing scenario, 100/100 for the Mermaid policy check, 100/100 README coverage, and a passing change-sync check.
+These checks cover structural skill health, prompt-to-skill routing scenarios, Mermaid explanation policy, folder README coverage, folder README quality, and change-level README sync. The pass bar is 90/100 for every skill, 100/100 for every routing scenario, 100/100 for the Mermaid policy check, 100/100 README coverage, at least 80/100 for every required README quality score, and a passing change-sync check.
+
+## README Coverage Scope
+
+README coverage is intentionally focused on product-facing folders. The benchmark excludes internal customization meta-folders and test data subfolders configured in `.github/skills/contextos-authoring/references/readme-coverage-exclusions.txt`.
+
+```mermaid
+flowchart TD
+  D[Tracked directory] --> E{Excluded by prefix?}
+  E -->|Yes| X[Skip README requirement]
+  E -->|No| R{README.md exists?}
+  R -->|Yes| C[Count as covered]
+  R -->|No| M[Report as missing]
+```
+
+Current policy excludes:
+
+- `.github` (customization internals)
+- `tests/harness/fixtures` (fixture payloads)
+- `tests/harness/golden` (golden artifacts)
+- `tests/harness/scenarios` (scenario definitions)
+
+README quality is scored against real folder context. High-level folders such as `apps`, `internal`, `domain`, `docs`, and `storage` must include Mermaid and describe the child areas they actually contain. Leaf package folders are checked for references to their real files, handlers, components, or connectors instead of being forced into the same section layout as root docs. Operational folders are checked for commands, workflow notes, or maintenance guidance when the code in that folder implies runnable or maintained behavior.
+
+## README Debt Guard
+
+The change-sync benchmark prevents AI documentation debt by making README updates part of the same diff as code changes. It checks the nearest applicable README instead of forcing every folder into one shape.
+
+```mermaid
+flowchart TD
+  C[Changed code file] --> E{Excluded path or generated artifact?}
+  E -->|Yes| S[Skip]
+  E -->|No| N[Find nearest README.md]
+  N --> U{README changed in same diff?}
+  U -->|No| F[Fail: missing README update]
+  U -->|Yes| M{Meaningful docs added?}
+  M -->|No| G[Fail: shallow README edit]
+  M -->|Yes| A{New code file?}
+  A -->|No| Q[Run quality benchmark]
+  A -->|Yes| R{README mentions file context?}
+  R -->|No| H[Fail: new file not reflected]
+  R -->|Yes| Q
+  Q --> P[Pass]
+```
+
+Use the guard locally without arguments to check the working tree:
+
+```bash
+.github/skills/contextos-authoring/scripts/check-readme-sync-on-change.sh
+```
+
+CI passes the pull request base and head SHA range so committed changes are checked the same way.
 
 ## CI Enforcement
 
-These same five checks run automatically on every pull request through [`.github/workflows/authoring-benchmarks.yml`](.github/workflows/authoring-benchmarks.yml). You can also run the workflow manually with `workflow_dispatch` from the Actions tab.
+These same six checks run automatically on every pull request through [`.github/workflows/authoring-benchmarks.yml`](.github/workflows/authoring-benchmarks.yml). You can also run the workflow manually with `workflow_dispatch` from the Actions tab.
