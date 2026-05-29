@@ -32,7 +32,7 @@ func RenderSummary(role Role, mismatches []types.Mismatch) string
 
 - If there are no mismatches, returns `<role> view: no delivery mismatches detected`.
 - If mismatches exist, returns a header with count and one bullet per finding.
-- Each finding line includes severity and summary.
+- Each finding line includes severity and summary, and appends confidence, impact, and evidence when those fields are present.
 
 ## Input And Output
 
@@ -70,7 +70,7 @@ summary := presentation.RenderSummary(presentation.PresentationLayer, result.Mis
 
 - Keep this layer focused on formatting. New detection rules belong in reasoning.
 - Role-specific wording can grow here, but it should not hide severity, impact, evidence, or recommended actions.
-- When findings become richer, presentation should expose confidence and evidence in role-friendly language.
+- When findings become richer, presentation should expose confidence, impact, and evidence in role-friendly language.
 
 ## Production Requirements
 

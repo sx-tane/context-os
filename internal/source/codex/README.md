@@ -4,7 +4,7 @@ Source connector that delegates ingestion to the [Codex CLI](https://github.com/
 
 ## How it works
 
-1. `Ingest()` reads the `codex_plugin` metadata key to decide which plugin handles the request.
+1. `Ingest()` and `IngestStream()` share the same `ingestWithProgress` implementation; `Ingest()` uses it in non-streaming mode.
 2. `runCodex` builds the prompt string from the URI and invokes the Codex CLI via `exec` (`--sandbox read-only --ephemeral --color never -o <tmpfile>`).
 3. The last agent message is written to `<tmpfile>` by Codex; stdout/stderr are captured as the run log.
 4. On context cancellation the **whole process group** is killed (`SIGKILL` to `-pgid`) so child processes spawned by the Codex agent cannot keep the stdout/stderr pipes open and stall the HTTP handler.

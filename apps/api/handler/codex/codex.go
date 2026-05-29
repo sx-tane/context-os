@@ -85,8 +85,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = sw
 
 	if err := cmd.Start(); err != nil {
-		_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
-		f.Flush()
+		sw.Event("error", err.Error())
 		return
 	}
 
@@ -97,24 +96,23 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	select {
 	case err := <-doneCh:
 		if err != nil {
-			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
+			sw.Event("error", err.Error())
 		} else {
-			_, _ = fmt.Fprintf(w, "event: result\ndata: ok\n\n")
+			sw.Event("result", "ok")
 		}
 	case <-ctx.Done():
 		if cmd.Process != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 		<-doneCh
-		_, _ = fmt.Fprintf(w, "event: error\ndata: cancelled\n\n")
+		sw.Event("error", "cancelled")
 	case <-time.After(3 * time.Minute):
 		if cmd.Process != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 		<-doneCh
-		_, _ = fmt.Fprintf(w, "event: error\ndata: login timed out\n\n")
+		sw.Event("error", "login timed out")
 	}
-	f.Flush()
 }
 
 // PluginReauth handles POST /codex/plugin-reauth?plugin=github|atlassian-rovo|slack.
@@ -161,24 +159,19 @@ func PluginReauth(w http.ResponseWriter, r *http.Request) {
 	binary := resolveCodexBin()
 
 	// Step 1: remove the plugin.
-	_, _ = fmt.Fprintf(w, "event: log\ndata: Removing %s...\n\n", fullName)
-	f.Flush()
-	if err := runCodexSSE(r.Context(), sw, f, binary, "plugin", "remove", fullName); err != nil {
-		_, _ = fmt.Fprintf(w, "event: log\ndata: (remove skipped: %s)\n\n", err.Error())
-		f.Flush()
+	sw.Log(fmt.Sprintf("Removing %s...", fullName))
+	if err := runCodexSSE(r.Context(), sw, binary, "plugin", "remove", fullName); err != nil {
+		sw.Log(fmt.Sprintf("(remove skipped: %s)", err.Error()))
 	}
 
 	// Step 2: re-add — this triggers the OAuth consent flow.
-	_, _ = fmt.Fprintf(w, "event: log\ndata: Re-adding %s - follow the auth prompt...\n\n", fullName)
-	f.Flush()
-	if err := runCodexSSE(r.Context(), sw, f, binary, "plugin", "add", fullName); err != nil {
-		_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
-		f.Flush()
+	sw.Log(fmt.Sprintf("Re-adding %s - follow the auth prompt...", fullName))
+	if err := runCodexSSE(r.Context(), sw, binary, "plugin", "add", fullName); err != nil {
+		sw.Event("error", err.Error())
 		return
 	}
 
-	_, _ = fmt.Fprintf(w, "event: result\ndata: ok\n\n")
-	f.Flush()
+	sw.Event("result", "ok")
 }
 
 // codexVersion returns the Codex CLI version string, or empty if not installed.
@@ -276,7 +269,7 @@ func runCodexInfo(args ...string) (string, error) {
 }
 
 // runCodexSSE runs a codex sub-command, streaming output to sw, with a 3-minute timeout.
-func runCodexSSE(ctx context.Context, sw *shared.SSEWriter, f http.Flusher, binary string, args ...string) error {
+func runCodexSSE(ctx context.Context, sw *shared.SSEWriter, binary string, args ...string) error {
 	cmd := exec.Command(binary, args...) //nolint:gosec
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdout = sw

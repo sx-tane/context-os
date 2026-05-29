@@ -9,8 +9,9 @@ This package is an **internal implementation detail** of `apps/api`. It must not
 | File             | Responsibility                                                                                                                  |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `ingest.go`      | Synchronous ingest pipeline: `RunSourceIngest`, `WriteSourceIngest`, `SourceIngestInput`, `NewIngestResponse`, metadata helpers |
-| `sse.go`         | SSE infrastructure: `SSEWriter`, `SSEHeaders`, `SSEError`, `SSEResult`, `StreamWithHeartbeat`, `StreamCodexIngest[T]`           |
+| `sse.go`         | SSE infrastructure: `SSEWriter` (with `Write`/`Log`/`Event`/`Error`/`Result`), `SSEHeaders`, `StreamWithHeartbeat`, `StreamCodexIngest[T]` |
 | `ingest_test.go` | Unit tests for preview truncation, metadata helpers, capability conversion                                                      |
+| `sse_test.go`    | Unit tests for SSE writer concurrency safety and error/result framing                                                           |
 
 ## Key exports
 
@@ -18,5 +19,5 @@ This package is an **internal implementation detail** of `apps/api`. It must not
 - **`RunSourceIngest`** — method-guards, decodes JSON body via a caller-supplied decoder, delegates to `WriteSourceIngest`.
 - **`WriteSourceIngest`** — validates URI/content, calls `connector.Ingest`, writes JSON response.
 - **`NewIngestResponse`** — builds a `response.Ingest` from connector name, capabilities, and ingested events.
-- **`SSEWriter`** — `io.Writer` that emits `event: log` SSE events per line.
+- **`SSEWriter`** — concurrency-safe SSE event writer; `Write` emits `event: log` per line while `Event`/`Error`/`Result` serialise status and terminal events through the same mutex so heartbeat and log writes never interleave.
 - **`StreamCodexIngest[T]`** — generic SSE handler for any Codex-backed domain request type.
