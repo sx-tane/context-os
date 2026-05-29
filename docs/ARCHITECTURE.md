@@ -60,7 +60,7 @@ sequenceDiagram
   end
   Pipeline->>Reasoning: DetectMismatches(graph)
   Reasoning-->>Pipeline: Mismatch list
-  Pipeline-->>User: Graph snapshot + explainable findings
+  Pipeline-->>User: Canonical entities + explainable findings
 ```
 
 ## Stage Responsibilities
@@ -150,23 +150,23 @@ flowchart TD
 
 - Internal packages import from domain only — domain never imports internal.
 - No internal stage imports another internal stage directly.
-- `pipelines` is the only orchestrator; it wires all stages together.
+- `internal/pipeline` is the only orchestrator; it wires all stages together.
 
 **What each internal package imports from domain:**
 
-| Internal package | Imports                                   |
-| ---------------- | ----------------------------------------- |
-| source           | contracts, events                         |
-| ingestion        | contracts, events                         |
-| normalization    | events, types                             |
-| classification   | types                                     |
-| extraction       | types                                     |
-| identity         | entities, types                           |
-| relationship     | entities, types                           |
-| graph            | entities, types                           |
-| reasoning        | types (plus graph as a dependency)        |
-| presentation     | types                                     |
-| pipelines        | contracts, types, and all internal stages |
+| Internal package | Imports                              |
+| ---------------- | ------------------------------------ |
+| source           | contracts, events                    |
+| ingestion        | contracts, events                    |
+| normalization    | events, types                        |
+| classification   | types                                |
+| extraction       | contracts, events, types             |
+| identity         | entities, types                      |
+| relationship     | entities, types                      |
+| graph            | entities, types                      |
+| reasoning        | contracts, entities, types           |
+| presentation     | types                                |
+| pipeline         | contracts, pipelines, and all stages |
 
 ## Data Shape Through The Pipeline
 

@@ -33,6 +33,62 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v codex >/dev/null 2>&1; then
+  if command -v npm >/dev/null 2>&1; then
+    echo "Codex CLI not found; installing @openai/codex globally..."
+    npm install -g @openai/codex
+  else
+    echo "[warn] Codex CLI is not installed and npm is unavailable."
+    echo "       Codex plugin ingestion will be disabled until codex is on PATH."
+  fi
+fi
+
+# Returns 0 (true) when running inside a headless, remote, or SSH environment.
+is_headless() {
+  [[ -n "${CODESPACES:-}" ]]                        && return 0
+  [[ -n "${VSCODE_REMOTE_CONTAINERS_SESSION:-}" ]]  && return 0
+  [[ -n "${SSH_TTY:-}" ]]                            && return 0
+  [[ -n "${SSH_CONNECTION:-}" ]]                     && return 0
+  [[ -z "${DISPLAY:-}" ]]                            && return 0
+  return 1
+}
+
+if command -v codex >/dev/null 2>&1; then
+  echo "Codex CLI: $(codex --version)"
+  echo "Ensuring Codex GitHub, Atlassian Rovo, and Slack plugins are installed..."
+  codex plugin add github@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install GitHub Codex plugin."
+  codex plugin add atlassian-rovo@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Atlassian Rovo Codex plugin."
+  codex plugin add slack@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Slack Codex plugin."
+  if ! codex login status >/dev/null 2>&1; then
+    if is_headless; then
+      echo
+      echo "╔══════════════════════════════════════════════════════════════╗"
+      echo "║  Codex CLI login required (remote / headless environment)   ║"
+      echo "║  Run this command in your terminal, then restart:           ║"
+      echo "║                                                              ║"
+      echo "║    codex login --device-auth                                ║"
+      echo "║                                                              ║"
+      echo "║  You will be shown a URL + code to approve in your browser. ║"
+      echo "╚══════════════════════════════════════════════════════════════╝"
+      echo
+    else
+      echo
+      echo "╔══════════════════════════════════════════════════════════════╗"
+      echo "║  Codex CLI login required                                   ║"
+      echo "║  Run this command in your terminal, then restart:           ║"
+      echo "║                                                              ║"
+      echo "║    codex login                                              ║"
+      echo "║                                                              ║"
+      echo "║  Your browser will open the Codex authorization page.       ║"
+      echo "╚══════════════════════════════════════════════════════════════╝"
+      echo
+    fi
+  fi
+fi
+
 if command -v uv >/dev/null 2>&1; then
   echo "Preparing AI worker environment..."
   (
@@ -49,6 +105,36 @@ if command -v uv >/dev/null 2>&1; then
 else
   echo "uv not found; skipping AI worker environment sync" >&2
 fi
+
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "[warn] GITHUB_TOKEN is not set — the GitHub connector will only reach public repos."
+  echo "       To authenticate: export GITHUB_TOKEN=ghp_... then re-run this script."
+fi
+
+if command -v swag >/dev/null 2>&1; then
+  echo "Regenerating OpenAPI docs..."
+  (
+    cd "$ROOT_DIR"
+    swag init -g apps/api/main.go -o apps/api/_docs --quiet 2>/dev/null || \
+      swag init -g apps/api/main.go -o apps/api/_docs
+  )
+  if command -v npx >/dev/null 2>&1; then
+    npx --yes @redocly/cli build-docs \
+      "$ROOT_DIR/apps/api/_docs/swagger.yaml" \
+      --output "$ROOT_DIR/apps/api/_docs/api.html" \
+      --title "ContextOS API" 2>/dev/null || true
+  fi
+else
+  echo "[info] swag not found; skipping OpenAPI doc generation."
+  echo "       Install with: go install github.com/swaggo/swag/cmd/swag@v1.16.4"
+fi
+
+echo "Regenerating frontend TypeScript types from swagger..."
+(
+  cd "$ROOT_DIR/apps/frontend"
+  bun run codegen 2>/dev/null || \
+    echo "[warn] Frontend codegen failed; types may be stale. Run: cd apps/frontend && bun run codegen"
+)
 
 echo "Starting API on current terminal session..."
 (

@@ -1,0 +1,12 @@
+id	prompt_trigger	expected_skill	required_terms	avoid_skills
+api-handler	add a new connector status and ingest route	contextos-api-handler	/connector/status,/connector/ingest,handler	contextos-frontend-connector,contextos-pipeline-stage-delivery
+frontend-connector	add a new Svelte connector card with status and ingest	contextos-frontend-connector	Connector.svelte,+page.svelte,runConnectorIngest	contextos-api-handler,frontend-jest-swc-patterns
+frontend-test	add a fast Jest SWC test for a frontend runner	frontend-jest-swc-patterns	*.test.ts,$lib,fetch	go-test-patterns,contextos-frontend-connector
+go-test	add a Go test with table driven subtests	go-test-patterns	_test.go,table-driven,subtest	frontend-jest-swc-patterns,go-best-practices
+go-quality	refactor Go code for error handling and goroutine safety	go-best-practices	Go,error handling,goroutine	go-test-patterns,contextos-pipeline-stage-delivery
+pipeline-stage	change extraction stage output and preserve trace IDs	contextos-pipeline-stage-delivery	pipeline stage,contracts,traceability	contextos-misalignment-report,contextos-identity-resolution-benchmark
+identity-benchmark	tune alias merge thresholds and measure precision recall	contextos-identity-resolution-benchmark	identity-resolution,precision,recall	contextos-pipeline-stage-delivery,contextos-misalignment-report
+misalignment-report	produce mismatch findings between PMO API and frontend	contextos-misalignment-report	misalignment,confidence,evidence	contextos-pipeline-stage-delivery,contextos-identity-resolution-benchmark
+harness	add deterministic fixtures golden outputs and regression gates	contextos-harness-engineering	fixtures,golden,regression	go-test-patterns,contextos-identity-resolution-benchmark
+issues	create parent child implementation issues with labels	contextos-issue-workflow	parent-child,labels,issue	contextos-authoring,contextos-pipeline-stage-delivery
+authoring	create or update an agent instruction or skill	contextos-authoring	SKILL.md,instructions,agent	contextos-issue-workflow,go-best-practices

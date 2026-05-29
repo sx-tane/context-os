@@ -7,6 +7,17 @@ user-invocable: true
 
 # Go Best Practices
 
+## Outcome
+
+Go code remains simple, idiomatic, documented, and safe at package and pipeline boundaries.
+
+## Procedure
+
+1. Read the package boundary and public API before editing.
+2. Apply the rules below while implementing or reviewing the Go change.
+3. Update the nearest README when exported behavior, package structure, commands, or setup changes.
+4. Run the relevant Go build, test, and vet checks for touched packages.
+
 ## Purpose
 
 Keep every Go file in this codebase simple, readable, and maintainable by following the twelve canonical Go best practices. Apply these rules when writing new code, reviewing existing code, or refactoring.
@@ -257,12 +268,14 @@ Before committing any Go file, verify:
 - [ ] No direct imports between `internal/` stage packages
 - [ ] Public API functions are synchronous — no goroutine in the signature
 - [ ] Every goroutine has a clear termination path
+- [ ] Nearest README updated when exported behavior, commands, package structure, or setup changed
 
 ## References
 
 - [Twelve Go Best Practices — Francesc Campoy Flores](https://go.dev/talks/2013/bestpractices.slide)
 - [Effective Go](https://go.dev/doc/effective_go)
 - [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
+- [Quick Checklist](./references/go-checklist.md) — review before marking Go implementation work complete.
 
 ## Assets
 

@@ -1,0 +1,23 @@
+{
+  "entities": [
+    {
+      "name": "refundStatus",
+      "type": "api_field"
+    },
+    {
+      "name": "missingRefundState",
+      "type": "api_field"
+    }
+  ],
+  "mismatches": [
+    {
+      "type": "keyword_signal",
+      "summary": "Potential delivery mismatch around missingRefundState",
+      "severity": "medium",
+      "confidence_min": 0.7,
+      "impact": "medium",
+      "evidence": ["repo://example/refund-flow#missingRefundState"],
+      "entity_names": ["missingRefundState"]
+    }
+  ]
+}

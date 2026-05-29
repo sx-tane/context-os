@@ -6,3 +6,4 @@
 4. Verify trace identifiers are preserved.
 5. Add evidence fields where inference is involved.
 6. Add tests for success, duplicate or replay, and failure.
+7. Update the nearest stage, contract, or package README when behavior, contracts, events, or run commands change.

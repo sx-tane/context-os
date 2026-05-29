@@ -1,43 +1,66 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import type { ServiceStatus, CodexPlugin } from "$lib/types";
+  import { API_URL, probeService, streamCodexLogin } from "$lib/api";
+  import { sourceConnectorConfigs } from "$lib/sourceConnectorConfigs";
+  import StatusSection from "$lib/components/feedback/StatusSection.svelte";
+  import GitHubConnector from "$lib/components/connectors/GitHubConnector.svelte";
+  import JiraConnector from "$lib/components/connectors/JiraConnector.svelte";
+  import SlackConnector from "$lib/components/connectors/SlackConnector.svelte";
+  import SourceConnector from "$lib/components/connectors/SourceConnector.svelte";
 
-  const API_URL = "/api";
   const WORKER_URL = "/worker";
-
-  type ServiceStatus = "checking" | "ok" | "unreachable";
 
   let apiStatus: ServiceStatus = "checking";
   let workerStatus: ServiceStatus = "checking";
 
-  async function probe(url: string): Promise<ServiceStatus> {
+  onMount(async () => {
+    [apiStatus, workerStatus] = await Promise.all([
+      probeService(API_URL),
+      probeService(WORKER_URL),
+    ]);
+    await checkCodexStatus();
+  });
+
+  // Codex CLI status — shared across all connectors
+  let codexInstalled = false;
+  let codexVersion = "";
+  let codexLoggedIn = false;
+  let codexAccount = "";
+  let codexPlugins: CodexPlugin[] = [];
+  let codexLoginLog = "";
+  let codexLoginRunning = false;
+
+  async function checkCodexStatus() {
     try {
-      const res = await fetch(`${url}/health`, {
-        signal: AbortSignal.timeout(3000),
-      });
-      return res.ok ? "ok" : "unreachable";
+      const res = await fetch(`${API_URL}/codex/status`);
+      if (res.ok) {
+        const body = await res.json();
+        codexInstalled = body?.installed === true;
+        codexVersion = body?.version ?? "";
+        codexLoggedIn = body?.logged_in === true;
+        codexAccount = body?.account ?? "";
+        codexPlugins = body?.plugins ?? [];
+      }
     } catch {
-      return "unreachable";
+      // ignore
     }
   }
 
-  onMount(async () => {
-    [apiStatus, workerStatus] = await Promise.all([
-      probe(API_URL),
-      probe(WORKER_URL),
-    ]);
-  });
-
-  const label: Record<ServiceStatus, string> = {
-    checking: "Checking...",
-    ok: "Online",
-    unreachable: "Offline",
-  };
-
-  const color: Record<ServiceStatus, string> = {
-    checking: "#888",
-    ok: "#22c55e",
-    unreachable: "#ef4444",
-  };
+  async function runCodexLogin() {
+    codexLoginLog = "";
+    codexLoginRunning = true;
+    try {
+      await streamCodexLogin((line) => {
+        codexLoginLog += line + "\n";
+      });
+    } catch (e) {
+      codexLoginLog += String(e) + "\n";
+    } finally {
+      codexLoginRunning = false;
+      await checkCodexStatus();
+    }
+  }
 </script>
 
 <svelte:head>
@@ -47,72 +70,70 @@
 <main>
   <h1>ContextOS</h1>
 
-  <section class="status">
-    <h2>System Status</h2>
-    <div class="row">
-      <span class="dot" style="background:{color[apiStatus]}"></span>
-      <span class="service">API</span>
-      <span class="value" style="color:{color[apiStatus]}"
-        >{label[apiStatus]}</span
-      >
-    </div>
-    <div class="row">
-      <span class="dot" style="background:{color[workerStatus]}"></span>
-      <span class="service">AI Worker</span>
-      <span class="value" style="color:{color[workerStatus]}"
-        >{label[workerStatus]}</span
-      >
-    </div>
-  </section>
+  <StatusSection
+    {apiStatus}
+    {workerStatus}
+    {codexInstalled}
+    {codexVersion}
+    {codexLoggedIn}
+    {codexAccount}
+    {codexLoginLog}
+    {codexLoginRunning}
+    onLoginClick={runCodexLogin}
+  />
+
+  <GitHubConnector
+    {codexLoggedIn}
+    {codexAccount}
+    {codexPlugins}
+    refreshCodexStatus={checkCodexStatus}
+  />
+
+  <SlackConnector
+    {codexLoggedIn}
+    {codexAccount}
+    {codexPlugins}
+    refreshCodexStatus={checkCodexStatus}
+  />
+
+  <JiraConnector
+    {codexLoggedIn}
+    {codexAccount}
+    {codexPlugins}
+    refreshCodexStatus={checkCodexStatus}
+  />
+
+  {#each sourceConnectorConfigs as config}
+    <SourceConnector
+      connector={config.connector}
+      title={config.title}
+      description={config.description}
+      examples={config.examples ?? []}
+      defaultUri={config.defaultUri ?? ""}
+      uriLabel={config.uriLabel ?? "URI"}
+      uriPlaceholder={config.uriPlaceholder ?? ""}
+      submitLabel={config.submitLabel ?? "Run ingest"}
+      uploadEnabled={config.uploadEnabled ?? false}
+      tokenLabel={config.tokenLabel ?? ""}
+      tokenPlaceholder={config.tokenPlaceholder ?? ""}
+      contentLabel={config.contentLabel ?? ""}
+      contentPlaceholder={config.contentPlaceholder ?? ""}
+      metadataFields={config.metadataFields ?? []}
+      supportedFormats={config.supportedFormats ?? []}
+    />
+  {/each}
 </main>
 
 <style>
   main {
     font-family: system-ui, sans-serif;
-    max-width: 480px;
-    margin: 4rem auto;
+    max-width: 860px;
+    margin: 3rem auto;
     padding: 0 1rem;
   }
 
   h1 {
     font-size: 1.75rem;
-    margin-bottom: 2rem;
-  }
-
-  .status {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 1.25rem 1.5rem;
-  }
-
-  h2 {
-    font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #6b7280;
-    margin: 0 0 1rem;
-  }
-
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.35rem 0;
-  }
-
-  .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .service {
-    flex: 1;
-    font-weight: 500;
-  }
-
-  .value {
-    font-weight: 600;
+    margin-bottom: 1.5rem;
   }
 </style>

@@ -44,14 +44,14 @@ Candidates shorter than three characters are ignored. Deduplication is case-inse
 
 ## Type Inference
 
-| Condition | Entity Type |
-| --- | --- |
-| name contains `field`, `status`, or `state` | `APIField` |
-| name contains `column` or `database` | `DBColumn` |
-| name contains `type` or `flag` | `Enum` |
-| document classification is `BusinessLogic` | `Requirement` |
-| document classification is `APIDiscussion` | `Service` |
-| fallback | `Dependency` |
+| Condition                                   | Entity Type   |
+| ------------------------------------------- | ------------- |
+| name contains `field`, `status`, or `state` | `APIField`    |
+| name contains `column` or `database`        | `DBColumn`    |
+| name contains `type` or `flag`              | `Enum`        |
+| document classification is `BusinessLogic`  | `Requirement` |
+| document classification is `APIDiscussion`  | `Service`     |
+| fallback                                    | `Dependency`  |
 
 ## Entity Shape
 
@@ -61,7 +61,7 @@ Each extracted entity receives:
 - `Type`: inferred entity type.
 - `Name`: original candidate text.
 - `SourceID`: normalized document ID.
-- `Metadata`: `classification` value.
+- `Metadata`: `classification`, plus `source_uri` and upstream `source_id` when present for downstream evidence.
 
 ## Dependencies
 
@@ -91,5 +91,5 @@ extracted := extraction.Extract(classified)
 
 - Emit source spans or structured field paths for every extracted entity.
 - Include extraction confidence and extraction method metadata.
-- Support structured inputs such as OpenAPI schemas, Jira fields, Excel cells, and filesystem documents.
+- Support structured inputs such as Jira fields, filesystem documents, OpenAPI schemas, and spreadsheet cells.
 - Preserve raw mention text separately from normalized entity names.

@@ -17,7 +17,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o api ./apps/api/
 # Stage 2: minimal runtime image
 FROM alpine:3.20
 
-RUN addgroup -S appgroup && adduser -S -G appgroup appuser
+# ca-certificates is required so the API can call HTTPS upstreams (e.g. api.github.com).
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S appgroup && adduser -S -G appgroup appuser
 
 WORKDIR /app
 

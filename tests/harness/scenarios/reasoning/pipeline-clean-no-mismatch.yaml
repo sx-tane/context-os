@@ -1,0 +1,29 @@
+id: pipeline-clean-no-mismatch
+area: reasoning
+level: pipeline
+description: "A source document without drift keywords produces entities without mismatch findings."
+owner: internal/pipeline
+
+inputs:
+  source_request:
+    uri: "repo://example/refund-clean"
+    content_path: "tests/harness/fixtures/reasoning/pipeline-clean-no-mismatch/input.txt"
+    metadata_path: "tests/harness/fixtures/reasoning/pipeline-clean-no-mismatch/source-metadata.json"
+
+expected:
+  golden_path: "tests/harness/golden/reasoning/pipeline-clean-no-mismatch.json"
+  entities:
+    - canonical: "refundStatus"
+      kind: "api_field"
+  mismatches: []
+
+thresholds:
+  precision_min: 1.00
+  recall_min: 1.00
+  false_positive_rate_max: 0.00
+
+evidence:
+  - "tests/harness/fixtures/reasoning/pipeline-clean-no-mismatch/input.txt"
+  - "tests/harness/fixtures/reasoning/pipeline-clean-no-mismatch/source-metadata.json"
+
+notes: "Negative regression scenario that protects the keyword rule from over-reporting clean delivery context."

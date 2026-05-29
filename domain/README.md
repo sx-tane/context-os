@@ -4,13 +4,13 @@ The `domain` tree contains stable contracts and primitives. These packages shoul
 
 ## Packages
 
-| Package | Responsibility |
-| --- | --- |
-| [contracts](contracts/README.md) | Source connector capability and ingestion request contracts. |
-| [entities](entities/README.md) | Canonical entity wrapper used after identity resolution. |
-| [events](events/README.md) | Event envelope and pipeline event type constants. |
-| [pipelines](pipelines/README.md) | Current orchestration contract and production pipeline direction. |
-| [types](types/README.md) | Normalized documents, classification, entities, relationships, and mismatches. |
+| Package                          | Responsibility                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| [contracts](contracts/README.md) | Source connector capability and ingestion request contracts.                   |
+| [entities](entities/README.md)   | Canonical entity wrapper used after identity resolution.                       |
+| [events](events/README.md)       | Event envelope and pipeline event type constants.                              |
+| [pipelines](pipelines/README.md) | Current orchestration contract and production pipeline direction.              |
+| [types](types/README.md)         | Normalized documents, classification, entities, relationships, and mismatches. |
 
 ## Contract Boundary
 
@@ -29,7 +29,7 @@ flowchart LR
   pipeline --> internal
 ```
 
-The domain layer should not import internal packages. The one exception-like boundary is `domain/pipelines`, which currently orchestrates internal stages and exposes a compact `Result` for tests and local use.
+The domain layer should not import internal packages. `domain/pipelines` only defines the compact `Result` contract for tests and local use; orchestration lives in `internal/pipeline`.
 
 ## Fast Lookup
 
@@ -39,3 +39,9 @@ The domain layer should not import internal packages. The one exception-like bou
 - Entity and relationship shape: [types](types/README.md)
 - Canonical identity wrapper: [entities](entities/README.md)
 - Pipeline result: [pipelines](pipelines/README.md)
+
+## Maintenance Checklist
+
+- Keep domain packages implementation-independent and serializable.
+- Update package READMEs when contracts or type meanings change.
+- Do not move stage orchestration logic into the domain layer.

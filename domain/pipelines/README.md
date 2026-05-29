@@ -4,18 +4,18 @@ Package `domain/pipelines` exposes the current orchestration boundary.
 
 ## Responsibility
 
-Run the current local-first processing path from a source request to a context graph and detected mismatches, while documenting the production direction for durable orchestration.
+Define the domain-level result contract for the current local-first processing path from a source request to canonical entities and detected mismatches, while documenting the production direction for durable orchestration.
 
 ## Key Types
 
 ```go
 type Result struct {
-    Graph      *graph.ContextGraph `json:"graph"`
-    Mismatches []types.Mismatch    `json:"mismatches"`
+  Entities   []entities.CanonicalEntity `json:"entities"`
+  Mismatches []types.Mismatch           `json:"mismatches"`
 }
 ```
 
-`Result` is the current high-level output. The graph is the accumulated memory for the request. Mismatches are reasoning findings derived from that graph.
+`Result` is the current high-level output. `Entities` exposes the canonical context accumulated during the run. `Mismatches` contains evidence-backed reasoning findings derived from the in-memory graph.
 
 ```go
 func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.SourceRequest) (Result, error)
@@ -50,14 +50,14 @@ flowchart TD
 5. Resolve candidates into canonical entities.
 6. Build relationships between adjacent canonical entities from the same source document.
 7. Add entities and relationships to the in-memory context graph.
-8. Run reasoning against the graph and return mismatches.
+8. Run reasoning against the graph and return canonical entities plus mismatches.
 
 ## Implementation Notes
 
 - `Run` currently imports internal stage implementations directly. Production orchestration should support stage contracts, durable state, replay, and trace IDs.
 - The function stops immediately on ingestion errors.
 - Downstream stages are currently synchronous and in-memory.
-- Tests for this contract live in [tests/pipeline_test.go](../../tests/pipeline_test.go).
+- Scenario-backed tests for this contract live in [tests/pipeline_test.go](../../tests/pipeline_test.go) and load fixtures from [tests/harness](../../tests/harness/README.md).
 
 ## Production Direction
 

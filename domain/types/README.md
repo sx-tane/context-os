@@ -92,14 +92,18 @@ Relationships connect domain entities. The current implementation creates `co_oc
 ```go
 type Mismatch struct {
     ID          string   `json:"id"`
+    Type        string   `json:"type"`
     Summary     string   `json:"summary"`
     EntityIDs   []string `json:"entity_ids"`
     Severity    string   `json:"severity"`
+    Confidence  float64  `json:"confidence"`
+    Impact      string   `json:"impact"`
+    Evidence    []string `json:"evidence"`
     Recommended string   `json:"recommended"`
 }
 ```
 
-Mismatches are reasoning findings. The production contract must include explicit confidence, impact, affected roles, evidence references, and recommendation status rather than burying them in prose.
+Mismatches are reasoning findings. Current findings include the detection type, confidence score, impact level, evidence references, severity, and recommended action so downstream presentation and regression harnesses can audit why a finding exists.
 
 Production mismatch direction:
 
@@ -111,12 +115,13 @@ type Mismatch struct {
     Severity    string
     Confidence  float64
     Impact      string
-    Evidence    []EvidenceRef
+    Evidence    []string
+    AffectedRoles []string
     Recommended string
 }
 ```
 
-The code has not adopted this expanded shape yet; track that work through [docs/PRODUCTION_READINESS.md](../../docs/PRODUCTION_READINESS.md).
+Future expansions should add role-specific impact and recommendation status without removing the existing evidence and confidence fields.
 
 ## Pipeline Shape
 
@@ -131,3 +136,9 @@ flowchart LR
 
   doc --> classified --> entity --> canonical --> relationship --> mismatch
 ```
+
+## Maintenance Checklist
+
+- Keep new shared types stable and JSON-friendly.
+- Preserve `Evidence` and `Confidence` fields for reasoning outputs.
+- Document breaking contract changes before updating downstream stages.

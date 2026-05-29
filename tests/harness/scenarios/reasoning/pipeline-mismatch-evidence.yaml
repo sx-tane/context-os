@@ -1,0 +1,35 @@
+id: pipeline-mismatch-evidence
+area: reasoning
+level: pipeline
+description: "A source document with a missing state token produces an evidence-backed mismatch finding."
+owner: internal/pipeline
+
+inputs:
+  source_request:
+    uri: "repo://example/refund-flow"
+    content_path: "tests/harness/fixtures/reasoning/pipeline-mismatch-evidence/input.txt"
+    metadata_path: "tests/harness/fixtures/reasoning/pipeline-mismatch-evidence/source-metadata.json"
+
+expected:
+  golden_path: "tests/harness/golden/reasoning/pipeline-mismatch-evidence.json"
+  entities:
+    - canonical: "refundStatus"
+      kind: "api_field"
+    - canonical: "missingRefundState"
+      kind: "api_field"
+  mismatches:
+    - summary: "Potential delivery mismatch around missingRefundState"
+      evidence:
+        - "repo://example/refund-flow#missingRefundState"
+      confidence_min: 0.70
+
+thresholds:
+  precision_min: 1.00
+  recall_min: 1.00
+  false_positive_rate_max: 0.00
+
+evidence:
+  - "tests/harness/fixtures/reasoning/pipeline-mismatch-evidence/input.txt"
+  - "tests/harness/fixtures/reasoning/pipeline-mismatch-evidence/source-metadata.json"
+
+notes: "Regression scenario for source-to-reasoning provenance on the first cross-layer mismatch path."

@@ -1,0 +1,730 @@
+basePath: /
+definitions:
+  events.Event:
+    properties:
+      content:
+        example: 'Issue body: Please update the connector README with setup steps.'
+        type: string
+      id:
+        example: evt_a1b2c3d4e5f6
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      occurred_at:
+        example: "2026-05-29T10:00:00Z"
+        type: string
+      schema_version:
+        example: v1
+        type: string
+      source:
+        example: github
+        type: string
+      source_id:
+        example: https://github.com/sx-tane/context-os/issues/1
+        type: string
+      subject:
+        example: 'Fix: update connector README'
+        type: string
+      trace_id:
+        example: trace_a1b2c3d4e5f6
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/events.Type'
+        example: document.ingested
+    type: object
+  events.Type:
+    enum:
+    - document.ingested
+    - document.normalized
+    - entity.extracted
+    - identity.resolved
+    - relationship.created
+    - mismatch.detected
+    - codex.analysis.completed
+    type: string
+    x-enum-varnames:
+    - DocumentIngested
+    - DocumentNormalized
+    - EntityExtracted
+    - IdentityResolved
+    - RelationshipCreated
+    - MismatchDetected
+    - CodexAnalysisComplete
+  request.FilesystemIngest:
+    properties:
+      content:
+        example: Optional raw content instead of reading from URI
+        type: string
+      cursor:
+        example: eyJsYXN0X2lkIjoiMTIzIn0=
+        type: string
+      exclude:
+        example: node_modules,*.log
+        type: string
+      include:
+        example: '*.go,*.md'
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      uri:
+        example: storage/raw/README.md
+        type: string
+    type: object
+  request.GithubIngest:
+    properties:
+      provider:
+        example: token
+        type: string
+      token:
+        example: ghp_xxxx
+        type: string
+      uri:
+        example: https://github.com/sx-tane/context-os/issues/1
+        type: string
+    type: object
+  request.JiraIngest:
+    properties:
+      api_base_url:
+        example: https://mysite.atlassian.net
+        type: string
+      content:
+        example: Optional raw content override
+        type: string
+      cursor:
+        example: eyJsYXN0X2lkIjoiMTIzIn0=
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      expand:
+        example: renderedFields,names
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      provider:
+        example: token
+        type: string
+      token:
+        example: ATATT3xFfGF0xxxx
+        type: string
+      uri:
+        example: https://mysite.atlassian.net/browse/PROJ-123
+        type: string
+    type: object
+  request.SlackIngest:
+    properties:
+      provider:
+        example: token
+        type: string
+      token:
+        example: xoxb-111-222-xxxx
+        type: string
+      uri:
+        example: slack://C1234567890
+        type: string
+    type: object
+  response.Ingest:
+    properties:
+      capabilities:
+        items:
+          type: string
+        type: array
+      connector:
+        example: github
+        type: string
+      event:
+        $ref: '#/definitions/events.Event'
+      event_count:
+        example: 1
+        type: integer
+      events:
+        items:
+          $ref: '#/definitions/events.Event'
+        type: array
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      metadata_items:
+        items:
+          additionalProperties:
+            type: string
+          type: object
+        type: array
+      preview:
+        example: 'Issue #1: Fix connector README — requesting updated setup steps.'
+        type: string
+      previews:
+        items:
+          type: string
+        type: array
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Local-first pipeline API for ingesting and reasoning over engineering
+    context.
+  title: ContextOS API
+  version: "1.0"
+paths:
+  /codex/login:
+    post:
+      description: Runs `codex login --device-auth` and streams log lines as SSE events.
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Trigger Codex device login
+      tags:
+      - codex
+  /codex/plugin-reauth:
+    post:
+      description: Removes then re-adds the named plugin to trigger a fresh OAuth
+        flow.
+      parameters:
+      - description: 'Plugin short name: github, atlassian-rovo, jira, or slack'
+        in: query
+        name: plugin
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Re-authenticate a Codex plugin
+      tags:
+      - codex
+  /codex/status:
+    get:
+      description: Returns Codex CLI version, login status, and installed plugin list.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Codex CLI status
+      tags:
+      - codex
+  /filesystem/ingest:
+    post:
+      consumes:
+      - application/json
+      description: Reads a local file or folder path and returns provenance-rich events
+        with extracted text and file metadata.
+      parameters:
+      - description: Filesystem ingest request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.FilesystemIngest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Ingest'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Ingest a local filesystem artifact
+      tags:
+      - filesystem
+  /filesystem/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Accepts multipart/form-data with one or more file parts and optional
+        relative paths, stages them under storage/raw/uploads/<upload-id>/, and ingests
+        through the filesystem connector. Metadata keys filesystem_upload_id, filesystem_upload_root,
+        filesystem_upload_file_count, and filesystem_upload_original_name are added
+        to each result event.
+      parameters:
+      - description: One or more files to upload
+        in: formData
+        name: files
+        required: true
+        type: file
+      - description: Relative paths for browser folder uploads (one per file, matching
+          file order)
+        in: formData
+        name: paths
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Ingest'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Upload and ingest browser files or folders
+      tags:
+      - filesystem
+  /github/ingest:
+    post:
+      consumes:
+      - application/json
+      description: Fetches a GitHub issue, PR, or commit by URI and returns a provenance-rich
+        event.
+      parameters:
+      - description: GitHub ingest request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.GithubIngest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Ingest'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Ingest a GitHub artifact
+      tags:
+      - github
+  /github/ingest/stream:
+    post:
+      consumes:
+      - application/json
+      description: Streams Codex CLI progress via SSE, then emits a result event.
+      parameters:
+      - description: GitHub ingest request (provider must be codex)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.GithubIngest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stream GitHub Codex ingest
+      tags:
+      - github
+  /github/status:
+    get:
+      description: Returns whether a GitHub token is configured and the authenticated
+        user identity.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: GitHub connection status
+      tags:
+      - github
+  /health:
+    get:
+      description: Returns ok when the API process is running.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Liveness check
+      tags:
+      - health
+  /jira/ingest:
+    post:
+      consumes:
+      - application/json
+      description: Fetches Jira issue or project context by URI and returns a provenance-rich
+        event.
+      parameters:
+      - description: Jira ingest request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.JiraIngest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Ingest'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Ingest a Jira issue or project
+      tags:
+      - jira
+  /jira/ingest/stream:
+    post:
+      consumes:
+      - application/json
+      description: Streams Atlassian Rovo Codex plugin progress via SSE, then emits
+        a result event.
+      parameters:
+      - description: Jira ingest request (provider must be codex)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.JiraIngest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stream Jira Codex/Rovo ingest
+      tags:
+      - jira
+  /jira/status:
+    get:
+      description: Returns whether Jira base URL and authentication environment variables
+        are configured.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Jira connection status
+      tags:
+      - jira
+  /slack/callback:
+    get:
+      description: Receives the OAuth code from Slack, exchanges it for a token, and
+        stores it locally.
+      parameters:
+      - description: Authorization code from Slack
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: CSRF state token
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML confirmation page
+          schema:
+            type: string
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Slack OAuth callback
+      tags:
+      - slack
+  /slack/connect:
+    get:
+      description: Generates a CSRF state token and redirects to Slack's OAuth consent
+        page.
+      produces:
+      - text/html
+      responses:
+        "302":
+          description: Redirect to Slack OAuth
+          schema:
+            type: string
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initiate Slack OAuth
+      tags:
+      - slack
+  /slack/ingest:
+    post:
+      consumes:
+      - application/json
+      description: Fetches messages from a Slack channel by URI and returns a provenance-rich
+        event.
+      parameters:
+      - description: Slack ingest request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.SlackIngest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Ingest'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Ingest a Slack channel or message
+      tags:
+      - slack
+  /slack/ingest/stream:
+    post:
+      consumes:
+      - application/json
+      description: Streams Codex CLI progress via SSE, then emits a result event.
+      parameters:
+      - description: Slack ingest request (provider must be codex)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.SlackIngest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stream Slack Codex ingest
+      tags:
+      - slack
+  /slack/status:
+    get:
+      description: Returns token availability, source (env/oauth/none), workspace
+        name, and OAuth readiness.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Slack connection status
+      tags:
+      - slack
+swagger: "2.0"

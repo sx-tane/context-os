@@ -1,36 +1,79 @@
+// Package main is the entry point for the ContextOS HTTP API.
+// It only wires routes to handlers; all logic lives in handler/, request/, response/, and middleware/.
+//
+// @title          ContextOS API
+// @version        1.0
+// @description    Local-first pipeline API for ingesting and reasoning over engineering context.
+// @host           localhost:8080
+// @BasePath       /
 package main
 
 import (
-	"encoding/json" // used to encode the health response as JSON
-	"log"           // used to print startup and error messages
-	"net/http"      // provides the HTTP server and request/response types
-	"os"            // used to read environment variables
+	"log"
+	"net/http"
+	"os"
+
+	_ "context-os/apps/api/docs"
+	handlercodex "context-os/apps/api/handler/codex"
+	"context-os/apps/api/handler/filesystem"
+	"context-os/apps/api/handler/github"
+	"context-os/apps/api/handler/health"
+	"context-os/apps/api/handler/jira"
+	"context-os/apps/api/handler/slack"
+	"context-os/apps/api/middleware"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // defaultAddr is the port the API binds to when API_ADDR is not set.
 const defaultAddr = ":8080"
 
-// main is the entry point — it configures and starts the HTTP server.
+type route struct {
+	pattern string
+	handler http.Handler
+	cors    bool
+}
+
 func main() {
-	addr := os.Getenv("API_ADDR") // read the address from the environment so it can be overridden
+	addr := os.Getenv("API_ADDR")
 	if addr == "" {
-		addr = defaultAddr // fall back to :8080 if no environment variable is set
+		addr = defaultAddr
 	}
 
-	mux := http.NewServeMux()              // create a new router to register handlers on
-	mux.HandleFunc("/health", healthHandler) // register the health check endpoint
+	mux := http.NewServeMux()
+	registerRoutes(mux, []route{
+		{pattern: "/health", handler: http.HandlerFunc(health.Health), cors: true},
+		{pattern: "/github/ingest", handler: http.HandlerFunc(github.Ingest), cors: true},
+		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(github.IngestStream), cors: true},
+		{pattern: "/github/status", handler: http.HandlerFunc(github.Status), cors: true},
+		{pattern: "/jira/status", handler: http.HandlerFunc(jira.Status), cors: true},
+		{pattern: "/jira/ingest", handler: http.HandlerFunc(jira.Ingest), cors: true},
+		{pattern: "/jira/ingest/stream", handler: http.HandlerFunc(jira.IngestStream), cors: true},
+		{pattern: "/filesystem/ingest", handler: http.HandlerFunc(filesystem.Ingest), cors: true},
+		{pattern: "/filesystem/upload", handler: http.HandlerFunc(filesystem.Upload), cors: true},
+		{pattern: "/codex/status", handler: http.HandlerFunc(handlercodex.Status), cors: true},
+		{pattern: "/codex/login", handler: http.HandlerFunc(handlercodex.Login), cors: true},
+		{pattern: "/codex/plugin-reauth", handler: http.HandlerFunc(handlercodex.PluginReauth), cors: true},
+		{pattern: "/slack/ingest", handler: http.HandlerFunc(slack.Ingest), cors: true},
+		{pattern: "/slack/ingest/stream", handler: http.HandlerFunc(slack.IngestStream), cors: true},
+		{pattern: "/slack/status", handler: http.HandlerFunc(slack.Status), cors: true},
+		{pattern: "/slack/connect", handler: http.HandlerFunc(slack.Connect), cors: true},
+		{pattern: "/slack/callback", handler: http.HandlerFunc(slack.Callback)},
+		{pattern: "/swagger/", handler: httpSwagger.WrapHandler},
+	})
 
-	log.Printf("context-os api listening on %s", addr) // log the address so the operator knows it started
+	log.Printf("context-os api listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("api server error: %v", err) // exit with error details if the server fails to start
+		log.Fatalf("api server error: %v", err)
 	}
 }
 
-// healthHandler responds to GET /health with a JSON payload indicating the service is alive.
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json") // tell the client to parse the body as JSON
-	json.NewEncoder(w).Encode(map[string]string{        //nolint:errcheck — encode and stream the JSON body directly to the response
-		"status":  "ok",              // signals the service is healthy
-		"service": "context-os-api", // identifies which service responded
-	})
+func registerRoutes(mux *http.ServeMux, routes []route) {
+	for _, r := range routes {
+		handler := r.handler
+		if r.cors {
+			handler = middleware.WithCORS(handler)
+		}
+		mux.Handle(r.pattern, handler)
+	}
 }

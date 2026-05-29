@@ -36,26 +36,32 @@ func (c MCPConnector) Ingest(ctx context.Context, req contracts.SourceRequest) (
 	if err := ctx.Err(); err != nil {
 		return nil, c.connectorError(req, contracts.ErrorKindCanceled, errors.Is(err, context.DeadlineExceeded), err)
 	}
-	if strings.TrimSpace(req.Content) == "" && strings.TrimSpace(req.URI) == "" {
+
+	// Normalize once so validation, metadata, and subject all use the same trimmed value.
+	uri := strings.TrimSpace(req.URI)
+	cursor := strings.TrimSpace(req.Cursor)
+
+	if strings.TrimSpace(req.Content) == "" && uri == "" {
 		err := errors.New("source request requires content or uri")
 		return nil, c.connectorError(req, contracts.ErrorKindInvalidRequest, false, err)
 	}
 
-	metadata := map[string]string{
-		contracts.MetadataConnector: c.name,
-		contracts.MetadataMCP:       "true",
-	}
-	if req.URI != "" {
-		metadata[contracts.MetadataSourceURI] = req.URI
-	}
-	if req.Cursor != "" {
-		metadata[contracts.MetadataSourceCursor] = req.Cursor
-	}
+	// Merge caller metadata first, then overwrite with reserved keys so callers
+	// cannot override connector, mcp, source_uri, or source_cursor.
+	metadata := make(map[string]string, len(req.Metadata)+4)
 	for key, value := range req.Metadata {
 		metadata[key] = value
 	}
+	metadata[contracts.MetadataConnector] = c.name
+	metadata[contracts.MetadataMCP] = "true"
+	if uri != "" {
+		metadata[contracts.MetadataSourceURI] = uri
+	}
+	if cursor != "" {
+		metadata[contracts.MetadataSourceCursor] = cursor
+	}
 
-	subject := req.URI
+	subject := uri
 	if subject == "" {
 		subject = c.name
 	}

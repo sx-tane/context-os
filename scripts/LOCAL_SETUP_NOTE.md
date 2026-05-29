@@ -1,12 +1,13 @@
 # Local Setup Note (Ubuntu)
 
 Use these commands to install the required tooling for this repository.
+Alternatively, run `./scripts/setup-local.sh` which performs all steps below automatically.
 
 ## 1) Install base utilities
 
 ```bash
 sudo apt update
-sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates
+sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs npm
 ```
 
 ## 2) Install Go 1.24.13
@@ -18,6 +19,11 @@ sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf go1.24.13.linux-amd64.tar.gz
 echo 'export PATH=/usr/local/go/bin:$PATH' >> ~/.bashrc
 export PATH=/usr/local/go/bin:$PATH
+
+# Install goimports formatter
+go install golang.org/x/tools/cmd/goimports@latest
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc
+export PATH="$HOME/go/bin:$PATH"
 ```
 
 ## 3) Install Bun
@@ -44,21 +50,41 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## 6) Verify installations
+## 6) Install Codex CLI
+
+```bash
+sudo npm install -g @openai/codex
+
+# Install GitHub, Atlassian Rovo, and Slack plugins
+codex plugin add github@openai-curated
+codex plugin add atlassian-rovo@openai-curated
+codex plugin add slack@openai-curated
+
+# Log in (opens browser; use --device-auth in headless/SSH environments)
+codex login
+```
+
+## 7) Verify tools and validate the repository
 
 ```bash
 go version
 bun --version
 python3.12 --version
 uv --version
-```
+codex --version
 
-## 7) Validate this repo
-
-```bash
-cd /workspaces/context-os
+# From the repo root
 go mod tidy
 go test ./...
+
 cd apps/frontend && bun install && bun run check
-cd /workspaces/context-os/apps/ai-worker && uv sync
+cd apps/ai-worker && uv sync
+```
+
+## After setup
+
+Restart your shell or run `source ~/.bashrc` to reload the updated PATH, then start all services:
+
+```bash
+./scripts/start-all.sh
 ```

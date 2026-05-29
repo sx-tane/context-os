@@ -98,7 +98,7 @@ Domain contracts and package structure are documented in [docs/ARCHITECTURE.md](
 ./scripts/setup-local.sh
 ```
 
-Installs Go, Bun, Python 3.12, and `uv` on Linux. Run once on a fresh machine.
+Installs Go, Bun, Python 3.12, `uv`, Codex CLI, and the GitHub, Atlassian Rovo, and Slack Codex plugins on Linux. Run once on a fresh machine.
 
 ### 2) Validate the repository
 
@@ -114,6 +114,8 @@ go test ./...
 ```
 
 Starts the API, context UI dev server, and AI worker together. Press `Ctrl+C` to stop all processes. If `uv` is not found, the AI worker is skipped automatically.
+
+Local connector UI is served from `apps/frontend` and includes GitHub, Jira, Slack, filesystem, and Codex CLI status/login flows. Filesystem ingestion covers browser-uploaded files/folders, server-visible local paths, spreadsheets, and OpenAPI spec files.
 
 ## Production Delivery Plan
 
@@ -137,13 +139,13 @@ Exit criteria:
 
 Goals:
 
-- production-ready connectors for GitHub, Slack, Jira, OpenAPI, and Excel
-- robust parsing for code, tickets, discussions, and specs
+- production-ready connectors for GitHub, Slack, Jira, and filesystem
+- robust parsing for code, tickets, discussions, OpenAPI specs, spreadsheets, and documents
 - snapshot versioning for reproducible analysis
 
 Exit criteria:
 
-- end-to-end sync runs across all core connectors
+- end-to-end sync runs across all core connectors and supported filesystem formats
 - parse coverage and error rates are measurable and within target
 - snapshots can reconstruct a prior context state deterministically
 

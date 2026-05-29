@@ -68,9 +68,7 @@ Receive external data.
 - Slack
 - Jira
 - GitHub
-- OpenAPI
-- Excel
-- Local Files
+- Local files and folders, including OpenAPI specs and spreadsheets
 
 ## Output
 
@@ -262,8 +260,6 @@ contextos/
 │   │   ├── slack/
 │   │   ├── jira/
 │   │   ├── github/
-│   │   ├── openapi/
-│   │   ├── excel/
 │   │   └── filesystem/
 │   │
 │   ├── ingestion/
@@ -422,7 +418,7 @@ System internally:
 
 - repo scanner
 - Slack export parser
-- OpenAPI parser
+- filesystem parser for local folders, documents, OpenAPI specs, and spreadsheets
 - normalization pipeline
 
 ## Phase 2

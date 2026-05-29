@@ -9,14 +9,16 @@ import (
 	"context-os/domain/contracts"
 	"context-os/domain/events"
 	"context-os/internal/source"
-	excelsource "context-os/internal/source/excel"
 	filesystemsource "context-os/internal/source/filesystem"
 	githubsource "context-os/internal/source/github"
+	googledrivesource "context-os/internal/source/googledrive"
 	jirasource "context-os/internal/source/jira"
-	openapisource "context-os/internal/source/openapi"
+	notionsource "context-os/internal/source/notion"
+	sharepointsource "context-os/internal/source/sharepoint"
 	slacksource "context-os/internal/source/slack"
 )
 
+// TestMCPConnectorExposesIdentityAndCapabilities verifies connector name and capability exposure are stable and defensive.
 func TestMCPConnectorExposesIdentityAndCapabilities(t *testing.T) {
 	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
 
@@ -35,6 +37,7 @@ func TestMCPConnectorExposesIdentityAndCapabilities(t *testing.T) {
 	}
 }
 
+// TestMCPConnectorIngestEmitsDocumentIngestedEventWithProvenance verifies ingest emits a provenance-rich document.ingested event.
 func TestMCPConnectorIngestEmitsDocumentIngestedEventWithProvenance(t *testing.T) {
 	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
 	req := contracts.SourceRequest{
@@ -88,6 +91,7 @@ func TestMCPConnectorIngestEmitsDocumentIngestedEventWithProvenance(t *testing.T
 	}
 }
 
+// TestMCPConnectorIngestRejectsEmptyRequestWithStructuredError verifies validation failures return actionable ConnectorError values.
 func TestMCPConnectorIngestRejectsEmptyRequestWithStructuredError(t *testing.T) {
 	connector := source.NewMCPConnector("slack", contracts.CapabilityMessages)
 	req := contracts.SourceRequest{
@@ -115,6 +119,7 @@ func TestMCPConnectorIngestRejectsEmptyRequestWithStructuredError(t *testing.T) 
 	}
 }
 
+// TestMCPConnectorIngestRespectsCancellationWithStructuredError verifies context cancellation returns retryable canceled ConnectorError values.
 func TestMCPConnectorIngestRespectsCancellationWithStructuredError(t *testing.T) {
 	deadline := time.Now().Add(-time.Second)
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
@@ -138,6 +143,7 @@ func TestMCPConnectorIngestRespectsCancellationWithStructuredError(t *testing.T)
 	}
 }
 
+// TestRequiredSourceConnectorsImplementMCPContract verifies required connectors satisfy the MCP contract and emit ingestion events.
 func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -147,9 +153,10 @@ func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 		{name: "github", connector: githubsource.NewConnector(), capability: contracts.CapabilityRepository},
 		{name: "slack", connector: slacksource.NewConnector(), capability: contracts.CapabilityMessages},
 		{name: "jira", connector: jirasource.NewConnector(), capability: contracts.CapabilityIssues},
-		{name: "openapi", connector: openapisource.NewConnector(), capability: contracts.CapabilityAPISpec},
-		{name: "excel", connector: excelsource.NewConnector(), capability: contracts.CapabilitySpreadsheet},
 		{name: "filesystem", connector: filesystemsource.NewConnector(), capability: contracts.CapabilityFiles},
+		{name: "googledrive", connector: googledrivesource.NewConnector(), capability: contracts.CapabilityFiles},
+		{name: "notion", connector: notionsource.NewConnector(), capability: contracts.CapabilityDocs},
+		{name: "sharepoint", connector: sharepointsource.NewConnector(), capability: contracts.CapabilityFiles},
 	}
 
 	for _, tt := range tests {
@@ -172,5 +179,36 @@ func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 				t.Fatalf("expected one document.ingested event, got %#v", ingested)
 			}
 		})
+	}
+}
+
+// TestMCPConnectorIngestReservedMetadataKeysCannotBeOverriddenByCaller verifies the connector overwrites reserved keys regardless of caller-supplied values.
+func TestMCPConnectorIngestReservedMetadataKeysCannotBeOverriddenByCaller(t *testing.T) {
+	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
+	req := contracts.SourceRequest{
+		URI:     "repo://context-os/issues/5",
+		Content: "mcp contract enforcement",
+		Metadata: map[string]string{
+			contracts.MetadataConnector:    "attacker",
+			contracts.MetadataMCP:          "false",
+			contracts.MetadataSourceURI:    "evil://uri",
+			contracts.MetadataSourceCursor: "evil-cursor",
+		},
+	}
+
+	ingested, err := connector.Ingest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ingest returned error: %v", err)
+	}
+
+	meta := ingested[0].Metadata
+	if meta[contracts.MetadataConnector] != "github" {
+		t.Errorf("connector overridden: got %q, want %q", meta[contracts.MetadataConnector], "github")
+	}
+	if meta[contracts.MetadataMCP] != "true" {
+		t.Errorf("mcp overridden: got %q, want %q", meta[contracts.MetadataMCP], "true")
+	}
+	if meta[contracts.MetadataSourceURI] != req.URI {
+		t.Errorf("source_uri overridden: got %q, want %q", meta[contracts.MetadataSourceURI], req.URI)
 	}
 }

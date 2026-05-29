@@ -14,8 +14,9 @@ export default defineConfig({
     proxy: {
       // /api/* is forwarded to the Go API server, stripping the /api prefix before forwarding
       "/api": {
-        target: apiTarget, // resolved from API_URL env var or localhost fallback
-        rewrite: (path) => path.replace(/^\/api/, ""), // strip /api so the API sees the original path (e.g. /health)
+        target: apiTarget,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+        timeout: 180000, // 3 min — Codex CLI plugin ingestion can take >20 s
       },
       // /worker/* is forwarded to the Python AI worker health server, stripping the /worker prefix
       "/worker": {
