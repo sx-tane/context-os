@@ -110,7 +110,9 @@
       description={config.description}
       examples={config.examples ?? []}
       defaultUri={config.defaultUri ?? ""}
+      uriLabel={config.uriLabel ?? "URI"}
       uriPlaceholder={config.uriPlaceholder ?? ""}
+      submitLabel={config.submitLabel ?? "Run ingest"}
       tokenLabel={config.tokenLabel ?? ""}
       tokenPlaceholder={config.tokenPlaceholder ?? ""}
       contentLabel={config.contentLabel ?? ""}

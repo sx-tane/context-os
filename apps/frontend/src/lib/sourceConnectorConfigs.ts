@@ -5,37 +5,17 @@ export const sourceConnectorConfigs: SourceConnectorConfig[] = [
     connector: "filesystem",
     title: "Filesystem MCP Connector",
     description:
-      "Ingest local files or folders, including spreadsheets and OpenAPI specs, with stable path and content-hash provenance.",
+      "Paste one local file or folder path. The connector detects the artifact type and emits stable provenance automatically.",
     defaultUri: "docs/",
-    uriPlaceholder: "/workspace/context-os/docs/",
-    examples: ["docs/", "README.md", "requirements.xlsx", "openapi.yaml", "docs/brief.docx"],
-    metadataFields: [
-      {
-        key: "filesystem_include",
-        label: "Include pattern",
-        placeholder: "docs/**",
-      },
-      {
-        key: "filesystem_exclude",
-        label: "Exclude pattern",
-        placeholder: "**/node_modules/**",
-      },
-      {
-        key: "filesystem_max_files",
-        label: "Max files",
-        placeholder: "1000",
-      },
-      {
-        key: "filesystem_max_file_size",
-        label: "Max file size bytes",
-        placeholder: "10485760",
-      },
-    ],
+    uriLabel: "File or folder path",
+    uriPlaceholder: "docs/ or README.md",
+    submitLabel: "Ingest file or folder",
+    examples: ["docs/", "README.md", "requirements.xlsx", "openapi.yaml"],
     supportedFormats: [
       {
         format: "Folder",
         extensions: "directory path",
-        extraction: "Recursive file events with include/exclude and size limits",
+        extraction: "Recurses into supported child files",
       },
       {
         format: "Text and Markdown",
@@ -45,7 +25,8 @@ export const sourceConnectorConfigs: SourceConnectorConfig[] = [
       {
         format: "Code and config",
         extensions: ".go, .ts, .json, .yaml, .toml, .sql",
-        extraction: "Read directly; OpenAPI JSON/YAML receives endpoint and schema metadata",
+        extraction:
+          "Read directly; OpenAPI JSON/YAML receives endpoint and schema metadata",
       },
       {
         format: "Spreadsheet",

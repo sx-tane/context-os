@@ -159,6 +159,21 @@
     margin: 0.25rem 0 1rem;
   }
 
+  :global(.connector-formats) {
+    margin: 0.25rem 0 1rem;
+    font-size: 0.85rem;
+  }
+
+  :global(.connector-formats summary) {
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  :global(.connector-formats .connector-table-wrap) {
+    margin-top: 0.6rem;
+  }
+
   :global(.connector-format-table) {
     width: 100%;
     border-collapse: collapse;

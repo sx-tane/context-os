@@ -56,7 +56,9 @@ export interface SourceConnectorConfig {
   description: string;
   examples?: string[];
   defaultUri?: string;
+  uriLabel?: string;
   uriPlaceholder?: string;
+  submitLabel?: string;
   tokenLabel?: string;
   tokenPlaceholder?: string;
   contentLabel?: string;

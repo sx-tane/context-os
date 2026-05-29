@@ -109,14 +109,12 @@ Request body:
 
 ```json
 {
-  "uri": "docs/",
-  "include": "docs/**",
-  "exclude": "**/archive/**"
+  "uri": "docs/"
 }
 ```
 
 - `uri` — accepts a local file or directory path, `file://` URI, or `filesystem://` URI.
-- `include` and `exclude` — optional glob-style path rules evaluated before each file is read.
+- `include` and `exclude` — optional advanced glob-style path rules evaluated before each file is read.
 - `content` — optional inline content for small fixtures; otherwise the connector reads the local file.
 - `metadata.filesystem_max_files` — optional folder guardrail; defaults to `1000`.
 - `metadata.filesystem_max_file_size` — optional per-file byte guardrail; defaults to `10485760`.

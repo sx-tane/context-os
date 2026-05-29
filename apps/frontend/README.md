@@ -10,8 +10,10 @@ Current local workflow:
 - runs GitHub MCP ingestion through either direct token/env auth or the Codex GitHub plugin;
 - runs Slack MCP ingestion through direct token/env/OAuth auth or the Codex Slack plugin;
 - runs Jira/Rovo MCP ingestion through the Atlassian Rovo Codex plugin by default, with direct API token/env auth still available for local checks;
-- runs filesystem MCP ingestion for local files, recursive folders, spreadsheets, OpenAPI specs, and document formats with optional include/exclude rules and folder guardrails;
+- runs filesystem MCP ingestion from one file-or-folder path field for local files, recursive folders, spreadsheets, OpenAPI specs, and document formats;
 - renders single-file and folder ingestion events, previews, metadata, and SSE progress logs.
+
+The filesystem card intentionally keeps the normal workflow to a single path input and one ingest action. Supported formats are tucked behind a secondary panel; advanced include/exclude rules and folder limits remain available through API metadata, but they are not shown in the main UI.
 
 ## Filesystem Supported Formats
 

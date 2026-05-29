@@ -78,7 +78,7 @@ GitHub, Jira, and Slack ingest requests accept `provider`. Use `"token"` or omit
 Jira and filesystem direct request fields:
 
 - Jira accepts `uri`, `token`, `email`, `api_base_url`, `expand`, `content`, `cursor`, `provider`, and `metadata`. The token/email/base URL fields map to connector metadata and fall back to `JIRA_TOKEN`, `JIRA_EMAIL`, and `JIRA_BASE_URL`. `provider=codex` routes through `atlassian-rovo@openai-curated`.
-- Filesystem accepts `uri`, optional inline `content`, `cursor`, `include`, `exclude`, and `metadata`. Include/exclude map to explicit path rules before local file reads. A directory `uri` is walked recursively and returns one event per supported child file. Folder guardrails can be set with metadata keys `filesystem_max_files` and `filesystem_max_file_size`; defaults are `1000` files and `10485760` bytes per file. Filesystem also handles spreadsheet extraction and OpenAPI JSON/YAML summary metadata.
+- Filesystem normally needs only `uri`, which may be a file or folder path. A directory `uri` is walked recursively and returns one event per supported child file. Optional advanced fields include inline `content`, `cursor`, `include`, `exclude`, and `metadata`; include/exclude map to explicit path rules before local file reads. Folder guardrails can be set with metadata keys `filesystem_max_files` and `filesystem_max_file_size`; defaults are `1000` files and `10485760` bytes per file. Filesystem also handles spreadsheet extraction and OpenAPI JSON/YAML summary metadata.
 
 Filesystem responses keep the existing first-event fields (`event`, `preview`, and `metadata`) and also include aggregate fields (`events`, `previews`, `metadata_items`, and `event_count`) for folder ingestion.
 

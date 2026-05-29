@@ -15,7 +15,9 @@
   export let description: string;
   export let examples: string[] = [];
   export let defaultUri = "";
+  export let uriLabel = "URI";
   export let uriPlaceholder = "";
+  export let submitLabel = "Run ingest";
   export let tokenLabel = "";
   export let tokenPlaceholder = "";
   export let contentLabel = "";
@@ -81,7 +83,7 @@
 
 <ConnectorCard {title} {description} {examples}>
   <label class="connector-field">
-    <span>URI</span>
+    <span>{uriLabel}</span>
     <input
       class="connector-input"
       type="text"
@@ -127,26 +129,31 @@
   {/if}
 
   {#if supportedFormats.length > 0}
-    <div class="connector-table-wrap">
-      <table class="connector-format-table">
-        <thead>
-          <tr>
-            <th>Format</th>
-            <th>Extensions</th>
-            <th>Extraction</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each supportedFormats as row}
+    <details class="connector-formats">
+      <summary>Supported formats</summary>
+      <div class="connector-table-wrap">
+        <table class="connector-format-table">
+          <thead>
             <tr>
-              <td>{row.format}</td>
-              <td><code class="connector-card-code">{row.extensions}</code></td>
-              <td>{row.extraction}</td>
+              <th>Format</th>
+              <th>Extensions</th>
+              <th>Extraction</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {#each supportedFormats as row}
+              <tr>
+                <td>{row.format}</td>
+                <td
+                  ><code class="connector-card-code">{row.extensions}</code></td
+                >
+                <td>{row.extraction}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </details>
   {/if}
 
   <button
@@ -155,7 +162,7 @@
     on:click={runIngest}
     disabled={loading || (!uri.trim() && !content.trim())}
   >
-    {loading ? `Ingesting... (${elapsed}s)` : "Run ingest"}
+    {loading ? `Ingesting... (${elapsed}s)` : submitLabel}
   </button>
 
   {#if errorMessage}
