@@ -2,6 +2,8 @@
 
 Stores normalized and parsed documents produced after ingestion and extraction.
 
+This folder currently contains only this README. Add parsed artifacts here when stage output snapshots are materialized for debugging or regression review.
+
 ## Responsibilities
 
 - Hold deterministic intermediate outputs suitable for downstream stages.

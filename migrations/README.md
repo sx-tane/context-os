@@ -2,6 +2,8 @@
 
 Database migration files for PostgreSQL and pgvector-backed local persistence.
 
+This folder currently contains only this README. Add ordered migration files here when local persistence schemas are introduced.
+
 ## Responsibilities
 
 - Track schema changes in an ordered, reproducible form.

@@ -217,7 +217,7 @@ The README coverage benchmark scores tracked directory coverage and lists missin
 The README quality benchmark scores folder documentation against the actual code context in that directory: direct child files, sibling folders, high-level architecture paths, and operational entrypoints.
 The change-sync benchmark checks that code edits are accompanied by meaningful nearest-README updates in the selected git diff range. New code files must be reflected by the nearest README, and shallow README edits are rejected.
 
-Passing bar: every structural skill score is at least 90, every routing scenario scores 100, the Mermaid policy score is 100, README coverage reaches 100, every required README quality score is at least 80, and the change-sync benchmark passes for the working diff.
+Passing bar: every structural skill score is at least 90, every routing scenario scores 100, the Mermaid policy score is 100, README coverage reaches 100, every required README quality score is 100, and the change-sync benchmark passes for the working diff.
 
 ## References
 

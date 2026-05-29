@@ -2,6 +2,21 @@
 
 This folder contains repository-level and cross-stage test suites.
 
+## Test Flow
+
+```mermaid
+flowchart TD
+	TESTS[tests/] --> PIPE[pipeline_test.go]
+	TESTS --> SCAFFOLD[repository_scaffold_test.go]
+	TESTS --> HARNESS[harness/]
+	HARNESS --> SCENARIOS[scenarios/]
+	HARNESS --> FIXTURES[fixtures/]
+	HARNESS --> GOLDEN[golden/]
+	SCENARIOS --> PIPE
+	FIXTURES --> PIPE
+	GOLDEN --> PIPE
+```
+
 ## Scope
 
 - End-to-end and cross-stage pipeline behavior checks.

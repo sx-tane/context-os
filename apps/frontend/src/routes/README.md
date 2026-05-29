@@ -2,6 +2,10 @@
 
 This folder contains Svelte route files and page entrypoints.
 
+## Files
+
+- `+page.svelte`: main local ContextOS UI page that probes service status, renders connector cards, and coordinates ingest actions through `src/lib` helpers.
+
 ## Responsibilities
 
 - Define page-level data flow and actions.

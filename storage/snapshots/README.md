@@ -2,6 +2,8 @@
 
 Stores historical context graph snapshots and comparable baseline outputs.
 
+This folder currently contains only this README. Add snapshot artifacts here when graph, reasoning, or presentation outputs need stable comparison points.
+
 ## Responsibilities
 
 - Capture stable point-in-time outputs for comparison and regression review.

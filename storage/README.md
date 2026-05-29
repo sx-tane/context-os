@@ -4,6 +4,18 @@ This folder stores local-first artifacts used by ingestion and downstream analys
 
 ## Layout
 
+```mermaid
+flowchart TD
+	STORAGE[storage/] --> RAW[raw/]
+	STORAGE --> PARSED[parsed/]
+	STORAGE --> EMBED[embeddings/]
+	STORAGE --> SNAP[snapshots/]
+	RAW --> INGEST[ingestion replay and provenance]
+	PARSED --> PIPELINE[pipeline stage inputs]
+	EMBED --> SEARCH[semantic lookup]
+	SNAP --> REGRESSION[comparison baselines]
+```
+
 - `raw/`: source artifacts and uploaded files.
 - `parsed/`: extracted and transformed intermediate outputs.
 - `embeddings/`: vector or embedding artifacts.

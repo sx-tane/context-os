@@ -2,6 +2,8 @@
 
 Prompt templates for local AI execution and assistive reasoning workflows.
 
+This folder currently contains only this README. Add prompt files here when a local worker or automation flow consumes reusable prompt text.
+
 ## Responsibilities
 
 - Store reusable prompt text for local AI-assisted features.

@@ -15,6 +15,18 @@ Current local workflow:
 
 The filesystem card intentionally makes upload the normal workflow, so users can choose files or folders outside the repository. The advanced server-path fallback still works for paths visible to the Go API process. Supported formats are tucked behind a secondary panel; include/exclude rules and folder limits remain available through API metadata, but they are not shown in the main UI.
 
+## Frontend Flow
+
+```mermaid
+flowchart TD
+	PAGE[src/routes/+page.svelte] --> COMPONENTS[src/lib/components]
+	COMPONENTS --> RUNNERS[ingestRunner.ts and reauthRunner.ts]
+	RUNNERS --> API[api.ts]
+	API --> BACKEND[Go API]
+	BACKEND --> TYPES[OpenAPI swagger]
+	TYPES --> GENERATED[src/lib/generated/api.d.ts]
+```
+
 ## Filesystem Supported Formats
 
 | Format            | Extensions                                      | Extraction                                                                       |

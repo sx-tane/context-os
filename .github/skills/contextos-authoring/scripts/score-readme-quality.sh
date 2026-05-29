@@ -85,6 +85,24 @@ folder_specific_check() {
     storage)
       grep -Eq '(raw/|parsed/|embeddings/|snapshots/)' "$file"
       ;;
+    migrations)
+      grep -Eqi '(migration|schema|PostgreSQL|pgvector|currently contains only this README)' "$file"
+      ;;
+    prompts)
+      grep -Eqi '(prompt|AI|worker|automation|currently contains only this README)' "$file"
+      ;;
+    storage/embeddings)
+      grep -Eqi '(embedding|pgvector|vector|currently contains only this README)' "$file"
+      ;;
+    storage/parsed)
+      grep -Eqi '(parsed|normalized|stage output|currently contains only this README)' "$file"
+      ;;
+    storage/raw)
+      grep -Eqi '(raw|uploads/|source snapshots|ingest staging)' "$file"
+      ;;
+    storage/snapshots)
+      grep -Eqi '(snapshot|graph|reasoning|comparison|currently contains only this README)' "$file"
+      ;;
     tests)
       grep -Eqi '(go test|harness|pipeline)' "$file"
       ;;
@@ -206,9 +224,9 @@ avg=$((total / count))
 echo
 echo "Average README quality score: $avg/100 across $count directories"
 
-if awk -F'\t' '$2 < 80 { found=1 } END { exit(found ? 0 : 1) }' "$results_file"; then
-  echo "README quality benchmark failed: one or more README files scored below 80."
+if awk -F'\t' '$2 < 100 { found=1 } END { exit(found ? 0 : 1) }' "$results_file"; then
+  echo "README quality benchmark failed: one or more README files scored below 100."
   exit 1
 fi
 
-echo "README quality benchmark passed: all required README files scored at least 80."
+echo "README quality benchmark passed: all required README files scored 100."

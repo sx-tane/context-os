@@ -2,6 +2,8 @@
 
 Stores local embedding artifacts and pgvector-related snapshots.
 
+This folder currently contains only this README. Add embedding artifacts here when local vector generation or pgvector export workflows are introduced.
+
 ## Responsibilities
 
 - Hold reproducible embedding outputs generated during local workflows.

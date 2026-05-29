@@ -117,7 +117,7 @@ Run the local benchmarks after changing any skill or customization routing:
 .github/skills/contextos-authoring/scripts/check-readme-sync-on-change.sh
 ```
 
-These checks cover structural skill health, prompt-to-skill routing scenarios, Mermaid explanation policy, folder README coverage, folder README quality, and change-level README sync. The pass bar is 90/100 for every skill, 100/100 for every routing scenario, 100/100 for the Mermaid policy check, 100/100 README coverage, at least 80/100 for every required README quality score, and a passing change-sync check.
+These checks cover structural skill health, prompt-to-skill routing scenarios, Mermaid explanation policy, folder README coverage, folder README quality, and change-level README sync. The pass bar is 90/100 for every skill, 100/100 for every routing scenario, 100/100 for the Mermaid policy check, 100/100 README coverage, 100/100 for every required README quality score, and a passing change-sync check.
 
 ## README Coverage Scope
 

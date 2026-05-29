@@ -11,6 +11,18 @@ Go API application surface for ContextOS orchestration endpoints.
 
 ## Folder layout
 
+```mermaid
+flowchart TD
+  API[apps/api] --> MAIN[main.go]
+  API --> HANDLER[handler/]
+  API --> REQUEST[request/]
+  API --> RESPONSE[response/]
+  API --> MIDDLEWARE[middleware/]
+  API --> DOCS[docs/ and _docs/]
+  HANDLER --> SHARED[shared ingest and SSE helpers]
+  DOCS --> FRONTEND[frontend codegen]
+```
+
 ```
 apps/api/
   main.go          — entry point: addr config, mux, route registration, ListenAndServe only
