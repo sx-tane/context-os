@@ -52,3 +52,21 @@ swag init  →  apps/api/_docs/swagger.json  →  bun run codegen  →  src/lib/
 ```
 
 Frontend-specific types that have no swagger equivalent (`IngestRequest`, `SourceConnectorConfig`, `ConnectorKind`, etc.) remain in `src/lib/types.ts` and are maintained manually.
+
+## Testing
+
+Frontend utility tests run with Jest and SWC for fast TypeScript compilation.
+
+```bash
+cd apps/frontend
+bun run test
+```
+
+Use coverage when changing shared API helpers, ingest runners, reauth runners, or other `src/lib/` utilities:
+
+```bash
+cd apps/frontend
+bun run test:coverage
+```
+
+The canonical test patterns live in [frontend-jest-swc-patterns](../../.github/skills/frontend-jest-swc-patterns/) and apply to `src/lib/__tests__/*.test.ts`.

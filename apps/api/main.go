@@ -14,7 +14,12 @@ import (
 	"os"
 
 	_ "context-os/apps/api/docs"
-	"context-os/apps/api/handler"
+	handlercodex "context-os/apps/api/handler/codex"
+	"context-os/apps/api/handler/filesystem"
+	"context-os/apps/api/handler/github"
+	"context-os/apps/api/handler/health"
+	"context-os/apps/api/handler/jira"
+	"context-os/apps/api/handler/slack"
 	"context-os/apps/api/middleware"
 
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -37,23 +42,23 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerRoutes(mux, []route{
-		{pattern: "/health", handler: http.HandlerFunc(handler.Health), cors: true},
-		{pattern: "/github/ingest", handler: http.HandlerFunc(handler.GithubIngest), cors: true},
-		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(handler.GithubIngestStream), cors: true},
-		{pattern: "/github/status", handler: http.HandlerFunc(handler.GithubStatus), cors: true},
-		{pattern: "/jira/status", handler: http.HandlerFunc(handler.JiraStatus), cors: true},
-		{pattern: "/jira/ingest", handler: http.HandlerFunc(handler.JiraIngest), cors: true},
-		{pattern: "/jira/ingest/stream", handler: http.HandlerFunc(handler.JiraIngestStream), cors: true},
-		{pattern: "/filesystem/ingest", handler: http.HandlerFunc(handler.FilesystemIngest), cors: true},
-		{pattern: "/filesystem/upload", handler: http.HandlerFunc(handler.FilesystemUpload), cors: true},
-		{pattern: "/codex/status", handler: http.HandlerFunc(handler.CodexStatus), cors: true},
-		{pattern: "/codex/login", handler: http.HandlerFunc(handler.CodexLogin), cors: true},
-		{pattern: "/codex/plugin-reauth", handler: http.HandlerFunc(handler.CodexPluginReauth), cors: true},
-		{pattern: "/slack/ingest", handler: http.HandlerFunc(handler.SlackIngest), cors: true},
-		{pattern: "/slack/ingest/stream", handler: http.HandlerFunc(handler.SlackIngestStream), cors: true},
-		{pattern: "/slack/status", handler: http.HandlerFunc(handler.SlackStatus), cors: true},
-		{pattern: "/slack/connect", handler: http.HandlerFunc(handler.SlackConnect), cors: true},
-		{pattern: "/slack/callback", handler: http.HandlerFunc(handler.SlackCallback)},
+		{pattern: "/health", handler: http.HandlerFunc(health.Health), cors: true},
+		{pattern: "/github/ingest", handler: http.HandlerFunc(github.Ingest), cors: true},
+		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(github.IngestStream), cors: true},
+		{pattern: "/github/status", handler: http.HandlerFunc(github.Status), cors: true},
+		{pattern: "/jira/status", handler: http.HandlerFunc(jira.Status), cors: true},
+		{pattern: "/jira/ingest", handler: http.HandlerFunc(jira.Ingest), cors: true},
+		{pattern: "/jira/ingest/stream", handler: http.HandlerFunc(jira.IngestStream), cors: true},
+		{pattern: "/filesystem/ingest", handler: http.HandlerFunc(filesystem.Ingest), cors: true},
+		{pattern: "/filesystem/upload", handler: http.HandlerFunc(filesystem.Upload), cors: true},
+		{pattern: "/codex/status", handler: http.HandlerFunc(handlercodex.Status), cors: true},
+		{pattern: "/codex/login", handler: http.HandlerFunc(handlercodex.Login), cors: true},
+		{pattern: "/codex/plugin-reauth", handler: http.HandlerFunc(handlercodex.PluginReauth), cors: true},
+		{pattern: "/slack/ingest", handler: http.HandlerFunc(slack.Ingest), cors: true},
+		{pattern: "/slack/ingest/stream", handler: http.HandlerFunc(slack.IngestStream), cors: true},
+		{pattern: "/slack/status", handler: http.HandlerFunc(slack.Status), cors: true},
+		{pattern: "/slack/connect", handler: http.HandlerFunc(slack.Connect), cors: true},
+		{pattern: "/slack/callback", handler: http.HandlerFunc(slack.Callback)},
 		{pattern: "/swagger/", handler: httpSwagger.WrapHandler},
 	})
 

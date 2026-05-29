@@ -1,6 +1,6 @@
 ---
 name: contextos-misalignment-report
-description: "Generate cross-layer context misalignment findings (presentation layer, service layer, PMO) with evidence, confidence, impact, and recommended actions."
+description: "Generate cross-layer context misalignment findings with evidence, confidence, impact, and recommended actions. Use when: comparing presentation, service, and PMO assumptions; producing mismatch reports; reviewing stale or contradictory delivery context. Covers finding types, confidence, severity, evidence, and remediation."
 argument-hint: "Which feature or artifact set should be analyzed?"
 user-invocable: true
 ---
@@ -25,6 +25,7 @@ Create an explainable misalignment report linking assumptions to implementation 
 4. Identify contradiction, omission, and stale-assumption patterns.
 5. Rank findings by impact and confidence.
 6. Produce recommended remediation actions.
+7. Update the relevant report template or README when the output format, evidence contract, or review workflow changes.
 
 ## Decision Points
 
@@ -38,6 +39,7 @@ Create an explainable misalignment report linking assumptions to implementation 
 - Confidence and impact are assigned consistently.
 - Recommendations map to owner roles.
 - Findings are reproducible from the same snapshot.
+- Relevant README or report template is aligned when the report format or workflow changes.
 
 ## References
 

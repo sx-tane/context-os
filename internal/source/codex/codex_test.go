@@ -34,6 +34,7 @@ while [ "$#" -gt 0 ]; do
 done
 `
 
+// TestConnectorUsesCodexExecOutput verifies the connector writes CLI output as event content.
 func TestConnectorUsesCodexExecOutput(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")
@@ -62,6 +63,7 @@ func TestConnectorUsesCodexExecOutput(t *testing.T) {
 	}
 }
 
+// TestConnectorCapturesLog verifies stdout from the Codex CLI is preserved in the codex_log metadata field.
 func TestConnectorCapturesLog(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")
@@ -82,6 +84,7 @@ func TestConnectorCapturesLog(t *testing.T) {
 	}
 }
 
+// TestConnectorSupportsAtlassianRovoPlugin verifies Jira URIs routed through the Rovo plugin produce jira object_type metadata.
 func TestConnectorSupportsAtlassianRovoPlugin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")
@@ -107,6 +110,7 @@ func TestConnectorSupportsAtlassianRovoPlugin(t *testing.T) {
 	}
 }
 
+// TestConnectorPassesEphemeralAndColorFlags verifies the required runtime flags are forwarded to the Codex CLI invocation.
 func TestConnectorPassesEphemeralAndColorFlags(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")
@@ -137,6 +141,7 @@ done
 	}
 }
 
+// TestConnectorContextCancellation verifies a cancelled context terminates the Codex CLI subprocess and returns an error.
 func TestConnectorContextCancellation(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")
@@ -163,6 +168,7 @@ sleep 30
 	}
 }
 
+// TestConnectorNotLoggedIn verifies the connector returns a login error when the Codex CLI exits with an auth failure.
 func TestConnectorNotLoggedIn(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")
@@ -186,6 +192,7 @@ exit 1
 	}
 }
 
+// TestConnectorRequiresSupportedPlugin verifies Ingest returns an error when codex_plugin metadata is absent.
 func TestConnectorRequiresSupportedPlugin(t *testing.T) {
 	connector := newConnector("unused", t.TempDir())
 
@@ -200,6 +207,7 @@ func TestConnectorRequiresSupportedPlugin(t *testing.T) {
 	}
 }
 
+// TestConnectorRejectsUnknownPlugin verifies Ingest returns an error for plugin names not in the supported set.
 func TestConnectorRejectsUnknownPlugin(t *testing.T) {
 	connector := newConnector("unused", t.TempDir())
 
@@ -215,6 +223,7 @@ func TestConnectorRejectsUnknownPlugin(t *testing.T) {
 	}
 }
 
+// TestConnectorRequiresURI verifies Ingest returns an error when the source request URI is empty.
 func TestConnectorRequiresURI(t *testing.T) {
 	connector := newConnector("unused", t.TempDir())
 
@@ -229,6 +238,7 @@ func TestConnectorRequiresURI(t *testing.T) {
 	}
 }
 
+// TestConnectorTokenOverrideInjected verifies a GitHub token override in metadata is forwarded as a GITHUB_TOKEN env var to the CLI.
 func TestConnectorTokenOverrideInjected(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")
@@ -262,6 +272,7 @@ done
 	}
 }
 
+// TestConnectorSlackTokenOverrideInjected verifies a Slack token override in metadata is forwarded as a SLACK_BOT_TOKEN env var to the CLI.
 func TestConnectorSlackTokenOverrideInjected(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fake command is unix-only")

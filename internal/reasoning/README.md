@@ -22,7 +22,15 @@ flowchart LR
 ## Key API
 
 ```go
-func DetectMismatches(g *graph.ContextGraph) []types.Mismatch
+func DetectMismatches(g EntityReader) []types.Mismatch
+```
+
+`EntityReader` is the narrow interface consumed by reasoning:
+
+```go
+type EntityReader interface {
+  AllEntities() []entities.CanonicalEntity
+}
 ```
 
 ## Current Detection Rule
@@ -36,9 +44,13 @@ For every canonical entity in the graph, lowercase the entity name and emit a mi
 The emitted finding uses:
 
 - `ID`: `mismatch:<entity id>`
+- `Type`: `keyword_signal`
 - `Summary`: `Potential delivery mismatch around <entity name>`
 - `EntityIDs`: the single matching entity ID
 - `Severity`: `medium`
+- `Confidence`: `0.70`
+- `Impact`: `medium`
+- `Evidence`: source URI plus entity fragment when available, otherwise the entity source ID
 - `Recommended`: confirmation guidance across knowledge layers (presentation, service, PMO)
 
 ## Dependencies
@@ -47,11 +59,13 @@ The emitted finding uses:
 flowchart TD
   reasoning[internal/reasoning]
   ctxgraph[internal/graph]
+  entities[domain/entities]
   types[domain/types]
   presentation[internal/presentation]
   pipeline[domain/pipelines]
 
-  reasoning --> ctxgraph
+  reasoning -. EntityReader .-> ctxgraph
+  reasoning --> entities
   reasoning --> types
   presentation --> reasoning
   pipeline --> reasoning
@@ -66,7 +80,7 @@ mismatches := reasoning.DetectMismatches(contextGraph)
 ## Implementation Notes
 
 - This is intentionally explainable but not production-complete. It is the first deterministic rule for cross-layer context drift detection.
-- Production findings must include confidence, impact, and evidence back to source artifacts.
+- Findings include confidence, impact, and evidence back to source artifacts.
 - Avoid opaque AI-only findings. AI output should support or rank evidence, not replace provenance.
 - Add tests for every detection rule because reasoning changes directly affect the first production success metric.
 

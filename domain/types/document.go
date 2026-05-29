@@ -17,14 +17,14 @@ type NormalizedDocument struct {
 type Classification string
 
 const (
-	BusinessLogic Classification = "business_logic"  // document describes business rules or requirements
-	APIDiscussion Classification = "api_discussion"   // document discusses API contracts or endpoints
-	PMORisk       Classification = "pmo_risk"         // document flags project risk or delay
+	BusinessLogic   Classification = "business_logic"   // document describes business rules or requirements
+	APIDiscussion   Classification = "api_discussion"   // document discusses API contracts or endpoints
+	PMORisk         Classification = "pmo_risk"         // document flags project risk or delay
 	ConsumerConcern Classification = "consumer_concern" // document is primarily a presentation-layer (consumer) concern
 	ProducerConcern Classification = "producer_concern" // document is primarily a service-layer (producer) concern
-	Blocker       Classification = "blocker"           // document signals a blocking issue
-	Decision      Classification = "decision"          // document records a team decision
-	Unknown       Classification = "unknown"           // document did not match any known signal pattern
+	Blocker         Classification = "blocker"          // document signals a blocking issue
+	Decision        Classification = "decision"         // document records a team decision
+	Unknown         Classification = "unknown"          // document did not match any known signal pattern
 )
 
 // ClassifiedDocument pairs a normalized document with its detected classification and confidence.
@@ -58,18 +58,22 @@ type Entity struct {
 
 // Relationship describes a directed link between two entities.
 type Relationship struct {
-	ID       string            `json:"id"`        // deterministic ID built from the two entity IDs
-	FromID   string            `json:"from_id"`   // ID of the source entity
-	ToID     string            `json:"to_id"`     // ID of the target entity
-	Kind     string            `json:"kind"`      // label describing how the two entities relate
-	Metadata map[string]string `json:"metadata"`  // extra context attached by the relationship builder
+	ID       string            `json:"id"`       // deterministic ID built from the two entity IDs
+	FromID   string            `json:"from_id"`  // ID of the source entity
+	ToID     string            `json:"to_id"`    // ID of the target entity
+	Kind     string            `json:"kind"`     // label describing how the two entities relate
+	Metadata map[string]string `json:"metadata"` // extra context attached by the relationship builder
 }
 
 // Mismatch describes a detected delivery misalignment between teams or artifacts.
 type Mismatch struct {
 	ID          string   `json:"id"`          // unique identifier for this mismatch finding
+	Type        string   `json:"type"`        // stable category for the detection rule that produced this finding
 	Summary     string   `json:"summary"`     // human-readable description of what was found
 	EntityIDs   []string `json:"entity_ids"`  // IDs of the entities involved in the mismatch
 	Severity    string   `json:"severity"`    // impact level: low, medium, or high
+	Confidence  float64  `json:"confidence"`  // 0.0-1.0 score for how certain the reasoning stage is
+	Impact      string   `json:"impact"`      // expected business or delivery impact level
+	Evidence    []string `json:"evidence"`    // source artifact references supporting this finding
 	Recommended string   `json:"recommended"` // suggested action for the team to resolve this
 }

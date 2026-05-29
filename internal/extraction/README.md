@@ -61,7 +61,7 @@ Each extracted entity receives:
 - `Type`: inferred entity type.
 - `Name`: original candidate text.
 - `SourceID`: normalized document ID.
-- `Metadata`: `classification` value.
+- `Metadata`: `classification`, plus `source_uri` and upstream `source_id` when present for downstream evidence.
 
 ## Dependencies
 

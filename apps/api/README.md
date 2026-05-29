@@ -5,7 +5,7 @@ Go API application surface for ContextOS orchestration endpoints.
 ## Production responsibility
 
 - Expose local-first pipeline orchestration endpoints.
-- Return traceable graph and finding results.
+- Return traceable ingest results today, and preserve entity/finding evidence as pipeline endpoints grow.
 - Preserve evidence, confidence, impact, and recommended actions in API responses.
 - Keep API contracts aligned with the domain layer.
 
@@ -15,13 +15,14 @@ Go API application surface for ContextOS orchestration endpoints.
 apps/api/
   main.go          — entry point: addr config, mux, route registration, ListenAndServe only
   handler/
-    health.go      — GET /health
-    github.go      — GitHub status and direct/token ingest
-    source_connectors.go — Jira direct/Codex ingest and filesystem path ingest
-    filesystem_upload.go — browser file/folder upload staging for filesystem ingest
-    slack.go       — Slack status, OAuth, and direct/token ingest
-    codex.go       — Codex CLI status, login, and plugin reauth streams
-    sse.go         — shared SSE helpers and Codex streaming ingest handlers
+    shared/               — shared ingest plumbing + SSE infrastructure (used by all domain packages)
+    health/               — GET /health
+    github/               — GitHub status, direct/token ingest, and Codex stream ingest
+    jira/                 — Jira status, direct/token ingest, and Codex/Rovo stream ingest
+    filesystem/           — filesystem path ingest and browser upload staging
+    slack/                — Slack status, OAuth, direct/token ingest, and Codex stream ingest
+    codex/                — Codex CLI status, login, and plugin reauth streams
+    README.md             — handler package docs, patterns, and new-connector checklist
   request/
     ingest.go      — inbound ingest request structs
   response/
@@ -41,7 +42,7 @@ apps/api/
 
 1. Add the inbound JSON struct to `request/ingest.go`.
 2. Reuse `response.Ingest` unless the connector needs a genuinely different response shape.
-3. Add the HTTP handler in `handler/`; include full swag annotations (`@Summary`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`).
+3. Create a new `handler/<domain>/` package with a `<domain>.go` file and its own `README.md`; include full swag annotations (`@Summary`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`).
 4. Register the route in `main.go` — the `@Router` tag must exactly match.
 5. Regenerate docs (required before building): `swag init -g apps/api/main.go -o apps/api/docs` (for the Go blank import) and `swag init -g apps/api/main.go -o apps/api/_docs` (for the committed swagger spec and Redoc HTML). Then refresh frontend TypeScript types: `cd apps/frontend && bun run codegen`. All steps run automatically via `start-all.sh`.
 6. Update this README and the frontend connector config/component when the endpoint is user-facing.

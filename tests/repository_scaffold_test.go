@@ -27,6 +27,7 @@ func TestRepositoryScaffoldPathsExist(t *testing.T) {
 		"prompts",
 		"docker",
 		"tests",
+		"tests/harness",
 		"internal/source",
 		"internal/ingestion",
 		"internal/normalization",

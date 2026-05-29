@@ -182,6 +182,7 @@ func TestRequiredSourceConnectorsImplementMCPContract(t *testing.T) {
 	}
 }
 
+// TestMCPConnectorIngestReservedMetadataKeysCannotBeOverriddenByCaller verifies the connector overwrites reserved keys regardless of caller-supplied values.
 func TestMCPConnectorIngestReservedMetadataKeysCannotBeOverriddenByCaller(t *testing.T) {
 	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
 	req := contracts.SourceRequest{

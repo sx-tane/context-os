@@ -1,0 +1,34 @@
+name: Authoring Benchmarks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: Run Customization Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Structural skill benchmark
+        run: bash .github/skills/contextos-authoring/scripts/score-skills.sh
+
+      - name: Skill routing benchmark
+        run: bash .github/skills/contextos-authoring/scripts/score-skill-routing.sh
+
+      - name: Mermaid policy benchmark
+        run: bash .github/skills/contextos-authoring/scripts/check-mermaid-policy.sh
+
+      - name: README coverage benchmark
+        run: bash .github/skills/contextos-authoring/scripts/score-readme-coverage.sh
+
+      - name: README change-sync benchmark
+        run: |
+          bash .github/skills/contextos-authoring/scripts/check-readme-sync-on-change.sh \
+            "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"

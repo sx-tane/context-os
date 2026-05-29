@@ -194,7 +194,7 @@ flowchart TD
 
 ```go
 pipe := ingestion.NewPipeline(githubsource.NewConnector())
-result, err := pipelines.Run(ctx, pipe, contracts.SourceRequest{
+result, err := pipeline.Run(ctx, pipe, contracts.SourceRequest{
     URI:     "repo://example",
     Content: "presentation layer expects refundStatus but service layer has missingRefundState mismatch",
 })

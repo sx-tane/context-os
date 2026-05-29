@@ -24,3 +24,13 @@
 - Add or update tests for pipeline behavior changes.
 - Surface confidence, impact, and evidence when implementing misalignment logic.
 - For connector work, include idempotency and replay safety checks.
+
+## Explanation Style
+
+- When explaining architecture, workflows, pipeline stages, skill routing, state transitions, or multi-step behavior, include a Mermaid diagram so the relationship is visually clear.
+- Keep the diagram small and purposeful; skip only for trivial one-line answers, pure command output, or cases where a diagram would be misleading.
+
+## Clarifying Ambiguous Requests
+
+- If the user request is ambiguous, restate the interpreted prompt in one short sentence and ask the minimum clarifying question before editing files.
+- If the intent is clear enough to act safely, proceed without asking and keep the work scoped to the interpreted request.

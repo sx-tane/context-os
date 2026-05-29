@@ -1,6 +1,6 @@
 ---
 name: contextos-issue-workflow
-description: "Create or update ContextOS parent-child GitHub issues using the established Main Group and child workflow, including labels, group linkage, and production traceability sections."
+description: "Create or update ContextOS parent-child GitHub issues using the established Main Group and child workflow. Use when: creating a parent epic with child tasks; standardizing issue bodies and labels; linking production traceability sections. Covers labels, group linkage, templates, and issue creation scripts."
 argument-hint: "What feature area should be grouped and what child issues are needed?"
 user-invocable: true
 ---
@@ -40,7 +40,8 @@ Create or update a parent group issue and aligned child issues that follow Conte
 3. Create child issues from [child-issue-template.md](./assets/child-issue-template.md).
 4. Apply label sets from [label-and-group-guide.md](./references/label-and-group-guide.md).
 5. Add child issue numbers into the parent `Child issues` list.
-6. Validate link integrity and acceptance coverage.
+6. Include README or docs update expectations in child acceptance criteria when implementation changes behavior, commands, or structure.
+7. Validate link integrity and acceptance coverage.
 
 ## Completion Checks
 
@@ -49,6 +50,7 @@ Create or update a parent group issue and aligned child issues that follow Conte
 - Parent-child links are complete and accurate.
 - Production traceability blocks are present in every issue.
 - Acceptance criteria are implementation-testable.
+- Child issues identify required README updates when implementation changes docs-relevant behavior.
 
 ## References
 
