@@ -7,6 +7,11 @@
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "./IngestResult.svelte";
+  import Button from "./Button.svelte";
+  import FormField from "./FormField.svelte";
+  import ModeToggle from "./ModeToggle.svelte";
+  import LogPanel from "./LogPanel.svelte";
+  import ErrorPanel from "./ErrorPanel.svelte";
 
   // Shared Codex state from parent page
   export let codexLoggedIn: boolean;
@@ -44,7 +49,11 @@
   });
 
   async function checkStatus() {
-    const body = await getJSON<{ connected?: boolean; login?: string; name?: string }>("/github/status");
+    const body = await getJSON<{
+      connected?: boolean;
+      login?: string;
+      name?: string;
+    }>("/github/status");
     connected = body?.connected === true;
     login = body?.login ?? "";
     name = body?.name ?? "";
@@ -61,7 +70,8 @@
       isCurrent: () => runID === reauthRunID,
       setPlugin: (value) => (reauthPlugin = value),
       setRunning: (value) => (reauthRunning = value),
-      setLog: (value) => (reauthLog = typeof value === "function" ? value(reauthLog) : value),
+      setLog: (value) =>
+        (reauthLog = typeof value === "function" ? value(reauthLog) : value),
     });
   }
 
@@ -79,8 +89,10 @@
       setLoading: (value) => (loading = value),
       setError: (message) => (errorMessage = message),
       setResult: (value) => (result = value),
-      setLiveLog: (value) => (liveLog = typeof value === "function" ? value(liveLog) : value),
-      setElapsed: (value) => (elapsed = typeof value === "function" ? value(elapsed) : value),
+      setLiveLog: (value) =>
+        (liveLog = typeof value === "function" ? value(liveLog) : value),
+      setElapsed: (value) =>
+        (elapsed = typeof value === "function" ? value(elapsed) : value),
     });
   }
 </script>
@@ -88,39 +100,60 @@
 <ConnectorCard
   title="GitHub MCP Connector"
   description="Ingest a GitHub repository, issue, or pull request via the MCP source connector."
-  examples={["https://github.com/owner/repo", "https://github.com/owner/repo/issues/1", "repo://owner/repo/..."]}
+  examples={[
+    "https://github.com/owner/repo",
+    "https://github.com/owner/repo/issues/1",
+    "repo://owner/repo/...",
+  ]}
 >
   {#if connected}
     <div class="connector-badge">
-      &#10003; Connected as <strong>{login}{name ? ` (${name})` : ""}</strong> via <code class="connector-card-code">Github</code>
+      &#10003; Connected as <strong>{login}{name ? ` (${name})` : ""}</strong>
+      via <code class="connector-card-code">Github</code>
     </div>
   {/if}
 
-  <div class="connector-mode-toggle" aria-label="GitHub ingestion provider">
-    <button type="button" class:active={provider === "token"} on:click={() => (provider = "token")}>Token / env</button>
-    <button type="button" class:active={provider === "codex"} on:click={() => (provider = "codex")}>Codex CLI plugin</button>
-  </div>
+  <ModeToggle
+    bind:value={provider}
+    options={[
+      { value: "token", label: "Token / env" },
+      { value: "codex", label: "Codex CLI plugin" },
+    ]}
+    ariaLabel="GitHub ingestion provider"
+  />
 
-  <label class="connector-field">
-    <span>URI</span>
-    <input class="connector-input" type="text" bind:value={uri} placeholder="https://github.com/owner/repo/issues/1" />
-  </label>
+  <FormField
+    label="URI"
+    bind:value={uri}
+    placeholder="https://github.com/owner/repo/issues/1"
+  />
 
   {#if provider === "token"}
-    <label class="connector-field">
-      <span>GitHub token <span class="connector-optional">(optional — needed for private repos or if rate-limited)</span></span>
-      <input class="connector-input" type="password" bind:value={token} placeholder="ghp_..." />
-    </label>
+    <FormField
+      label="GitHub token"
+      optional="(optional — needed for private repos or if rate-limited)"
+      type="password"
+      bind:value={token}
+      placeholder="ghp_..."
+    />
     <details class="connector-help">
       <summary>How to get a GitHub token</summary>
       <ol>
-        <li>Go to <a href="https://github.com/settings/tokens/new?scopes=repo&description=ContextOS" target="_blank" rel="noopener">github.com/settings/tokens</a></li>
+        <li>
+          Go to <a
+            href="https://github.com/settings/tokens/new?scopes=repo&description=ContextOS"
+            target="_blank"
+            rel="noopener">github.com/settings/tokens</a
+          >
+        </li>
         <li>Click <strong>Generate new token (classic)</strong></li>
         <li>Tick the <strong>repo</strong> scope</li>
         <li>Click <strong>Generate token</strong>, copy it, paste above</li>
       </ol>
       <p class="connector-note">
-        Inside a Codespace you can leave this blank — <code class="connector-card-code">GITHUB_TOKEN</code> is already set to your account automatically.
+        Inside a Codespace you can leave this blank — <code
+          class="connector-card-code">GITHUB_TOKEN</code
+        > is already set to your account automatically.
       </p>
     </details>
   {:else}
@@ -136,17 +169,13 @@
     />
   {/if}
 
-  <button class="connector-button" type="button" on:click={runIngest} disabled={loading || !uri.trim()}>
-    {loading ? `Ingesting… (${elapsed}s)` : "Run ingest"}
-  </button>
+  <Button {loading} disabled={loading || !uri.trim()} on:click={runIngest}>
+    {loading ? `Ingesting\u2026 (${elapsed}s)` : "Run ingest"}
+  </Button>
 
-  {#if provider === "codex" && (liveLog || loading)}
-    <pre class="connector-log">{liveLog || "Waiting for Codex output…"}</pre>
-  {/if}
+  <LogPanel log={liveLog} {loading} visible={provider === "codex"} />
 
-  {#if errorMessage}
-    <div class="connector-error">{errorMessage}</div>
-  {/if}
+  <ErrorPanel message={errorMessage} />
 
   {#if result}
     <ResultPanel {result} {provider} />

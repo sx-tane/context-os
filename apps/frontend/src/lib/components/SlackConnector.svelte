@@ -7,6 +7,11 @@
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "./IngestResult.svelte";
+  import Button from "./Button.svelte";
+  import FormField from "./FormField.svelte";
+  import ModeToggle from "./ModeToggle.svelte";
+  import LogPanel from "./LogPanel.svelte";
+  import ErrorPanel from "./ErrorPanel.svelte";
 
   // Shared Codex state from parent page
   export let codexLoggedIn: boolean;
@@ -68,7 +73,8 @@
       isCurrent: () => runID === reauthRunID,
       setPlugin: (value) => (reauthPlugin = value),
       setRunning: (value) => (reauthRunning = value),
-      setLog: (value) => (reauthLog = typeof value === "function" ? value(reauthLog) : value),
+      setLog: (value) =>
+        (reauthLog = typeof value === "function" ? value(reauthLog) : value),
     });
   }
 
@@ -86,8 +92,10 @@
       setLoading: (value) => (loading = value),
       setError: (message) => (errorMessage = message),
       setResult: (value) => (result = value),
-      setLiveLog: (value) => (liveLog = typeof value === "function" ? value(liveLog) : value),
-      setElapsed: (value) => (elapsed = typeof value === "function" ? value(elapsed) : value),
+      setLiveLog: (value) =>
+        (liveLog = typeof value === "function" ? value(liveLog) : value),
+      setElapsed: (value) =>
+        (elapsed = typeof value === "function" ? value(elapsed) : value),
     });
   }
 </script>
@@ -97,31 +105,57 @@
   description="Ingest a Slack channel or message."
   examples={["slack://CHANNEL_ID", "slack://CHANNEL_ID/TIMESTAMP"]}
 >
-  <div class="connector-mode-toggle" aria-label="Slack ingestion provider">
-    <button type="button" class:active={provider === "token"} on:click={() => (provider = "token")}>Token / env</button>
-    <button type="button" class:active={provider === "codex"} on:click={() => (provider = "codex")}>Codex CLI plugin</button>
-  </div>
+  <ModeToggle
+    bind:value={provider}
+    options={[
+      { value: "token", label: "Token / env" },
+      { value: "codex", label: "Codex CLI plugin" },
+    ]}
+    ariaLabel="Slack ingestion provider"
+  />
 
   {#if provider === "token"}
     {#if connected && source === "oauth"}
-      <div class="connector-badge">&#10003; Connected to <strong>{teamName}</strong> via saved token</div>
+      <div class="connector-badge">
+        &#10003; Connected to <strong>{teamName}</strong> via saved token
+      </div>
     {:else if connected}
-      <div class="connector-badge">&#10003; Connected via <code class="connector-card-code">SLACK_BOT_TOKEN</code></div>
+      <div class="connector-badge">
+        &#10003; Connected via <code class="connector-card-code"
+          >SLACK_BOT_TOKEN</code
+        >
+      </div>
     {/if}
     <details class="connector-help">
       <summary>How to get a Slack bot token</summary>
       <ol>
-        <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a> → <strong>Create New App → From scratch</strong></li>
-        <li>Under <strong>OAuth &amp; Permissions</strong>, add Bot Token Scopes: <code>channels:history</code>, <code>channels:read</code></li>
+        <li>
+          Go to <a
+            href="https://api.slack.com/apps"
+            target="_blank"
+            rel="noopener">api.slack.com/apps</a
+          >
+          → <strong>Create New App → From scratch</strong>
+        </li>
+        <li>
+          Under <strong>OAuth &amp; Permissions</strong>, add Bot Token Scopes:
+          <code>channels:history</code>, <code>channels:read</code>
+        </li>
         <li>Install the app to your workspace</li>
         <li>Copy the Bot User OAuth Token and paste it below</li>
       </ol>
-      <p class="connector-note">You can also set <code class="connector-card-code">SLACK_BOT_TOKEN</code> before starting the API.</p>
+      <p class="connector-note">
+        You can also set <code class="connector-card-code">SLACK_BOT_TOKEN</code
+        > before starting the API.
+      </p>
     </details>
-    <label class="connector-field">
-      <span>Slack token <span class="connector-optional">(optional when env token is set)</span></span>
-      <input class="connector-input" type="password" bind:value={token} placeholder="xoxb-..." />
-    </label>
+    <FormField
+      label="Slack token"
+      optional="(optional when env token is set)"
+      type="password"
+      bind:value={token}
+      placeholder="xoxb-..."
+    />
   {:else}
     <CodexBadge
       {codexLoggedIn}
@@ -135,22 +169,20 @@
     />
   {/if}
 
-  <label class="connector-field connector-field-offset">
-    <span>URI</span>
-    <input class="connector-input" type="text" bind:value={uri} placeholder="slack://C1234567890" />
-  </label>
+  <FormField
+    label="URI"
+    bind:value={uri}
+    placeholder="slack://C1234567890"
+    offset
+  />
 
-  <button class="connector-button" type="button" on:click={runIngest} disabled={loading || !uri.trim()}>
+  <Button {loading} disabled={loading || !uri.trim()} on:click={runIngest}>
     {loading ? `Ingesting… (${elapsed}s)` : "Run ingest"}
-  </button>
+  </Button>
 
-  {#if provider === "codex" && (liveLog || loading)}
-    <pre class="connector-log">{liveLog || "Waiting for Codex output…"}</pre>
-  {/if}
+  <LogPanel log={liveLog} {loading} visible={provider === "codex"} />
 
-  {#if errorMessage}
-    <div class="connector-error">{errorMessage}</div>
-  {/if}
+  <ErrorPanel message={errorMessage} />
 
   {#if result}
     <ResultPanel {result} {provider} />

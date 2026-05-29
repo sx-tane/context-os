@@ -7,6 +7,11 @@
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "./IngestResult.svelte";
+  import Button from "./Button.svelte";
+  import FormField from "./FormField.svelte";
+  import ModeToggle from "./ModeToggle.svelte";
+  import LogPanel from "./LogPanel.svelte";
+  import ErrorPanel from "./ErrorPanel.svelte";
 
   export let codexLoggedIn: boolean;
   export let codexAccount: string;
@@ -107,18 +112,14 @@
     "jira://project/PROJ",
   ]}
 >
-  <div class="connector-mode-toggle" aria-label="Jira ingestion provider">
-    <button
-      type="button"
-      class:active={provider === "token"}
-      on:click={() => (provider = "token")}>Token / env</button
-    >
-    <button
-      type="button"
-      class:active={provider === "codex"}
-      on:click={() => (provider = "codex")}>Codex Rovo plugin</button
-    >
-  </div>
+  <ModeToggle
+    bind:value={provider}
+    options={[
+      { value: "token", label: "Token / env" },
+      { value: "codex", label: "Codex Rovo plugin" },
+    ]}
+    ariaLabel="Jira ingestion provider"
+  />
 
   {#if provider === "token"}
     {#if connected}
@@ -130,45 +131,25 @@
           : ""}
       </div>
     {/if}
-    <label class="connector-field">
-      <span
-        >Jira API token <span class="connector-optional"
-          >(optional when env token is set)</span
-        ></span
-      >
-      <input
-        class="connector-input"
-        type="password"
-        bind:value={token}
-        placeholder="ATATT..."
-      />
-    </label>
-    <label class="connector-field">
-      <span
-        >Jira email <span class="connector-optional"
-          >(optional when env email is set)</span
-        ></span
-      >
-      <input
-        class="connector-input"
-        type="text"
-        bind:value={email}
-        placeholder="name@example.com"
-      />
-    </label>
-    <label class="connector-field">
-      <span
-        >Jira base URL <span class="connector-optional"
-          >(optional when env base URL is set)</span
-        ></span
-      >
-      <input
-        class="connector-input"
-        type="text"
-        bind:value={apiBaseURL}
-        placeholder="https://site.atlassian.net"
-      />
-    </label>
+    <FormField
+      label="Jira API token"
+      optional="(optional when env token is set)"
+      type="password"
+      bind:value={token}
+      placeholder="ATATT..."
+    />
+    <FormField
+      label="Jira email"
+      optional="(optional when env email is set)"
+      bind:value={email}
+      placeholder="name@example.com"
+    />
+    <FormField
+      label="Jira base URL"
+      optional="(optional when env base URL is set)"
+      bind:value={apiBaseURL}
+      placeholder="https://site.atlassian.net"
+    />
   {:else}
     <CodexBadge
       {codexLoggedIn}
@@ -182,32 +163,20 @@
     />
   {/if}
 
-  <label class="connector-field connector-field-offset">
-    <span>URI</span>
-    <input
-      class="connector-input"
-      type="text"
-      bind:value={uri}
-      placeholder="https://site.atlassian.net/browse/PROJ-123"
-    />
-  </label>
+  <FormField
+    label="URI"
+    bind:value={uri}
+    placeholder="https://site.atlassian.net/browse/PROJ-123"
+    offset
+  />
 
-  <button
-    class="connector-button"
-    type="button"
-    on:click={runIngest}
-    disabled={loading || !uri.trim()}
-  >
-    {loading ? `Ingesting... (${elapsed}s)` : "Run ingest"}
-  </button>
+  <Button {loading} disabled={loading || !uri.trim()} on:click={runIngest}>
+    {loading ? `Ingesting… (${elapsed}s)` : "Run ingest"}
+  </Button>
 
-  {#if provider === "codex" && (liveLog || loading)}
-    <pre class="connector-log">{liveLog || "Waiting for Codex output..."}</pre>
-  {/if}
+  <LogPanel log={liveLog} {loading} visible={provider === "codex"} />
 
-  {#if errorMessage}
-    <div class="connector-error">{errorMessage}</div>
-  {/if}
+  <ErrorPanel message={errorMessage} />
 
   {#if result}
     <ResultPanel {result} {provider} />

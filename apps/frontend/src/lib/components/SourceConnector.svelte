@@ -10,6 +10,9 @@
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import ResultPanel from "./IngestResult.svelte";
+  import Button from "./Button.svelte";
+  import FormField from "./FormField.svelte";
+  import ErrorPanel from "./ErrorPanel.svelte";
 
   export let connector: DirectSourceConnectorKind;
   export let title: string;
@@ -172,57 +175,37 @@
         <div class="connector-upload-summary">{uploadSummary}</div>
       {/if}
 
-      <button
-        class="connector-button"
-        type="button"
-        on:click={runUploadIngest}
+      <Button
+        {loading}
         disabled={loading || uploadFiles.length === 0}
+        on:click={runUploadIngest}
       >
         {loading ? `Ingesting... (${elapsed}s)` : "Upload and ingest"}
-      </button>
+      </Button>
     </div>
 
     <details class="connector-path-fallback">
       <summary>Use server path</summary>
-      <label class="connector-field connector-field-offset">
-        <span>{uriLabel}</span>
-        <input
-          class="connector-input"
-          type="text"
-          bind:value={uri}
-          placeholder={uriPlaceholder}
-        />
-      </label>
-      <button
-        class="connector-button"
-        type="button"
-        on:click={runIngest}
-        disabled={loading || !uri.trim()}
-      >
-        {loading ? `Ingesting... (${elapsed}s)` : submitLabel}
-      </button>
-    </details>
-  {:else}
-    <label class="connector-field">
-      <span>{uriLabel}</span>
-      <input
-        class="connector-input"
-        type="text"
+      <FormField
+        label={uriLabel}
         bind:value={uri}
         placeholder={uriPlaceholder}
+        offset
       />
-    </label>
+      <Button {loading} disabled={loading || !uri.trim()} on:click={runIngest}>
+        {loading ? `Ingesting... (${elapsed}s)` : submitLabel}
+      </Button>
+    </details>
+  {:else}
+    <FormField label={uriLabel} bind:value={uri} placeholder={uriPlaceholder} />
 
     {#if tokenLabel}
-      <label class="connector-field">
-        <span>{tokenLabel}</span>
-        <input
-          class="connector-input"
-          type="password"
-          bind:value={token}
-          placeholder={tokenPlaceholder}
-        />
-      </label>
+      <FormField
+        label={tokenLabel}
+        type="password"
+        bind:value={token}
+        placeholder={tokenPlaceholder}
+      />
     {/if}
 
     {#each metadataFields as field}
@@ -279,19 +262,16 @@
   {/if}
 
   {#if !uploadEnabled}
-    <button
-      class="connector-button"
-      type="button"
-      on:click={runIngest}
+    <Button
+      {loading}
       disabled={loading || (!uri.trim() && !content.trim())}
+      on:click={runIngest}
     >
       {loading ? `Ingesting... (${elapsed}s)` : submitLabel}
-    </button>
+    </Button>
   {/if}
 
-  {#if errorMessage}
-    <div class="connector-error">{errorMessage}</div>
-  {/if}
+  <ErrorPanel message={errorMessage} />
 
   {#if result}
     <ResultPanel {result} provider="token" />
