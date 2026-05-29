@@ -3,11 +3,11 @@
   import type { ServiceStatus, CodexPlugin } from "$lib/types";
   import { API_URL, probeService, streamCodexLogin } from "$lib/api";
   import { sourceConnectorConfigs } from "$lib/sourceConnectorConfigs";
-  import StatusSection from "$lib/components/StatusSection.svelte";
-  import GitHubConnector from "$lib/components/GitHubConnector.svelte";
-  import JiraConnector from "$lib/components/JiraConnector.svelte";
-  import SlackConnector from "$lib/components/SlackConnector.svelte";
-  import SourceConnector from "$lib/components/SourceConnector.svelte";
+  import StatusSection from "$lib/components/feedback/StatusSection.svelte";
+  import GitHubConnector from "$lib/components/connectors/GitHubConnector.svelte";
+  import JiraConnector from "$lib/components/connectors/JiraConnector.svelte";
+  import SlackConnector from "$lib/components/connectors/SlackConnector.svelte";
+  import SourceConnector from "$lib/components/connectors/SourceConnector.svelte";
 
   const WORKER_URL = "/worker";
 

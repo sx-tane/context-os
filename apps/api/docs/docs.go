@@ -836,10 +836,12 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "content": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Issue body: Please update the connector README with setup steps."
                 },
                 "id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "evt_a1b2c3d4e5f6"
                 },
                 "metadata": {
                     "type": "object",
@@ -848,25 +850,36 @@ const docTemplate = `{
                     }
                 },
                 "occurred_at": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2026-05-29T10:00:00Z"
                 },
                 "schema_version": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "v1"
                 },
                 "source": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "github"
                 },
                 "source_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "https://github.com/sx-tane/context-os/issues/1"
                 },
                 "subject": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Fix: update connector README"
                 },
                 "trace_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "trace_a1b2c3d4e5f6"
                 },
                 "type": {
-                    "$ref": "#/definitions/events.Type"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/events.Type"
+                        }
+                    ],
+                    "example": "document.ingested"
                 }
             }
         },
@@ -895,16 +908,20 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "content": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Optional raw content instead of reading from URI"
                 },
                 "cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "eyJsYXN0X2lkIjoiMTIzIn0="
                 },
                 "exclude": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "node_modules,*.log"
                 },
                 "include": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "*.go,*.md"
                 },
                 "metadata": {
                     "type": "object",
@@ -913,7 +930,8 @@ const docTemplate = `{
                     }
                 },
                 "uri": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "storage/raw/README.md"
                 }
             }
         },
@@ -921,13 +939,16 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "provider": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "token"
                 },
                 "token": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "ghp_xxxx"
                 },
                 "uri": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "https://github.com/sx-tane/context-os/issues/1"
                 }
             }
         },
@@ -935,19 +956,24 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "api_base_url": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "https://mysite.atlassian.net"
                 },
                 "content": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Optional raw content override"
                 },
                 "cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "eyJsYXN0X2lkIjoiMTIzIn0="
                 },
                 "email": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "user@example.com"
                 },
                 "expand": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "renderedFields,names"
                 },
                 "metadata": {
                     "type": "object",
@@ -956,13 +982,16 @@ const docTemplate = `{
                     }
                 },
                 "provider": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "token"
                 },
                 "token": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "ATATT3xFfGF0xxxx"
                 },
                 "uri": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "https://mysite.atlassian.net/browse/PROJ-123"
                 }
             }
         },
@@ -970,13 +999,16 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "provider": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "token"
                 },
                 "token": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "xoxb-111-222-xxxx"
                 },
                 "uri": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "slack://C1234567890"
                 }
             }
         },
@@ -990,13 +1022,15 @@ const docTemplate = `{
                     }
                 },
                 "connector": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "github"
                 },
                 "event": {
                     "$ref": "#/definitions/events.Event"
                 },
                 "event_count": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "events": {
                     "type": "array",
@@ -1020,7 +1054,8 @@ const docTemplate = `{
                     }
                 },
                 "preview": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Issue #1: Fix connector README — requesting updated setup steps."
                 },
                 "previews": {
                     "type": "array",

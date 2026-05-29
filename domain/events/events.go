@@ -41,16 +41,16 @@ const (
 
 // Event is the core unit of data flowing through the pipeline.
 type Event struct {
-	ID            string            `json:"id"`
-	TraceID       string            `json:"trace_id"`
-	Type          Type              `json:"type"`
-	SchemaVersion string            `json:"schema_version"`
-	Source        string            `json:"source"`
-	SourceID      string            `json:"source_id"`
-	Subject       string            `json:"subject"`
-	Content       string            `json:"content"`
+	ID            string            `json:"id"             example:"evt_a1b2c3d4e5f6"`
+	TraceID       string            `json:"trace_id"       example:"trace_a1b2c3d4e5f6"`
+	Type          Type              `json:"type"           example:"document.ingested"`
+	SchemaVersion string            `json:"schema_version" example:"v1"`
+	Source        string            `json:"source"         example:"github"`
+	SourceID      string            `json:"source_id"      example:"https://github.com/sx-tane/context-os/issues/1"`
+	Subject       string            `json:"subject"        example:"Fix: update connector README"`
+	Content       string            `json:"content"        example:"Issue body: Please update the connector README with setup steps."`
 	Metadata      map[string]string `json:"metadata"`
-	OccurredAt    time.Time         `json:"occurred_at"`
+	OccurredAt    time.Time         `json:"occurred_at"    example:"2026-05-29T10:00:00Z"`
 }
 
 // New creates an Event with replay-stable identity and provenance defaults.

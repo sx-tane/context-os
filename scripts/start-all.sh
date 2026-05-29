@@ -129,6 +129,13 @@ else
   echo "       Install with: go install github.com/swaggo/swag/cmd/swag@v1.16.4"
 fi
 
+echo "Regenerating frontend TypeScript types from swagger..."
+(
+  cd "$ROOT_DIR/apps/frontend"
+  bun run codegen 2>/dev/null || \
+    echo "[warn] Frontend codegen failed; types may be stale. Run: cd apps/frontend && bun run codegen"
+)
+
 echo "Starting API on current terminal session..."
 (
   cd "$ROOT_DIR"

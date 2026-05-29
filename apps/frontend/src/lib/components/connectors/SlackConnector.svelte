@@ -6,12 +6,12 @@
   import { runCodexReauth } from "$lib/reauthRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
-  import ResultPanel from "./IngestResult.svelte";
-  import Button from "./Button.svelte";
-  import FormField from "./FormField.svelte";
-  import ModeToggle from "./ModeToggle.svelte";
-  import LogPanel from "./LogPanel.svelte";
-  import ErrorPanel from "./ErrorPanel.svelte";
+  import ResultPanel from "../feedback/IngestResult.svelte";
+  import Button from "../ui/Button.svelte";
+  import FormField from "../ui/FormField.svelte";
+  import ModeToggle from "../ui/ModeToggle.svelte";
+  import LogPanel from "../feedback/LogPanel.svelte";
+  import ErrorPanel from "../feedback/ErrorPanel.svelte";
 
   // Shared Codex state from parent page
   export let codexLoggedIn: boolean;

@@ -3,27 +3,37 @@ definitions:
   events.Event:
     properties:
       content:
+        example: 'Issue body: Please update the connector README with setup steps.'
         type: string
       id:
+        example: evt_a1b2c3d4e5f6
         type: string
       metadata:
         additionalProperties:
           type: string
         type: object
       occurred_at:
+        example: "2026-05-29T10:00:00Z"
         type: string
       schema_version:
+        example: v1
         type: string
       source:
+        example: github
         type: string
       source_id:
+        example: https://github.com/sx-tane/context-os/issues/1
         type: string
       subject:
+        example: 'Fix: update connector README'
         type: string
       trace_id:
+        example: trace_a1b2c3d4e5f6
         type: string
       type:
-        $ref: '#/definitions/events.Type'
+        allOf:
+        - $ref: '#/definitions/events.Type'
+        example: document.ingested
     type: object
   events.Type:
     enum:
@@ -46,59 +56,78 @@ definitions:
   request.FilesystemIngest:
     properties:
       content:
+        example: Optional raw content instead of reading from URI
         type: string
       cursor:
+        example: eyJsYXN0X2lkIjoiMTIzIn0=
         type: string
       exclude:
+        example: node_modules,*.log
         type: string
       include:
+        example: '*.go,*.md'
         type: string
       metadata:
         additionalProperties:
           type: string
         type: object
       uri:
+        example: storage/raw/README.md
         type: string
     type: object
   request.GithubIngest:
     properties:
       provider:
+        example: token
         type: string
       token:
+        example: ghp_xxxx
         type: string
       uri:
+        example: https://github.com/sx-tane/context-os/issues/1
         type: string
     type: object
   request.JiraIngest:
     properties:
       api_base_url:
+        example: https://mysite.atlassian.net
         type: string
       content:
+        example: Optional raw content override
         type: string
       cursor:
+        example: eyJsYXN0X2lkIjoiMTIzIn0=
         type: string
       email:
+        example: user@example.com
         type: string
       expand:
+        example: renderedFields,names
         type: string
       metadata:
         additionalProperties:
           type: string
         type: object
       provider:
+        example: token
         type: string
       token:
+        example: ATATT3xFfGF0xxxx
         type: string
       uri:
+        example: https://mysite.atlassian.net/browse/PROJ-123
         type: string
     type: object
   request.SlackIngest:
     properties:
       provider:
+        example: token
         type: string
       token:
+        example: xoxb-111-222-xxxx
         type: string
       uri:
+        example: slack://C1234567890
         type: string
     type: object
   response.Ingest:
@@ -108,10 +137,12 @@ definitions:
           type: string
         type: array
       connector:
+        example: github
         type: string
       event:
         $ref: '#/definitions/events.Event'
       event_count:
+        example: 1
         type: integer
       events:
         items:
@@ -128,6 +159,7 @@ definitions:
           type: object
         type: array
       preview:
+        example: 'Issue #1: Fix connector README — requesting updated setup steps.'
         type: string
       previews:
         items:

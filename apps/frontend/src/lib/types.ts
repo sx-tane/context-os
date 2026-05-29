@@ -1,3 +1,12 @@
+// Auto-generated API types — run `bun run codegen` to refresh from swagger.json.
+import type { definitions } from "$lib/generated/api";
+
+// ---- API types (auto-generated from swagger) ----
+export type IngestEvent = definitions["events.Event"];
+export type IngestResult = definitions["response.Ingest"];
+export type EventType = definitions["events.Type"];
+
+// ---- Frontend-only types ----
 export type ServiceStatus = "checking" | "ok" | "unreachable";
 
 export type IngestProvider = "token" | "codex";
@@ -20,27 +29,8 @@ export interface CodexPlugin {
   enabled: boolean;
 }
 
-export interface IngestEvent {
-  id: string;
-  type: string;
-  source: string;
-  source_id: string;
-  subject: string;
-  occurred_at: string;
-}
-
-export interface IngestResult {
-  connector: string;
-  capabilities: string[];
-  event: IngestEvent;
-  events?: IngestEvent[];
-  event_count?: number;
-  preview: string;
-  previews?: string[];
-  metadata: Record<string, string>;
-  metadata_items?: Record<string, string>[];
-}
-
+// IngestRequest stays as a unified frontend type covering all connectors.
+// The swagger has separate per-connector request types; the frontend collapses them.
 export interface IngestRequest {
   uri: string;
   token?: string;

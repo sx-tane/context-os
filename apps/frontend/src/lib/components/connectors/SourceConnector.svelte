@@ -9,10 +9,10 @@
   import { postFilesystemUpload } from "$lib/api";
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
-  import ResultPanel from "./IngestResult.svelte";
-  import Button from "./Button.svelte";
-  import FormField from "./FormField.svelte";
-  import ErrorPanel from "./ErrorPanel.svelte";
+  import ResultPanel from "../feedback/IngestResult.svelte";
+  import Button from "../ui/Button.svelte";
+  import FormField from "../ui/FormField.svelte";
+  import ErrorPanel from "../feedback/ErrorPanel.svelte";
 
   export let connector: DirectSourceConnectorKind;
   export let title: string;

@@ -12,16 +12,8 @@
     }
   }
 
-  $: events = result.events?.length
-    ? result.events
-    : result.event
-      ? [result.event]
-      : [];
-  $: previews = result.previews?.length
-    ? result.previews
-    : result.preview
-      ? [result.preview]
-      : [];
+  $: events = result.events?.length ? result.events : result.event ? [result.event] : [];
+  $: previews = result.previews?.length ? result.previews : result.preview ? [result.preview] : [];
   $: metadataItems = result.metadata_items?.length
     ? result.metadata_items
     : [result.metadata];
@@ -33,16 +25,12 @@
     <strong>Connector</strong><span>{result.connector}</span>
   </div>
   <div class="kv">
-    <strong>Capabilities</strong><span
-      >{result.capabilities?.join(", ") ?? ""}</span
-    >
+    <strong>Capabilities</strong><span>{result.capabilities?.join(", ") ?? ""}</span>
   </div>
   {#if eventCount > 1}
     <div class="kv"><strong>Event count</strong><span>{eventCount}</span></div>
   {/if}
-  <div class="kv">
-    <strong>Event ID</strong><span>{result.event?.id ?? ""}</span>
-  </div>
+  <div class="kv"><strong>Event ID</strong><span>{result.event?.id ?? ""}</span></div>
   <div class="kv">
     <strong>Event type</strong><span>{result.event?.type ?? ""}</span>
   </div>
