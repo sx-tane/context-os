@@ -33,3 +33,22 @@ Production responsibility:
 - keep findings tied to evidence and impacted artifacts;
 - separate facts, confidence, impact, and recommended next actions;
 - support fast local workflows for inspecting delivery misalignment.
+
+## Type generation
+
+TypeScript types for API responses and events are auto-generated from the OpenAPI spec. Do **not** edit `src/lib/generated/api.d.ts` by hand.
+
+Refresh types after any API shape change:
+
+```bash
+cd apps/frontend
+bun run codegen
+```
+
+This reads `apps/api/_docs/swagger.json` and writes `src/lib/generated/api.d.ts`. The generated file is committed to the repository because TypeScript needs it to compile. `start-all.sh` runs this step automatically on every startup.
+
+```
+swag init  →  apps/api/_docs/swagger.json  →  bun run codegen  →  src/lib/generated/api.d.ts
+```
+
+Frontend-specific types that have no swagger equivalent (`IngestRequest`, `SourceConnectorConfig`, `ConnectorKind`, etc.) remain in `src/lib/types.ts` and are maintained manually.

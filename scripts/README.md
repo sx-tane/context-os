@@ -36,7 +36,8 @@ Starts all local services in a single terminal session. Run this after setup is 
 What it does:
 
 - Runs `uv sync` in `apps/ai-worker` if `uv` is available
-- Regenerates optional standalone OpenAPI docs (`swag init` + Redoc HTML) if `swag` is installed
+- Regenerates OpenAPI docs (`swag init` → `apps/api/_docs/`) and Redoc HTML if `swag` is installed
+- Regenerates frontend TypeScript types from the OpenAPI spec (`bun run codegen` in `apps/frontend`)
 - Starts the Go API (`go run ./apps/api`) in the background
 - Starts the SvelteKit context UI dev server (`bun run dev`) in the background
 - Shuts down both processes cleanly when you press `Ctrl+C`
@@ -71,9 +72,11 @@ Once running:
 
 - **http://localhost:5173** — ContextOS UI
 - **http://localhost:8080/health** — API health endpoint
-- **apps/api/\_docs/api.html** — Optional standalone Redoc HTML after docs are generated
+- **http://localhost:8080/swagger/** — Interactive Swagger UI
+- **http://localhost:8080/swagger/doc.json** — Raw OpenAPI spec (Postman/Insomnia)
+- **apps/api/\_docs/api.html** — Standalone Redoc HTML (open directly in browser after docs are generated)
 
-Generated docs under `apps/api/_docs/` are local artifacts and are not required for the API to start. The underscore keeps generated Go docs out of normal `go test ./...` and `go mod tidy` runs.
+Generated docs under `apps/api/_docs/` are local artifacts (gitignored) and are not required for the API to start. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository and are regenerated automatically on each startup.
 
 ---
 

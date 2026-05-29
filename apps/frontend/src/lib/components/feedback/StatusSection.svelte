@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ServiceStatus, CodexPlugin } from "$lib/types";
+  import Button from "../ui/Button.svelte";
 
   export let apiStatus: ServiceStatus;
   export let workerStatus: ServiceStatus;
@@ -31,17 +32,22 @@
   <div class="row">
     <span class="dot" style="background:{color[apiStatus]}"></span>
     <span class="service">API</span>
-    <span class="value" style="color:{color[apiStatus]}">{label[apiStatus]}</span>
+    <span class="value" style="color:{color[apiStatus]}"
+      >{label[apiStatus]}</span
+    >
   </div>
 
   <div class="row">
     <span class="dot" style="background:{color[workerStatus]}"></span>
     <span class="service">AI Worker</span>
-    <span class="value" style="color:{color[workerStatus]}">{label[workerStatus]}</span>
+    <span class="value" style="color:{color[workerStatus]}"
+      >{label[workerStatus]}</span
+    >
   </div>
 
   <div class="row">
-    <span class="dot" style="background:{codexLoggedIn ? '#22c55e' : '#888'}"></span>
+    <span class="dot" style="background:{codexLoggedIn ? '#22c55e' : '#888'}"
+    ></span>
     <span class="service">Codex CLI</span>
     <span class="value" style="color:{codexLoggedIn ? '#22c55e' : '#888'}">
       {#if codexInstalled}
@@ -54,14 +60,18 @@
       {/if}
     </span>
     {#if codexInstalled}
-      <button
-        class="login-btn"
-        on:click={onLoginClick}
+      <Button
+        variant="ghost"
         disabled={codexLoginRunning}
+        on:click={onLoginClick}
         title="Run codex login --device-auth"
       >
-        {codexLoginRunning ? "Logging in…" : codexLoggedIn ? "Switch account" : "Login"}
-      </button>
+        {codexLoginRunning
+          ? "Logging in…"
+          : codexLoggedIn
+            ? "Switch account"
+            : "Login"}
+      </Button>
     {/if}
   </div>
 
@@ -113,24 +123,6 @@
     font-weight: 400;
     color: #9ca3af;
     font-size: 0.8rem;
-  }
-
-  .login-btn {
-    background: transparent;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    padding: 0.25rem 0.7rem;
-    border-radius: 5px;
-    font-size: 0.8rem;
-    font-weight: normal;
-    cursor: pointer;
-  }
-  .login-btn:hover:not(:disabled) {
-    background: #f3f4f6;
-  }
-  .login-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 
   .login-log {

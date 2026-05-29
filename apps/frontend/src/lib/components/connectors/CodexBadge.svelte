@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import type { CodexPlugin } from "$lib/types";
+  import Button from "../ui/Button.svelte";
 
   /** Full plugin identifier, e.g. "github@openai-curated" */
   export let pluginName: string;
@@ -21,7 +22,11 @@
 <div class="codex-account-badge">
   {#if codexLoggedIn}
     <span class="status-dot green"></span>
-    <span><strong>{codexAccount || "Logged in"}</strong><span class="optional"> via OpenAI</span></span>
+    <span
+      ><strong>{codexAccount || "Logged in"}</strong><span class="optional">
+        via OpenAI</span
+      ></span
+    >
   {:else}
     <span class="status-dot red"></span>
     <span>Not logged in</span>
@@ -29,24 +34,33 @@
 
   {#if plugin?.enabled}
     <span class="sep">·</span>
-    <span class="sub">Plugin: <strong style="color:#16a34a">✓ enabled</strong></span>
+    <span class="sub"
+      >Plugin: <strong style="color:#16a34a">✓ enabled</strong></span
+    >
   {:else if plugin?.installed}
     <span class="sep">·</span>
     <span class="sub warn">Plugin installed but not enabled</span>
   {:else if codexPlugins.length > 0}
     <span class="sep">·</span>
-    <span class="sub warn">Plugin not installed — run <code>codex plugin add {pluginName}</code></span>
+    <span class="sub warn"
+      >Plugin not installed — run <code>codex plugin add {pluginName}</code
+      ></span
+    >
   {/if}
 
   {#if plugin?.installed}
-    <button
-      class="reauth-btn"
-      on:click={() => dispatch("reauth", shortName)}
-      disabled={reauthRunning && reauthPlugin === shortName}
-      title="Remove and re-add the plugin to connect a different account"
-    >
-      {reauthRunning && reauthPlugin === shortName ? "Re-authing…" : `Re-auth ${shortName} plugin`}
-    </button>
+    <span style="margin-left:auto">
+      <Button
+        variant="ghost"
+        disabled={reauthRunning && reauthPlugin === shortName}
+        on:click={() => dispatch("reauth", shortName)}
+        title="Remove and re-add the plugin to connect a different account"
+      >
+        {reauthRunning && reauthPlugin === shortName
+          ? "Re-authing…"
+          : `Re-auth ${shortName} plugin`}
+      </Button>
+    </span>
   {/if}
 </div>
 
@@ -75,8 +89,12 @@
     border-radius: 50%;
     flex-shrink: 0;
   }
-  .status-dot.green { background: #22c55e; }
-  .status-dot.red   { background: #ef4444; }
+  .status-dot.green {
+    background: #22c55e;
+  }
+  .status-dot.red {
+    background: #ef4444;
+  }
 
   .sep {
     color: #9ca3af;
@@ -91,25 +109,6 @@
 
   .warn {
     color: #b45309;
-  }
-
-  .reauth-btn {
-    background: transparent;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    padding: 0.25rem 0.7rem;
-    border-radius: 5px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    margin-left: auto;
-    font-weight: normal;
-  }
-  .reauth-btn:hover:not(:disabled) {
-    background: #f3f4f6;
-  }
-  .reauth-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 
   .reauth-log {
