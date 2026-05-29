@@ -1,7 +1,8 @@
 import type {
+  ApiErrorBody,
   CodexConnectorKind,
   ConnectorKind,
-  IngestProvider,
+  IngestRequest,
   IngestResult,
   ServiceStatus,
 } from "$lib/types";
@@ -47,18 +48,11 @@ export async function getJSON<T>(path: string): Promise<T | null> {
 
 export async function postIngest(
   connector: ConnectorKind,
-  body: {
-    uri: string;
-    token?: string;
-    provider: IngestProvider;
-    content?: string;
-    cursor?: string;
-    metadata?: Record<string, string>;
-  },
+  body: IngestRequest,
   options: RequestOptions = {},
 ): Promise<
   | { ok: true; status: number; body: IngestResult }
-  | { ok: false; status: number; body: { message?: string } }
+  | { ok: false; status: number; body: ApiErrorBody }
 > {
   const res = await fetch(`${API_URL}/${connector}/ingest`, {
     method: "POST",
@@ -68,12 +62,43 @@ export async function postIngest(
   });
   const responseBody = await readJSON(res);
   if (res.ok) {
-    return { ok: true, status: res.status, body: responseBody as IngestResult };
+    return {
+      ok: true,
+      status: res.status,
+      body: responseBody as unknown as IngestResult,
+    };
   }
   return {
     ok: false,
     status: res.status,
-    body: responseBody as { message?: string },
+    body: responseBody,
+  };
+}
+
+export async function postFilesystemUpload(
+  body: FormData,
+  options: RequestOptions = {},
+): Promise<
+  | { ok: true; status: number; body: IngestResult }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  const res = await fetch(`${API_URL}/filesystem/upload`, {
+    method: "POST",
+    body,
+    signal: options.signal,
+  });
+  const responseBody = await readJSON(res);
+  if (res.ok) {
+    return {
+      ok: true,
+      status: res.status,
+      body: responseBody as unknown as IngestResult,
+    };
+  }
+  return {
+    ok: false,
+    status: res.status,
+    body: responseBody,
   };
 }
 
@@ -191,10 +216,12 @@ async function assertStreamResponse(res: Response): Promise<void> {
   throw new Error(message);
 }
 
-async function readJSON(res: Response): Promise<Record<string, any>> {
+async function readJSON(
+  res: Response,
+): Promise<ApiErrorBody & Record<string, unknown>> {
   const text = await res.text();
   if (!text.trim()) return {};
-  const parsed = parseJSON<Record<string, any>>(text);
+  const parsed = parseJSON<ApiErrorBody & Record<string, unknown>>(text);
   if (parsed) return parsed;
   return { message: text };
 }

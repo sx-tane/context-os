@@ -65,7 +65,7 @@ func JiraStatus(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      request.JiraIngest  true  "Jira ingest request"
-// @Success      200   {object}  response.JiraIngest
+// @Success      200   {object}  response.Ingest
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
 // @Failure      500   {object}  map[string]string
@@ -112,7 +112,7 @@ func JiraIngest(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      request.FilesystemIngest  true  "Filesystem ingest request"
-// @Success      200   {object}  response.FilesystemIngest
+// @Success      200   {object}  response.Ingest
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
 // @Failure      500   {object}  map[string]string

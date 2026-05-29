@@ -111,19 +111,27 @@ if [[ -z "${GITHUB_TOKEN:-}" ]]; then
   echo "       To authenticate: export GITHUB_TOKEN=ghp_... then re-run this script."
 fi
 
+if command -v swag >/dev/null 2>&1; then
+  echo "Regenerating OpenAPI docs..."
+  (
+    cd "$ROOT_DIR"
+    swag init -g apps/api/main.go -o apps/api/_docs --quiet 2>/dev/null || \
+      swag init -g apps/api/main.go -o apps/api/_docs
+  )
+  if command -v npx >/dev/null 2>&1; then
+    npx --yes @redocly/cli build-docs \
+      "$ROOT_DIR/apps/api/_docs/swagger.yaml" \
+      --output "$ROOT_DIR/apps/api/_docs/api.html" \
+      --title "ContextOS API" 2>/dev/null || true
+  fi
+else
+  echo "[info] swag not found; skipping OpenAPI doc generation."
+  echo "       Install with: go install github.com/swaggo/swag/cmd/swag@v1.16.4"
+fi
+
 echo "Starting API on current terminal session..."
 (
   cd "$ROOT_DIR"
-  if command -v swag >/dev/null 2>&1; then
-    echo "Regenerating Swagger docs..."
-    swag init -g apps/api/main.go -o apps/api/docs --quiet
-    if command -v npx >/dev/null 2>&1; then
-      npx --yes @redocly/cli build-docs apps/api/docs/swagger.json --output apps/api/docs/api.html 2>/dev/null \
-        && echo "HTML docs: apps/api/docs/api.html"
-    fi
-  else
-    echo "[warn] swag not found; skipping doc generation. Install with: go install github.com/swaggo/swag/cmd/swag@latest"
-  fi
   go run ./apps/api
 ) &
 API_PID=$!

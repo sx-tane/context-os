@@ -30,7 +30,7 @@ Each connector emits raw ingestion events that are then normalized, classified, 
 
 ## HTTP API surface
 
-Connectors are exposed via the Go API (`apps/api`). Each connector has a dedicated endpoint under `/<connector>/ingest`.
+Connectors are exposed via the Go API (`apps/api`). Each connector has a dedicated endpoint under `/<connector>/ingest`, with filesystem also exposing `/filesystem/upload` for browser-selected files and folders.
 
 | Method | Path                    | Connector  | Description                                                    |
 | ------ | ----------------------- | ---------- | -------------------------------------------------------------- |
@@ -41,6 +41,7 @@ Connectors are exposed via the Go API (`apps/api`). Each connector has a dedicat
 | POST   | `/jira/ingest`          | Jira       | Ingest an issue or project by URI                              |
 | POST   | `/jira/ingest/stream`   | Jira       | Stream Codex/Rovo-backed Jira ingest over SSE                  |
 | POST   | `/filesystem/ingest`    | Filesystem | Ingest a local file or recursive folder path                   |
+| POST   | `/filesystem/upload`    | Filesystem | Upload browser-selected files or folders, then ingest          |
 | GET    | `/slack/status`         | Slack      | Report env/OAuth token status                                  |
 | GET    | `/slack/connect`        | Slack      | Start Slack OAuth flow                                         |
 | GET    | `/slack/callback`       | Slack      | Slack OAuth callback; stores token locally                     |
@@ -105,7 +106,7 @@ Response: the common `document.ingested` envelope with Jira keys such as `jira_i
 
 ### Filesystem
 
-Request body:
+Path request body:
 
 ```json
 {
@@ -119,6 +120,18 @@ Request body:
 - `metadata.filesystem_max_files` — optional folder guardrail; defaults to `1000`.
 - `metadata.filesystem_max_file_size` — optional per-file byte guardrail; defaults to `10485760`.
 
+Browser upload request:
+
+```http
+POST /filesystem/upload
+Content-Type: multipart/form-data
+```
+
+- `files` — one or more uploaded file parts.
+- `paths` — matching browser relative paths, using `file.webkitRelativePath` for folder uploads and `file.name` for normal file uploads.
+
+Uploads are staged under `storage/raw/uploads/<upload-id>/` before ingestion, so users can choose files or folders outside the repository while the connector still processes local files with stable replay metadata. Server path ingest remains available for developer workflows where the API can already see the path.
+
 Supported file extraction:
 
 | Format            | Extensions                                      | Extraction                                                                       |
@@ -131,6 +144,6 @@ Supported file extraction:
 | PDF               | `.pdf`                                          | Best-effort page text                                                            |
 | PowerPoint        | `.pptx`                                         | Slide text                                                                       |
 
-Response metadata includes original path, extension, extracted format, content hash, modified time, size, spreadsheet summary fields including formula count when applicable, and OpenAPI summary fields when a JSON/YAML file is an API spec. Folder responses preserve the existing first-event fields and add `events`, `previews`, `metadata_items`, and `event_count`; each child event has `filesystem_ingest_mode=folder`, `filesystem_root`, `filesystem_relative_path`, emitted file count, skipped count, and first skipped path metadata.
+Response metadata includes original path, extension, extracted format, content hash, modified time, size, spreadsheet summary fields including formula count when applicable, OpenAPI summary fields when a JSON/YAML file is an API spec, and `filesystem_upload_*` keys for browser uploads. Folder responses preserve the existing first-event fields and add `events`, `previews`, `metadata_items`, and `event_count`; each child event has `filesystem_ingest_mode=folder`, `filesystem_root`, `filesystem_relative_path`, emitted file count, skipped count, and first skipped path metadata.
 
 New connector endpoints follow the same pattern: add `request/`, `response/`, and `handler/` files and register the route in `main.go`.

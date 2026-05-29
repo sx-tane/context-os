@@ -5,12 +5,12 @@ export const sourceConnectorConfigs: SourceConnectorConfig[] = [
     connector: "filesystem",
     title: "Filesystem MCP Connector",
     description:
-      "Paste one local file or folder path. The connector detects the artifact type and emits stable provenance automatically.",
+      "Choose files or a folder from your computer. Server-visible paths stay available for local developer workflows.",
     defaultUri: "docs/",
     uriLabel: "File or folder path",
     uriPlaceholder: "docs/ or README.md",
-    submitLabel: "Ingest file or folder",
-    examples: ["docs/", "README.md", "requirements.xlsx", "openapi.yaml"],
+    submitLabel: "Ingest server path",
+    uploadEnabled: true,
     supportedFormats: [
       {
         format: "Folder",

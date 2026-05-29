@@ -16,9 +16,6 @@ import (
 	githubsource "context-os/internal/source/github"
 )
 
-// ingestTimeout caps a single GitHub connector call so the HTTP handler stays responsive.
-const ingestTimeout = 20 * time.Second
-
 // GithubStatus handles GET /github/status.
 // It checks the GITHUB_TOKEN environment variable and probes the GitHub API
 // to return the connected account identity.
@@ -94,7 +91,7 @@ func resolveGithubUser(token string) (login, name string) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      request.GithubIngest   true  "GitHub ingest request"
-// @Success      200   {object}  response.GithubIngest
+// @Success      200   {object}  response.Ingest
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
 // @Failure      500   {object}  map[string]string
@@ -110,19 +107,10 @@ func GithubIngest(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
-	uri := strings.TrimSpace(req.URI)
-	if uri == "" {
-		response.WriteError(w, http.StatusBadRequest, "invalid_request", "uri is required")
-		return
-	}
-
 	metadata := map[string]string{}
 	if token := strings.TrimSpace(req.Token); token != "" {
 		metadata["github_token"] = token
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), ingestTimeout)
-	defer cancel()
 
 	connector := contracts.MCPSourceConnector(githubsource.NewConnector())
 	if strings.EqualFold(strings.TrimSpace(req.Provider), "codex") {
@@ -130,28 +118,5 @@ func GithubIngest(w http.ResponseWriter, r *http.Request) {
 		metadata[codexsource.MetadataPlugin] = codexsource.PluginGitHub
 	}
 
-	ingested, err := connector.Ingest(ctx, contracts.SourceRequest{URI: uri, Metadata: metadata})
-	if err != nil {
-		response.WriteConnectorError(w, err)
-		return
-	}
-	if len(ingested) == 0 {
-		response.WriteError(w, http.StatusInternalServerError, "empty_result", "connector returned no events")
-		return
-	}
-
-	event := ingested[0]
-	caps := connector.Capabilities()
-	capStrings := make([]string, len(caps))
-	for i, c := range caps {
-		capStrings[i] = string(c)
-	}
-
-	response.WriteJSON(w, http.StatusOK, response.GithubIngest{
-		Connector:    connector.Name(),
-		Capabilities: capStrings,
-		Event:        event,
-		Preview:      event.Content,
-		Metadata:     event.Metadata,
-	})
+	writeSourceIngest(w, r, connector, sourceIngestInput{URI: req.URI, Metadata: metadata})
 }

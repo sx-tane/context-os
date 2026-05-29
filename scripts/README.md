@@ -36,13 +36,10 @@ Starts all local services in a single terminal session. Run this after setup is 
 What it does:
 
 - Runs `uv sync` in `apps/ai-worker` if `uv` is available
-- Regenerates Swagger docs (`swag init`) if `swag` is on the PATH
-- Rebuilds the standalone HTML doc (`npx @redocly/cli build-docs`) if `npx` is available
+- Regenerates optional standalone OpenAPI docs (`swag init` + Redoc HTML) if `swag` is installed
 - Starts the Go API (`go run ./apps/api`) in the background
 - Starts the SvelteKit context UI dev server (`bun run dev`) in the background
 - Shuts down both processes cleanly when you press `Ctrl+C`
-
-The files under `apps/api/docs/` are generated local artifacts and are ignored by git. If `swag` is missing, generate them with `go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g apps/api/main.go -o apps/api/docs` before `go test ./...` or API startup.
 
 ```bash
 chmod +x scripts/start-all.sh
@@ -55,8 +52,6 @@ Expected output when running:
 uv not found; skipping AI worker environment sync
 [warn] GITHUB_TOKEN is not set — the GitHub connector will only reach public repos.
        To authenticate: export GITHUB_TOKEN=ghp_... then re-run this script.
-Regenerating Swagger docs...
-HTML docs: apps/api/docs/api.html
 Starting API on current terminal session...
 Starting frontend dev server...
 API PID:      <pid>
@@ -75,16 +70,10 @@ export GITHUB_TOKEN=ghp_your_token_here
 Once running:
 
 - **http://localhost:5173** — ContextOS UI
-- **http://localhost:8080/swagger/index.html** — interactive API docs
-- **apps/api/docs/api.html** — standalone HTML docs (open in browser, no server needed)
+- **http://localhost:8080/health** — API health endpoint
+- **apps/api/\_docs/api.html** — Optional standalone Redoc HTML after docs are generated
 
-### Optional: install `swag` for automatic doc generation
-
-```bash
-go install github.com/swaggo/swag/cmd/swag@latest
-```
-
-Without it, `start-all.sh` skips doc generation and prints a warning.
+Generated docs under `apps/api/_docs/` are local artifacts and are not required for the API to start. The underscore keeps generated Go docs out of normal `go test ./...` and `go mod tidy` runs.
 
 ---
 

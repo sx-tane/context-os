@@ -74,7 +74,6 @@ uv --version
 codex --version
 
 # From the repo root
-go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g apps/api/main.go -o apps/api/docs
 go mod tidy
 go test ./...
 

@@ -198,15 +198,65 @@
     background: #111827;
     color: white;
     border: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0.55rem 1rem;
     border-radius: 6px;
     font-weight: 600;
     cursor: pointer;
   }
 
+  :global(.connector-button-secondary) {
+    background: #f9fafb;
+    color: #374151;
+    border: 1px solid #d1d5db;
+  }
+
   :global(.connector-button:disabled) {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  :global(.connector-upload) {
+    margin-bottom: 1rem;
+  }
+
+  :global(.connector-upload-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+  }
+
+  :global(.connector-file-button) {
+    position: relative;
+    overflow: hidden;
+  }
+
+  :global(.connector-file-input) {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  :global(.connector-upload-summary) {
+    color: #374151;
+    font-size: 0.85rem;
+    margin-bottom: 0.65rem;
+    word-break: break-all;
+  }
+
+  :global(.connector-path-fallback) {
+    margin: 0.25rem 0 1rem;
+    font-size: 0.85rem;
+  }
+
+  :global(.connector-path-fallback summary) {
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
   }
 
   :global(.connector-log) {

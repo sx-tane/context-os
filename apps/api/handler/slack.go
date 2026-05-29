@@ -24,7 +24,6 @@ import (
 )
 
 const (
-	slackIngestTimeout      = 20 * time.Second
 	slackOAuthScopes        = "channels:history,channels:read"
 	slackOAuthAuthorizeURL  = "https://slack.com/oauth/v2/authorize"
 	slackOAuthTokenURL      = "https://slack.com/api/oauth.v2.access"
@@ -191,7 +190,7 @@ func SlackCallback(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      request.SlackIngest   true  "Slack ingest request"
-// @Success      200   {object}  response.SlackIngest
+// @Success      200   {object}  response.Ingest
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
 // @Failure      500   {object}  map[string]string
@@ -207,12 +206,6 @@ func SlackIngest(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
-	uri := strings.TrimSpace(req.URI)
-	if uri == "" {
-		response.WriteError(w, http.StatusBadRequest, "invalid_request", "uri is required")
-		return
-	}
-
 	metadata := map[string]string{}
 	if token := strings.TrimSpace(req.Token); token != "" {
 		// Explicit token from the request takes priority.
@@ -223,39 +216,13 @@ func SlackIngest(w http.ResponseWriter, r *http.Request) {
 	}
 	// If neither is set, the connector falls back to SLACK_BOT_TOKEN env var.
 
-	ctx, cancel := context.WithTimeout(r.Context(), slackIngestTimeout)
-	defer cancel()
-
 	connector := contracts.MCPSourceConnector(slacksource.NewConnector())
 	if strings.EqualFold(strings.TrimSpace(req.Provider), "codex") {
 		connector = codexsource.NewConnector()
 		metadata[codexsource.MetadataPlugin] = codexsource.PluginSlack
 	}
 
-	ingested, err := connector.Ingest(ctx, contracts.SourceRequest{URI: uri, Metadata: metadata})
-	if err != nil {
-		response.WriteConnectorError(w, err)
-		return
-	}
-	if len(ingested) == 0 {
-		response.WriteError(w, http.StatusInternalServerError, "empty_result", "connector returned no events")
-		return
-	}
-
-	event := ingested[0]
-	caps := connector.Capabilities()
-	capStrings := make([]string, len(caps))
-	for i, c := range caps {
-		capStrings[i] = string(c)
-	}
-
-	response.WriteJSON(w, http.StatusOK, response.SlackIngest{
-		Connector:    connector.Name(),
-		Capabilities: capStrings,
-		Event:        event,
-		Preview:      event.Content,
-		Metadata:     event.Metadata,
-	})
+	writeSourceIngest(w, r, connector, sourceIngestInput{URI: req.URI, Metadata: metadata})
 }
 
 // ---- OAuth helpers ----------------------------------------------------------

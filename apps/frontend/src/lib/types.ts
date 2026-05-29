@@ -9,6 +9,11 @@ export type CodexConnectorKind = Extract<
   "github" | "slack" | "jira"
 >;
 
+export type DirectSourceConnectorKind = Exclude<
+  ConnectorKind,
+  CodexConnectorKind
+>;
+
 export interface CodexPlugin {
   name: string;
   installed: boolean;
@@ -36,6 +41,20 @@ export interface IngestResult {
   metadata_items?: Record<string, string>[];
 }
 
+export interface IngestRequest {
+  uri: string;
+  token?: string;
+  provider: IngestProvider;
+  content?: string;
+  cursor?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface ApiErrorBody {
+  error?: string;
+  message?: string;
+}
+
 export interface SourceMetadataField {
   key: string;
   label: string;
@@ -51,7 +70,7 @@ export interface SupportedFormat {
 }
 
 export interface SourceConnectorConfig {
-  connector: ConnectorKind;
+  connector: DirectSourceConnectorKind;
   title: string;
   description: string;
   examples?: string[];
@@ -59,6 +78,7 @@ export interface SourceConnectorConfig {
   uriLabel?: string;
   uriPlaceholder?: string;
   submitLabel?: string;
+  uploadEnabled?: boolean;
   tokenLabel?: string;
   tokenPlaceholder?: string;
   contentLabel?: string;

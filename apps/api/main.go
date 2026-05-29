@@ -45,6 +45,7 @@ func main() {
 		{pattern: "/jira/ingest", handler: http.HandlerFunc(handler.JiraIngest), cors: true},
 		{pattern: "/jira/ingest/stream", handler: http.HandlerFunc(handler.JiraIngestStream), cors: true},
 		{pattern: "/filesystem/ingest", handler: http.HandlerFunc(handler.FilesystemIngest), cors: true},
+		{pattern: "/filesystem/upload", handler: http.HandlerFunc(handler.FilesystemUpload), cors: true},
 		{pattern: "/codex/status", handler: http.HandlerFunc(handler.CodexStatus), cors: true},
 		{pattern: "/codex/login", handler: http.HandlerFunc(handler.CodexLogin), cors: true},
 		{pattern: "/codex/plugin-reauth", handler: http.HandlerFunc(handler.CodexPluginReauth), cors: true},

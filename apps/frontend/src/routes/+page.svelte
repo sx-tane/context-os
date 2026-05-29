@@ -113,6 +113,7 @@
       uriLabel={config.uriLabel ?? "URI"}
       uriPlaceholder={config.uriPlaceholder ?? ""}
       submitLabel={config.submitLabel ?? "Run ingest"}
+      uploadEnabled={config.uploadEnabled ?? false}
       tokenLabel={config.tokenLabel ?? ""}
       tokenPlaceholder={config.tokenPlaceholder ?? ""}
       contentLabel={config.contentLabel ?? ""}

@@ -16,6 +16,3 @@ type Ingest struct {
 	Metadata      map[string]string   `json:"metadata"`
 	MetadataItems []map[string]string `json:"metadata_items,omitempty"`
 }
-
-// GithubIngest is the JSON body returned by POST /github/ingest.
-type GithubIngest = Ingest
