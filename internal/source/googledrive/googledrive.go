@@ -459,7 +459,10 @@ func (c connector) doRequest(ctx context.Context, method, endpoint, token, conte
 			return nil, nil, closeErr
 		}
 
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+		lowerBody := strings.ToLower(string(responseBody))
+		isRateLimit403 := resp.StatusCode == http.StatusForbidden &&
+			(strings.Contains(lowerBody, "ratelimitexceeded") || strings.Contains(lowerBody, "userratelimitexceeded"))
+		if resp.StatusCode == http.StatusTooManyRequests || isRateLimit403 || resp.StatusCode >= http.StatusInternalServerError {
 			lastErr = googleAPIError{status: resp.StatusCode, message: strings.TrimSpace(string(responseBody))}
 			if attempt == maxAttempts {
 				return nil, resp.Header.Clone(), lastErr
