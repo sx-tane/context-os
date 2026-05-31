@@ -507,7 +507,13 @@ func classifyGoogleError(err error) (contracts.ErrorKind, bool) {
 		switch {
 		case apiErr.status == http.StatusTooManyRequests || apiErr.status >= http.StatusInternalServerError:
 			return contracts.ErrorKindTemporary, true
-		case apiErr.status == http.StatusUnauthorized || apiErr.status == http.StatusForbidden || apiErr.status == http.StatusNotFound:
+		case apiErr.status == http.StatusForbidden:
+			lower := strings.ToLower(apiErr.message)
+			if strings.Contains(lower, "ratelimitexceeded") || strings.Contains(lower, "userratelimitexceeded") {
+				return contracts.ErrorKindTemporary, true
+			}
+			return contracts.ErrorKindPermanent, false
+		case apiErr.status == http.StatusUnauthorized || apiErr.status == http.StatusNotFound:
 			return contracts.ErrorKindPermanent, false
 		default:
 			return contracts.ErrorKindInvalidRequest, false
