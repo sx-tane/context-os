@@ -93,7 +93,7 @@ export interface paths {
     };
   };
   "/filesystem/upload": {
-    /** Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/<upload-id>/, and ingests through the filesystem connector. Metadata keys filesystem_upload_id, filesystem_upload_root, filesystem_upload_file_count, and filesystem_upload_original_name are added to each result event. */
+    /** Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/<upload-id>/, and ingests through the filesystem connector. */
     post: {
       parameters: {
         formData: {
@@ -187,6 +187,58 @@ export interface paths {
   };
   "/github/status": {
     /** Returns whether a GitHub token is configured and the authenticated user identity. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/googledrive/ingest": {
+    /** Lists Google Docs, Sheets, and Slides in a configured folder and emits one raw ingest event per file. */
+    post: {
+      parameters: {
+        body: {
+          /** Google Drive ingest request */
+          body: definitions["request.GoogleDriveIngest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.Ingest"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/googledrive/status": {
+    /** Returns whether OAuth credentials, service account credentials, or a direct access token are configured for Google Drive ingest. */
     get: {
       responses: {
         /** OK */
@@ -451,6 +503,21 @@ export interface definitions {
     /** @example ghp_xxxx */
     token?: string;
     /** @example https://github.com/sx-tane/context-os/issues/1 */
+    uri?: string;
+  };
+  "request.GoogleDriveIngest": {
+    /** @example ya29.a0AfH6SMD... */
+    access_token?: string;
+    /** @example /Users/name/.config/context-os/google-authorized-user.json */
+    credential_path?: string;
+    /** @example 2026-05-29T10:00:00Z */
+    cursor?: string;
+    /** @example 1234567890 */
+    folder_id?: string;
+    metadata?: { [key: string]: string };
+    /** @example /Users/name/.config/context-os/google-service-account.json */
+    service_account_path?: string;
+    /** @example https://drive.google.com/drive/folders/1234567890 */
     uri?: string;
   };
   "request.JiraIngest": {

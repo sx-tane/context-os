@@ -190,7 +190,7 @@
         },
         "/filesystem/upload": {
             "post": {
-                "description": "Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/\u003cupload-id\u003e/, and ingests through the filesystem connector. Metadata keys filesystem_upload_id, filesystem_upload_root, filesystem_upload_file_count, and filesystem_upload_original_name are added to each result event.",
+                "description": "Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/\u003cupload-id\u003e/, and ingests through the filesystem connector.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -394,6 +394,115 @@
                     "github"
                 ],
                 "summary": "GitHub connection status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/googledrive/ingest": {
+            "post": {
+                "description": "Lists Google Docs, Sheets, and Slides in a configured folder and emits one raw ingest event per file.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "googledrive"
+                ],
+                "summary": "Ingest Google Drive documents",
+                "parameters": [
+                    {
+                        "description": "Google Drive ingest request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.GoogleDriveIngest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Ingest"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/googledrive/status": {
+            "get": {
+                "description": "Returns whether OAuth credentials, service account credentials, or a direct access token are configured for Google Drive ingest.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "googledrive"
+                ],
+                "summary": "Google Drive connection status",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -943,6 +1052,41 @@
                 "uri": {
                     "type": "string",
                     "example": "https://github.com/sx-tane/context-os/issues/1"
+                }
+            }
+        },
+        "request.GoogleDriveIngest": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string",
+                    "example": "ya29.a0AfH6SMD..."
+                },
+                "credential_path": {
+                    "type": "string",
+                    "example": "/Users/name/.config/context-os/google-authorized-user.json"
+                },
+                "cursor": {
+                    "type": "string",
+                    "example": "2026-05-29T10:00:00Z"
+                },
+                "folder_id": {
+                    "type": "string",
+                    "example": "1234567890"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "service_account_path": {
+                    "type": "string",
+                    "example": "/Users/name/.config/context-os/google-service-account.json"
+                },
+                "uri": {
+                    "type": "string",
+                    "example": "https://drive.google.com/drive/folders/1234567890"
                 }
             }
         },

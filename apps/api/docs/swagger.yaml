@@ -87,6 +87,31 @@ definitions:
         example: https://github.com/sx-tane/context-os/issues/1
         type: string
     type: object
+  request.GoogleDriveIngest:
+    properties:
+      access_token:
+        example: ya29.a0AfH6SMD...
+        type: string
+      credential_path:
+        example: /Users/name/.config/context-os/google-authorized-user.json
+        type: string
+      cursor:
+        example: "2026-05-29T10:00:00Z"
+        type: string
+      folder_id:
+        example: "1234567890"
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      service_account_path:
+        example: /Users/name/.config/context-os/google-service-account.json
+        type: string
+      uri:
+        example: https://drive.google.com/drive/folders/1234567890
+        type: string
+    type: object
   request.JiraIngest:
     properties:
       api_base_url:
@@ -300,9 +325,7 @@ paths:
       - multipart/form-data
       description: Accepts multipart/form-data with one or more file parts and optional
         relative paths, stages them under storage/raw/uploads/<upload-id>/, and ingests
-        through the filesystem connector. Metadata keys filesystem_upload_id, filesystem_upload_root,
-        filesystem_upload_file_count, and filesystem_upload_original_name are added
-        to each result event.
+        through the filesystem connector.
       parameters:
       - description: One or more files to upload
         in: formData
@@ -450,6 +473,80 @@ paths:
       summary: GitHub connection status
       tags:
       - github
+  /googledrive/ingest:
+    post:
+      consumes:
+      - application/json
+      description: Lists Google Docs, Sheets, and Slides in a configured folder and
+        emits one raw ingest event per file.
+      parameters:
+      - description: Google Drive ingest request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.GoogleDriveIngest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Ingest'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Ingest Google Drive documents
+      tags:
+      - googledrive
+  /googledrive/status:
+    get:
+      description: Returns whether OAuth credentials, service account credentials,
+        or a direct access token are configured for Google Drive ingest.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Google Drive connection status
+      tags:
+      - googledrive
   /health:
     get:
       description: Returns ok when the API process is running.

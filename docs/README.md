@@ -20,6 +20,10 @@ flowchart TD
 	MCP --> SOURCES[Connector behavior and direction]
 ```
 
+## Recent Updates
+
+- [MCP Connectors](mcp-connectors.md) now documents the Google Drive connector (Phase 1): OAuth/service-account auth, folder scan, Docs/Sheets/Slides export, stable replay event IDs, and the `/googledrive/status` and `/googledrive/ingest` API endpoints.
+
 ## Maintenance Checklist
 
 - Update this index when new top-level documentation is added.
