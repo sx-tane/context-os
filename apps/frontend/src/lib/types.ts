@@ -11,7 +11,7 @@ export type ServiceStatus = "checking" | "ok" | "unreachable";
 
 export type IngestProvider = "token" | "codex";
 
-export type ConnectorKind = "github" | "slack" | "jira" | "filesystem";
+export type ConnectorKind = "github" | "slack" | "jira" | "filesystem" | "googledrive";
 
 export type CodexConnectorKind = Extract<
   ConnectorKind,

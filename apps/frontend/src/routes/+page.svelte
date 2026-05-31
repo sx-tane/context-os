@@ -5,6 +5,7 @@
   import { sourceConnectorConfigs } from "$lib/sourceConnectorConfigs";
   import StatusSection from "$lib/components/feedback/StatusSection.svelte";
   import GitHubConnector from "$lib/components/connectors/GitHubConnector.svelte";
+  import GoogleDriveConnector from "$lib/components/connectors/GoogleDriveConnector.svelte";
   import JiraConnector from "$lib/components/connectors/JiraConnector.svelte";
   import SlackConnector from "$lib/components/connectors/SlackConnector.svelte";
   import SourceConnector from "$lib/components/connectors/SourceConnector.svelte";
@@ -97,6 +98,13 @@
   />
 
   <JiraConnector
+    {codexLoggedIn}
+    {codexAccount}
+    {codexPlugins}
+    refreshCodexStatus={checkCodexStatus}
+  />
+
+  <GoogleDriveConnector
     {codexLoggedIn}
     {codexAccount}
     {codexPlugins}
