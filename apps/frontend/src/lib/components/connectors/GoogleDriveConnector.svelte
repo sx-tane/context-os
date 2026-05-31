@@ -1,23 +1,26 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import type { CodexPlugin, IngestResult } from "$lib/types";
+  import type { IngestResult, CodexPlugin } from "$lib/types";
   import { getJSON } from "$lib/api";
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
+  import ResultPanel from "../feedback/IngestResult.svelte";
   import Button from "../ui/Button.svelte";
   import FormField from "../ui/FormField.svelte";
+  import LogPanel from "../feedback/LogPanel.svelte";
   import ErrorPanel from "../feedback/ErrorPanel.svelte";
-  import ResultPanel from "../feedback/IngestResult.svelte";
 
+  // Shared Codex state from parent page
   export let codexLoggedIn: boolean;
   export let codexAccount: string;
   export let codexPlugins: CodexPlugin[];
   export let refreshCodexStatus: () => Promise<void>;
 
-  // These four Codex props are part of the uniform connector interface.
-  // Google Drive does not use Codex streaming but receives them for API consistency.
-  void codexLoggedIn, codexAccount, codexPlugins, refreshCodexStatus;
+  // Google Drive has no Codex streaming endpoint — these four props are part of
+  // the uniform connector interface and are intentionally unused here.
+  $: void (codexLoggedIn, codexAccount, codexPlugins, refreshCodexStatus);
 
+  // Local state
   let uri = "";
   let credentialPath = "";
   let serviceAccountPath = "";
@@ -26,6 +29,7 @@
   let loading = false;
   let errorMessage = "";
   let result: IngestResult | null = null;
+  let liveLog = "";
   let elapsed = 0;
   let ingestController: AbortController | null = null;
   let ingestRunID = 0;
@@ -75,7 +79,8 @@
       setLoading: (value) => (loading = value),
       setError: (message) => (errorMessage = message),
       setResult: (value) => (result = value),
-      setLiveLog: (_value) => {},
+      setLiveLog: (value) =>
+        (liveLog = typeof value === "function" ? value(liveLog) : value),
       setElapsed: (value) =>
         (elapsed = typeof value === "function" ? value(elapsed) : value),
     });
@@ -92,16 +97,51 @@
 >
   {#if connected}
     <div class="connector-badge">
-      &#10003; Google Drive credentials configured{oauthConfigured
-        ? " (OAuth)"
-        : ""}{serviceAccountConfigured ? " (service account)" : ""}{accessTokenConfigured
-        ? " (access token)"
-        : ""}{folderConfigured ? " · default folder set" : ""}
+      &#10003; Connected to <strong>Google Drive</strong>{oauthConfigured
+        ? " via OAuth"
+        : serviceAccountConfigured
+          ? " via service account"
+          : accessTokenConfigured
+            ? " via access token"
+            : ""}{folderConfigured ? " · default folder set" : ""}
     </div>
   {/if}
 
+  <details class="connector-help">
+    <summary>How to set up Google Drive credentials</summary>
+    <ol>
+      <li>
+        Go to <a
+          href="https://console.cloud.google.com/apis/credentials"
+          target="_blank"
+          rel="noopener">console.cloud.google.com/apis/credentials</a
+        > and create an OAuth 2.0 client ID (Desktop app).
+      </li>
+      <li>
+        Download the JSON and supply its path as the OAuth credential path
+        below, or set <code class="connector-card-code"
+          >GOOGLE_DRIVE_OAUTH_CREDENTIALS_PATH</code
+        > before starting the API.
+      </li>
+      <li>
+        Alternatively, create a service account, grant it <strong>Viewer</strong>
+        access to the target folder, download the JSON key, and use it as the
+        service account path.
+      </li>
+      <li>
+        Get the folder ID from the URL:
+        <code class="connector-card-code">drive.google.com/drive/folders/<strong>FOLDER_ID</strong></code>.
+        Paste the full URL or just the folder ID below.
+      </li>
+    </ol>
+    <p class="connector-note">
+      Set <code class="connector-card-code">GOOGLE_DRIVE_FOLDER_ID</code> to skip
+      the folder URI field entirely.
+    </p>
+  </details>
+
   <FormField
-    label="OAuth credentials path"
+    label="OAuth credential path"
     optional="(optional when GOOGLE_DRIVE_OAUTH_CREDENTIALS_PATH is set)"
     bind:value={credentialPath}
     placeholder="/Users/name/.config/context-os/google-authorized-user.json"
@@ -141,8 +181,10 @@
     disabled={loading || (!uri.trim() && !folderConfigured)}
     on:click={runIngest}
   >
-    {loading ? `Ingesting… (${elapsed}s)` : "Run ingest"}
+    {loading ? `Ingesting\u2026 (${elapsed}s)` : "Run ingest"}
   </Button>
+
+  <LogPanel log={liveLog} {loading} visible={false} />
 
   <ErrorPanel message={errorMessage} />
 
