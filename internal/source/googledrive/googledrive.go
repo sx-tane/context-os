@@ -258,11 +258,11 @@ func (c connector) listFiles(ctx context.Context, folderID, cursor, token string
 		"(mimeType = '" + googleDocsMimeType + "' or mimeType = '" + googleSheetsMimeType + "' or mimeType = '" + googleSlidesMimeType + "')",
 	}
 	if trimmedCursor := strings.TrimSpace(cursor); trimmedCursor != "" {
-		parsedCursor, err := time.Parse(time.RFC3339, trimmedCursor)
+		parsedCursor, err := time.Parse(time.RFC3339Nano, trimmedCursor)
 		if err != nil {
 			return nil, fmt.Errorf("parse cursor: %w", err)
 		}
-		query = append(query, fmt.Sprintf("modifiedTime > '%s'", parsedCursor.UTC().Format(time.RFC3339)))
+		query = append(query, fmt.Sprintf("modifiedTime > '%s'", parsedCursor.UTC().Format(time.RFC3339Nano)))
 	}
 
 	params := url.Values{}
