@@ -161,7 +161,7 @@ func (c connector) Ingest(ctx context.Context, req contracts.SourceRequest) ([]e
 		return nil, c.connectorError(req, defaultFolderObjectType, folderID, kind, retryable, err)
 	}
 	if len(files) == 0 {
-		return nil, c.connectorError(req, defaultFolderObjectType, folderID, contracts.ErrorKindPermanent, false, errors.New("google drive folder has no supported files"))
+		return nil, c.connectorError(req, defaultFolderObjectType, folderID, contracts.ErrorKindInvalidRequest, false, errors.New("google drive folder has no supported files"))
 	}
 
 	sort.Slice(files, func(i, j int) bool {
