@@ -57,6 +57,8 @@ func Status(w http.ResponseWriter, r *http.Request) {
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
 // @Failure      500   {object}  map[string]string
+// @Failure      502   {object}  map[string]string
+// @Failure      503   {object}  map[string]string
 // @Router       /googledrive/ingest [post]
 func Ingest(w http.ResponseWriter, r *http.Request) {
 	shared.RunSourceIngest(w, r, googledrivesource.NewConnector(), func(dec *json.Decoder) (shared.SourceIngestInput, error) {
