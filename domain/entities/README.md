@@ -9,20 +9,37 @@ Represent the result of resolving raw extracted entities into canonical identiti
 ## Key Type
 
 ```go
+type MergeCandidate struct {
+    Name       string   `json:"name"`
+    Layer      string   `json:"layer"`
+    Confidence float64  `json:"confidence"`
+    Evidence   []string `json:"evidence"`
+}
+
 type CanonicalEntity struct {
-    Entity     types.Entity `json:"entity"`
-    Confidence float64      `json:"confidence"`
-    NeedsHuman bool         `json:"needs_human"`
+    Entity         types.Entity     `json:"entity"`
+    Confidence     float64          `json:"confidence"`
+    NeedsHuman     bool             `json:"needs_human"`
+    MatchLayer     string           `json:"match_layer"`
+    Evidence       []string         `json:"evidence"`
+    ConflictReason string           `json:"conflict_reason"`
+    Candidates     []MergeCandidate `json:"candidates"`
 }
 ```
 
+Match layers are labeled with the `MatchLayerExact`, `MatchLayerConvention`, and `MatchLayerSemantic` constants.
+
 ## Field Meaning
 
-| Field        | Meaning                                                                               |
-| ------------ | ------------------------------------------------------------------------------------- |
-| `Entity`     | Canonical entity payload, including aliases and metadata.                             |
-| `Confidence` | Resolution confidence from 0 to 1. Current exact canonical-key grouping uses `1`.     |
-| `NeedsHuman` | Manual-review flag for ambiguous merges. Current exact matching sets this to `false`. |
+| Field            | Meaning                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `Entity`         | Canonical entity payload, including aliases and metadata.                             |
+| `Confidence`     | Resolution confidence from 0 to 1. Exact canonical-key grouping uses `1`.             |
+| `NeedsHuman`     | Manual-review flag set when a merge is ambiguous or high-impact.                      |
+| `MatchLayer`     | Strongest layer that contributed: `exact`, `convention`, or `semantic`.              |
+| `Evidence`       | References explaining how aliases were merged.                                        |
+| `ConflictReason` | Populated when `NeedsHuman` is set, explaining the conflict.                          |
+| `Candidates`     | Unmerged alias candidates (e.g. semantic suggestions) awaiting confirmation.          |
 
 ## Produced By
 
@@ -39,6 +56,6 @@ flowchart LR
 
 ## Implementation Notes
 
-- Keep confidence explainable. Future semantic or multilingual matching should include evidence in metadata or a richer contract before lowering certainty.
-- `NeedsHuman` is the hook for conflict review once identity resolution moves beyond deterministic key matching.
+- Keep confidence explainable. Semantic and multilingual matching surface alias suggestions as `Candidates` with evidence rather than silently collapsing distinct entities.
+- `NeedsHuman` plus `ConflictReason` is the hook for conflict review when convention or semantic matching is ambiguous or high-impact.
 - Canonical entities are stored in [internal/graph](../../internal/graph/README.md).

@@ -17,13 +17,8 @@
   export let codexAccount: string;
   export let codexPlugins: CodexPlugin[];
   export let refreshCodexStatus: () => Promise<void>;
-
   // Local state
   let uri = "";
-  let credentialPath = "";
-  let serviceAccountPath = "";
-  let accessToken = "";
-  let cursor = "";
   let provider: IngestProvider = "codex";
   let loading = false;
   let errorMessage = "";
@@ -66,16 +61,7 @@
     await runConnectorIngest({
       connector: "googledrive",
       uri,
-      cursor: cursor || undefined,
       provider,
-      metadata:
-        provider === "token"
-          ? {
-              googledrive_oauth_credentials_path: credentialPath,
-              googledrive_service_account_path: serviceAccountPath,
-              googledrive_access_token: accessToken,
-            }
-          : undefined,
       signal: ingestController.signal,
       isCurrent: () => runID === ingestRunID,
       setLoading: (value) => (loading = value),
@@ -118,28 +104,6 @@
               : ""}{folderConfigured ? " · default folder set" : ""}
       </div>
     {/if}
-
-    <FormField
-      label="OAuth credential path"
-      optional="(optional when GOOGLE_DRIVE_OAUTH_CREDENTIALS_PATH is set)"
-      bind:value={credentialPath}
-      placeholder="/Users/name/.config/context-os/google-authorized-user.json"
-    />
-
-    <FormField
-      label="Service account path"
-      optional="(optional when GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH is set)"
-      bind:value={serviceAccountPath}
-      placeholder="/Users/name/.config/context-os/google-service-account.json"
-    />
-
-    <FormField
-      label="Access token"
-      optional="(optional override)"
-      type="password"
-      bind:value={accessToken}
-      placeholder="ya29.a0AfH6SMD..."
-    />
   {:else}
     <CodexBadge
       {codexLoggedIn}
@@ -155,15 +119,6 @@
     placeholder="https://drive.google.com/drive/folders/1234567890"
     offset
   />
-
-  {#if provider === "token"}
-    <FormField
-      label="Cursor"
-      optional="(optional RFC3339 modified-time watermark)"
-      bind:value={cursor}
-      placeholder="2026-05-29T10:00:00Z"
-    />
-  {/if}
 
   <Button
     {loading}
