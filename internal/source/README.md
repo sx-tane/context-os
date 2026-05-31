@@ -117,7 +117,7 @@ The Google Drive connector lists supported file types from a folder URI (`https:
 - `object_type=file`
 - `object_id=<drive-file-id>`
 - `source_id=googledrive:file:<drive-file-id>`
-- `event_id=sha256(<drive-file-id> + modifiedTime)`
+- `event_id=event:sha256(<drive-file-id> + "\x00" + <modifiedTime>)`
 - `url=https://drive.google.com/file/d/<drive-file-id>/view`
 - `googledrive_folder_id`
 - `googledrive_file_id`
