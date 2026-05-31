@@ -164,9 +164,11 @@ func PluginReauth(w http.ResponseWriter, r *http.Request) {
 		sw.Log(fmt.Sprintf("(remove skipped: %s)", err.Error()))
 	}
 
-	// Step 2: re-add — this triggers the OAuth consent flow.
-	sw.Log(fmt.Sprintf("Re-adding %s - follow the auth prompt...", fullName))
-	if err := runCodexSSE(r.Context(), sw, binary, "plugin", "add", fullName); err != nil {
+	// Step 2: re-add with BROWSER=echo so the OAuth URL is printed into the
+	// SSE log instead of silently opening a browser on the server.
+	// The user clicks the URL that appears in the connector log to complete auth.
+	sw.Log(fmt.Sprintf("Re-adding %s — an OAuth URL will appear below, open it to complete auth...", fullName))
+	if err := runCodexSSEEnv(r.Context(), sw, binary, []string{"BROWSER=echo"}, "plugin", "add", fullName); err != nil {
 		sw.Event("error", err.Error())
 		return
 	}
@@ -270,8 +272,15 @@ func runCodexInfo(args ...string) (string, error) {
 
 // runCodexSSE runs a codex sub-command, streaming output to sw, with a 3-minute timeout.
 func runCodexSSE(ctx context.Context, sw *shared.SSEWriter, binary string, args ...string) error {
+	return runCodexSSEEnv(ctx, sw, binary, nil, args...)
+}
+
+// runCodexSSEEnv is like runCodexSSE but merges extraEnv into the subprocess
+// environment before starting. Keys in extraEnv override inherited values.
+func runCodexSSEEnv(ctx context.Context, sw *shared.SSEWriter, binary string, extraEnv []string, args ...string) error {
 	cmd := exec.Command(binary, args...) //nolint:gosec
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Env = append(os.Environ(), extraEnv...)
 	cmd.Stdout = sw
 	cmd.Stderr = sw
 

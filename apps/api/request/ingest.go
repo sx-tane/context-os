@@ -36,6 +36,7 @@ type GoogleDriveIngest struct {
 	ServiceAccountPath string            `json:"service_account_path" example:"/Users/name/.config/context-os/google-service-account.json"`
 	AccessToken        string            `json:"access_token"         example:"ya29.a0AfH6SMD..."`
 	Cursor             string            `json:"cursor"               example:"2026-05-29T10:00:00Z"`
+	Provider           string            `json:"provider"             example:"token"`
 	Metadata           map[string]string `json:"metadata"`
 }
 

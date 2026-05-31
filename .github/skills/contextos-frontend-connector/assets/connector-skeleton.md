@@ -12,7 +12,6 @@ Delete any block marked `<!-- only if ... -->` that does not apply to your conne
   import type { IngestProvider, IngestResult, CodexPlugin } from "$lib/types";
   import { getJSON } from "$lib/api";
   import { runConnectorIngest } from "$lib/ingestRunner";
-  import { runCodexReauth } from "$lib/reauthRunner";    <!-- only if connector has a Codex plugin -->
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";          <!-- only if connector has a Codex plugin -->
   import Button from "../ui/Button.svelte";
@@ -38,24 +37,16 @@ Delete any block marked `<!-- only if ... -->` that does not apply to your conne
   let liveLog = "";
   let elapsed = 0;
   let ingestController: AbortController | null = null;
-  let reauthController: AbortController | null = null;
   let ingestRunID = 0;
-  let reauthRunID = 0;
 
   // Status state
   let connected = false;
   // Add more connector-specific status fields here, e.g.:
   // let teamName = "";
 
-  // Re-auth state — only if connector has a Codex plugin
-  let reauthPlugin = "";
-  let reauthLog = "";
-  let reauthRunning = false;
-
   onMount(checkStatus);
   onDestroy(() => {
     ingestController?.abort();
-    reauthController?.abort();
   });
 
   async function checkStatus() {
@@ -69,21 +60,9 @@ Delete any block marked `<!-- only if ... -->` that does not apply to your conne
     // teamName = body?.team_name ?? "";
   }
 
-  // runReauth — only if connector has a Codex plugin
-  async function runReauth(plugin: string) {
-    reauthController?.abort();
-    reauthController = new AbortController();
-    const runID = ++reauthRunID;
-    await runCodexReauth({
-      plugin,
-      refreshCodexStatus,
-      signal: reauthController.signal,
-      isCurrent: () => runID === reauthRunID,
-      setPlugin:  (value) => (reauthPlugin  = value),
-      setRunning: (value) => (reauthRunning = value),
-      setLog:     (value) => (reauthLog = typeof value === "function" ? value(reauthLog)  : value),
-    });
-  }
+  // runReauth is not currently wired in the UI.
+  // To reconnect a plugin to a different account, run in terminal:
+  // codex plugin remove <plugin>@openai-curated && codex plugin add <plugin>@openai-curated
 
   async function runIngest() {
     ingestController?.abort();
@@ -151,10 +130,6 @@ Delete any block marked `<!-- only if ... -->` that does not apply to your conne
       {codexAccount}
       {codexPlugins}
       pluginName="<codex-plugin-name>"
-      onReauth={runReauth}
-      {reauthPlugin}
-      {reauthLog}
-      {reauthRunning}
     />
   {/if}
 

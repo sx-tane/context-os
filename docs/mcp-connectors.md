@@ -6,13 +6,13 @@ All external source integrations in ContextOS are MCP-first connectors. Each con
 
 These connectors ingest from local paths or authenticated APIs with no hosted infrastructure dependency.
 
-| Connector  | Source                                                                                                                          | Capability   | Issue |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----- |
-| GitHub     | Repository, issues, PRs                                                                                                         | `repository` | #7    |
-| Slack      | Messages, threads, channels                                                                                                     | `messages`   | #8    |
-| Jira/Rovo  | Jira issues, comments, status history, fields, and links through the Atlassian Rovo Codex plugin by default                     | `issues`     | #9    |
-| Filesystem | Local files and folders, including text/code/config, OpenAPI JSON/YAML specs, spreadsheets, Word, PDF, and PowerPoint documents | `files`      | #12   |
-| Google Drive | Google Docs, Sheets, Slides via OAuth 2.0 or service-account credentials | `files` | #30 |
+| Connector    | Source                                                                                                                          | Capability   | Issue |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----- |
+| GitHub       | Repository, issues, PRs                                                                                                         | `repository` | #7    |
+| Slack        | Messages, threads, channels                                                                                                     | `messages`   | #8    |
+| Jira/Rovo    | Jira issues, comments, status history, fields, and links through the Atlassian Rovo Codex plugin by default                     | `issues`     | #9    |
+| Filesystem   | Local files and folders, including text/code/config, OpenAPI JSON/YAML specs, spreadsheets, Word, PDF, and PowerPoint documents | `files`      | #12   |
+| Google Drive | Google Docs, Sheets, Slides via OAuth 2.0 or service-account credentials                                                        | `files`      | #30   |
 
 ## Phase 2 — cloud and knowledge-base connector candidates
 
@@ -32,26 +32,26 @@ Each connector emits raw ingestion events that are then normalized, classified, 
 
 Connectors are exposed via the Go API (`apps/api`). Each connector has a dedicated endpoint under `/<connector>/ingest`, with filesystem also exposing `/filesystem/upload` for browser-selected files and folders.
 
-| Method | Path                    | Connector  | Description                                                    |
-| ------ | ----------------------- | ---------- | -------------------------------------------------------------- |
-| GET    | `/github/status`        | GitHub     | Report configured token/account status                         |
-| GET    | `/googledrive/status`   | Google Drive | Report local OAuth/service-account/folder configuration     |
-| POST   | `/googledrive/ingest`   | Google Drive | Ingest Docs, Sheets, and Slides from a Drive folder         |
-| POST   | `/github/ingest`        | GitHub     | Ingest a repo, issue, PR, or commit by URI                     |
-| POST   | `/github/ingest/stream` | GitHub     | Stream Codex-backed GitHub ingest over SSE                     |
-| GET    | `/jira/status`          | Jira       | Report Jira env configuration status                           |
-| POST   | `/jira/ingest`          | Jira       | Ingest an issue or project by URI                              |
-| POST   | `/jira/ingest/stream`   | Jira       | Stream Codex/Rovo-backed Jira ingest over SSE                  |
-| POST   | `/filesystem/ingest`    | Filesystem | Ingest a local file or recursive folder path                   |
-| POST   | `/filesystem/upload`    | Filesystem | Upload browser-selected files or folders, then ingest          |
-| GET    | `/slack/status`         | Slack      | Report env/OAuth token status                                  |
-| GET    | `/slack/connect`        | Slack      | Start Slack OAuth flow                                         |
-| GET    | `/slack/callback`       | Slack      | Slack OAuth callback; stores token locally                     |
-| POST   | `/slack/ingest`         | Slack      | Ingest a channel or message by URI                             |
-| POST   | `/slack/ingest/stream`  | Slack      | Stream Codex-backed Slack ingest over SSE                      |
-| GET    | `/codex/status`         | Codex      | Report CLI login and plugin status                             |
-| POST   | `/codex/login`          | Codex      | Stream device-auth login output over SSE                       |
-| POST   | `/codex/plugin-reauth`  | Codex      | Re-auth `github`, `atlassian-rovo`, or `slack` plugin over SSE |
+| Method | Path                    | Connector    | Description                                                                                |
+| ------ | ----------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| GET    | `/github/status`        | GitHub       | Report configured token/account status                                                     |
+| GET    | `/googledrive/status`   | Google Drive | Report local OAuth/service-account/folder configuration                                    |
+| POST   | `/googledrive/ingest`   | Google Drive | Ingest Docs, Sheets, and Slides from a Drive folder                                        |
+| POST   | `/github/ingest`        | GitHub       | Ingest a repo, issue, PR, or commit by URI                                                 |
+| POST   | `/github/ingest/stream` | GitHub       | Stream Codex-backed GitHub ingest over SSE                                                 |
+| GET    | `/jira/status`          | Jira         | Report Jira env configuration status                                                       |
+| POST   | `/jira/ingest`          | Jira         | Ingest an issue or project by URI                                                          |
+| POST   | `/jira/ingest/stream`   | Jira         | Stream Codex/Rovo-backed Jira ingest over SSE                                              |
+| POST   | `/filesystem/ingest`    | Filesystem   | Ingest a local file or recursive folder path                                               |
+| POST   | `/filesystem/upload`    | Filesystem   | Upload browser-selected files or folders, then ingest                                      |
+| GET    | `/slack/status`         | Slack        | Report env/OAuth token status                                                              |
+| GET    | `/slack/connect`        | Slack        | Start Slack OAuth flow                                                                     |
+| GET    | `/slack/callback`       | Slack        | Slack OAuth callback; stores token locally                                                 |
+| POST   | `/slack/ingest`         | Slack        | Ingest a channel or message by URI                                                         |
+| POST   | `/slack/ingest/stream`  | Slack        | Stream Codex-backed Slack ingest over SSE                                                  |
+| GET    | `/codex/status`         | Codex        | Report CLI login and plugin status                                                         |
+| POST   | `/codex/login`          | Codex        | Stream device-auth login output over SSE                                                   |
+| POST   | `/codex/plugin-reauth`  | Codex        | Re-adds plugin with `BROWSER=echo`; OAuth URL streamed in SSE log (UI not wired — use CLI) |
 
 Request body:
 

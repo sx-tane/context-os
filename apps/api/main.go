@@ -47,6 +47,7 @@ func main() {
 		{pattern: "/github/ingest", handler: http.HandlerFunc(github.Ingest), cors: true},
 		{pattern: "/googledrive/status", handler: http.HandlerFunc(googledrive.Status), cors: true},
 		{pattern: "/googledrive/ingest", handler: http.HandlerFunc(googledrive.Ingest), cors: true},
+		{pattern: "/googledrive/ingest/stream", handler: http.HandlerFunc(googledrive.IngestStream), cors: true},
 		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(github.IngestStream), cors: true},
 		{pattern: "/github/status", handler: http.HandlerFunc(github.Status), cors: true},
 		{pattern: "/jira/status", handler: http.HandlerFunc(jira.Status), cors: true},

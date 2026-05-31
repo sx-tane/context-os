@@ -107,9 +107,12 @@ function isAbortError(err: unknown): boolean {
 
 function supportsCodex(
   connector: ConnectorKind,
-): connector is "github" | "jira" | "slack" {
+): connector is "github" | "jira" | "slack" | "googledrive" {
   return (
-    connector === "github" || connector === "jira" || connector === "slack"
+    connector === "github" ||
+    connector === "jira" ||
+    connector === "slack" ||
+    connector === "googledrive"
   );
 }
 

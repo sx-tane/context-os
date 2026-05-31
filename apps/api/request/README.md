@@ -14,13 +14,13 @@ This folder defines HTTP request payload contracts consumed by API handlers.
 
 ## Request Types
 
-| Type | Endpoint | Key fields |
-| ---- | -------- | ---------- |
-| `GithubIngest` | `POST /github/ingest` | `uri`, `token`, `provider` |
-| `SlackIngest` | `POST /slack/ingest` | `uri`, `token`, `provider` |
-| `JiraIngest` | `POST /jira/ingest` | `uri`, `token`, `email`, `api_base_url`, `provider`, `cursor` |
+| Type                | Endpoint                   | Key fields                                                                              |
+| ------------------- | -------------------------- | --------------------------------------------------------------------------------------- |
+| `GithubIngest`      | `POST /github/ingest`      | `uri`, `token`, `provider`                                                              |
+| `SlackIngest`       | `POST /slack/ingest`       | `uri`, `token`, `provider`                                                              |
+| `JiraIngest`        | `POST /jira/ingest`        | `uri`, `token`, `email`, `api_base_url`, `provider`, `cursor`                           |
 | `GoogleDriveIngest` | `POST /googledrive/ingest` | `uri`, `folder_id`, `credential_path`, `service_account_path`, `access_token`, `cursor` |
-| `FilesystemIngest` | `POST /filesystem/ingest` | `uri`, `content`, `cursor`, `include`, `exclude` |
+| `FilesystemIngest`  | `POST /filesystem/ingest`  | `uri`, `content`, `cursor`, `include`, `exclude`                                        |
 
 ## Maintenance Checklist
 

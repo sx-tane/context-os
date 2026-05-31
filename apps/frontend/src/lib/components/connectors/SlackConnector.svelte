@@ -3,7 +3,6 @@
   import type { IngestProvider, IngestResult, CodexPlugin } from "$lib/types";
   import { getJSON } from "$lib/api";
   import { runConnectorIngest } from "$lib/ingestRunner";
-  import { runCodexReauth } from "$lib/reauthRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "../feedback/IngestResult.svelte";
@@ -29,24 +28,16 @@
   let liveLog = "";
   let elapsed = 0;
   let ingestController: AbortController | null = null;
-  let reauthController: AbortController | null = null;
   let ingestRunID = 0;
-  let reauthRunID = 0;
 
   let connected = false;
   let source = "none";
   let teamName = "";
   let userName = "";
 
-  // Re-auth state (local — only relevant to this connector's plugin)
-  let reauthPlugin = "";
-  let reauthLog = "";
-  let reauthRunning = false;
-
   onMount(checkStatus);
   onDestroy(() => {
     ingestController?.abort();
-    reauthController?.abort();
   });
 
   async function checkStatus() {
@@ -60,22 +51,6 @@
     source = body?.source ?? "none";
     teamName = body?.team_name ?? "";
     userName = body?.user_name ?? "";
-  }
-
-  async function runReauth(plugin: string) {
-    reauthController?.abort();
-    reauthController = new AbortController();
-    const runID = ++reauthRunID;
-    await runCodexReauth({
-      plugin,
-      refreshCodexStatus,
-      signal: reauthController.signal,
-      isCurrent: () => runID === reauthRunID,
-      setPlugin: (value) => (reauthPlugin = value),
-      setRunning: (value) => (reauthRunning = value),
-      setLog: (value) =>
-        (reauthLog = typeof value === "function" ? value(reauthLog) : value),
-    });
   }
 
   async function runIngest() {
@@ -109,7 +84,7 @@
     bind:value={provider}
     options={[
       { value: "token", label: "Token / env" },
-      { value: "codex", label: "Codex CLI plugin" },
+      { value: "codex", label: "Codex Slack plugin" },
     ]}
     ariaLabel="Slack ingestion provider"
   />
@@ -162,10 +137,6 @@
       {codexAccount}
       {codexPlugins}
       pluginName="slack@openai-curated"
-      {reauthRunning}
-      {reauthPlugin}
-      {reauthLog}
-      on:reauth={(e) => runReauth(e.detail)}
     />
   {/if}
 

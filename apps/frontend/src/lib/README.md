@@ -99,7 +99,11 @@ A `setInterval` timer increments `elapsed` every second during Codex streaming a
 
 ## reauthRunner.ts
 
-Thin wrapper around `streamCodexReauth` for the Codex plugin re-auth flow.
+Wrapper around `streamCodexReauth` for the Codex plugin re-auth flow.
+
+> **Not currently wired into the UI.** To reconnect a plugin to a different account, run
+> `codex plugin remove <plugin>@openai-curated && codex plugin add <plugin>@openai-curated`
+> directly in your terminal. Tracked in issue: **Add frontend Codex plugin re-auth flow**.
 
 **Exported function**
 

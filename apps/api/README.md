@@ -62,28 +62,28 @@ apps/api/
 
 ## Endpoints
 
-| Method | Path                    | Description                                            |
-| ------ | ----------------------- | ------------------------------------------------------ |
-| GET    | `/health`               | Liveness check — returns `{"status":"ok"}`             |
-| GET    | `/github/status`        | Checks `GITHUB_TOKEN` and returns account identity     |
-| GET    | `/googledrive/status`   | Checks Google Drive OAuth/service-account/folder setup |
-| POST   | `/googledrive/ingest`   | Ingest Docs, Sheets, and Slides from a Drive folder    |
-| POST   | `/github/ingest`        | Ingest a GitHub repo, issue, PR, or commit via MCP     |
-| POST   | `/github/ingest/stream` | Stream Codex-backed GitHub ingest progress over SSE    |
-| GET    | `/jira/status`          | Checks Jira environment base URL/token/email readiness |
-| POST   | `/jira/ingest`          | Ingest a Jira issue or project via MCP                 |
-| POST   | `/jira/ingest/stream`   | Stream Codex/Rovo-backed Jira ingest progress over SSE |
-| POST   | `/filesystem/ingest`    | Ingest a local file or folder path via MCP             |
-| POST   | `/filesystem/upload`    | Upload browser-selected files or folders, then ingest  |
-| GET    | `/slack/status`         | Token availability, source (env/oauth/none), readiness |
-| GET    | `/slack/connect`        | Initiates Slack OAuth flow (browser redirect)          |
-| GET    | `/slack/callback`       | OAuth callback — exchanges code, stores token locally  |
-| POST   | `/slack/ingest`         | Ingest a Slack channel or message via MCP              |
-| POST   | `/slack/ingest/stream`  | Stream Codex-backed Slack ingest progress over SSE     |
-| GET    | `/codex/status`         | Codex CLI install/login/plugin status                  |
-| POST   | `/codex/login`          | Run `codex login --device-auth` and stream logs as SSE |
-| POST   | `/codex/plugin-reauth`  | Re-add `github`, `atlassian-rovo`, or `slack` plugin   |
-| GET    | `/swagger/`             | Interactive Swagger UI (served from generated docs)    |
+| Method | Path                    | Description                                                                              |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------------- |
+| GET    | `/health`               | Liveness check — returns `{"status":"ok"}`                                               |
+| GET    | `/github/status`        | Checks `GITHUB_TOKEN` and returns account identity                                       |
+| GET    | `/googledrive/status`   | Checks Google Drive OAuth/service-account/folder setup                                   |
+| POST   | `/googledrive/ingest`   | Ingest Docs, Sheets, and Slides from a Drive folder                                      |
+| POST   | `/github/ingest`        | Ingest a GitHub repo, issue, PR, or commit via MCP                                       |
+| POST   | `/github/ingest/stream` | Stream Codex-backed GitHub ingest progress over SSE                                      |
+| GET    | `/jira/status`          | Checks Jira environment base URL/token/email readiness                                   |
+| POST   | `/jira/ingest`          | Ingest a Jira issue or project via MCP                                                   |
+| POST   | `/jira/ingest/stream`   | Stream Codex/Rovo-backed Jira ingest progress over SSE                                   |
+| POST   | `/filesystem/ingest`    | Ingest a local file or folder path via MCP                                               |
+| POST   | `/filesystem/upload`    | Upload browser-selected files or folders, then ingest                                    |
+| GET    | `/slack/status`         | Token availability, source (env/oauth/none), readiness                                   |
+| GET    | `/slack/connect`        | Initiates Slack OAuth flow (browser redirect)                                            |
+| GET    | `/slack/callback`       | OAuth callback — exchanges code, stores token locally                                    |
+| POST   | `/slack/ingest`         | Ingest a Slack channel or message via MCP                                                |
+| POST   | `/slack/ingest/stream`  | Stream Codex-backed Slack ingest progress over SSE                                       |
+| GET    | `/codex/status`         | Codex CLI install/login/plugin status                                                    |
+| POST   | `/codex/login`          | Run `codex login --device-auth` and stream logs as SSE                                   |
+| POST   | `/codex/plugin-reauth`  | Re-add plugin with `BROWSER=echo`; OAuth URL printed in SSE log (UI not wired — use CLI) |
+| GET    | `/swagger/`             | Interactive Swagger UI (served from generated docs)                                      |
 
 GitHub, Jira, and Slack ingest requests accept `provider`. Use `"token"` or omit it for direct API-token ingestion. Use `"codex"` for Codex CLI plugin ingestion; streaming clients should call the matching `/ingest/stream` endpoint.
 

@@ -128,7 +128,7 @@ func StreamWithHeartbeat(ctx context.Context, sw *SSEWriter, fn func() ([]events
 
 // CodexStreamRequest constrains the request types accepted by StreamCodexIngest.
 type CodexStreamRequest interface {
-	request.GithubIngest | request.JiraIngest | request.SlackIngest
+	request.GithubIngest | request.JiraIngest | request.SlackIngest | request.GoogleDriveIngest
 }
 
 // StreamCodexIngest handles POST for Codex CLI SSE streaming.  It decodes the

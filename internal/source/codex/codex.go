@@ -72,6 +72,8 @@ const (
 	PluginSlack = "slack"
 	// PluginAtlassianRovo routes Jira requests through the Atlassian Rovo Codex plugin.
 	PluginAtlassianRovo = "atlassian-rovo"
+	// PluginGoogleDrive routes Google Drive requests through the Google Drive Codex plugin.
+	PluginGoogleDrive = "googledrive"
 
 	defaultCommand = "codex"
 )
@@ -279,6 +281,8 @@ func promptFor(plugin, uri string) string {
 		return "Use the GitHub Codex plugin to read the GitHub artifact identified by " + uri + ". Return the relevant repository, issue, pull request, or commit content with source identifiers, timestamps, authors, and links when available. Do not modify GitHub."
 	case PluginAtlassianRovo:
 		return "Use the Atlassian Rovo Codex plugin to read the Jira context identified by " + uri + ". Return the relevant issue or project content with issue keys, summaries, statuses, descriptions, comments, links, fields, changelog entries, timestamps, authors, and source URLs when available. Do not modify Jira or Atlassian data."
+	case PluginGoogleDrive:
+		return "Use the Google Drive Codex plugin to read files from the Google Drive folder identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, and links when available. Do not modify any files."
 	default:
 		return "Read source context for " + uri + " using the installed Codex plugin."
 	}
@@ -286,7 +290,7 @@ func promptFor(plugin, uri string) string {
 
 func isSupportedPlugin(plugin string) bool {
 	switch plugin {
-	case PluginGitHub, PluginSlack, PluginAtlassianRovo:
+	case PluginGitHub, PluginSlack, PluginAtlassianRovo, PluginGoogleDrive:
 		return true
 	default:
 		return false

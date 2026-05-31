@@ -6,13 +6,12 @@ Use before merging a new `<Name>Connector.svelte` or a `+page.svelte` update.
 
 ## Script Section
 
-- [ ] Imports are in the correct order: svelte lifecycle → `$lib/types` → `$lib/api` → `$lib/ingestRunner` → `$lib/reauthRunner` → child components.
+- [ ] Imports are in the correct order: svelte lifecycle → `$lib/types` → `$lib/api` → `$lib/ingestRunner` → child components.
 - [ ] Exactly four shared Codex `export let` props: `codexLoggedIn`, `codexAccount`, `codexPlugins`, `refreshCodexStatus`.
 - [ ] All local state variables are declared in the `// Local state` block in the canonical order.
 - [ ] Connector-specific status vars are in a `// Status state` block after local state.
-- [ ] Reauth state vars (`reauthPlugin`, `reauthLog`, `reauthRunning`) are present only when the connector has a Codex plugin.
 - [ ] `onMount(checkStatus)` is present.
-- [ ] `onDestroy` aborts both `ingestController` and `reauthController`.
+- [ ] `onDestroy` aborts `ingestController`.
 
 ## `checkStatus`
 
@@ -29,7 +28,9 @@ Use before merging a new `<Name>Connector.svelte` or a `+page.svelte` update.
 - [ ] `setElapsed` uses the updater-function pattern: `typeof value === "function" ? value(elapsed) : value`.
 - [ ] `connector` prop matches the API route name exactly (lowercase, same as Go package).
 
-## `runReauth` (only when connector has a Codex plugin)
+## `runReauth` (not currently wired in the UI)
+
+Plugin re-auth is done from the CLI: `codex plugin remove <p>@openai-curated && codex plugin add <p>@openai-curated`. When the frontend reauth flow is re-introduced, add these checks back:
 
 - [ ] Aborts previous `reauthController` before creating a new one.
 - [ ] Increments `reauthRunID` and captures `const runID = ++reauthRunID`.
