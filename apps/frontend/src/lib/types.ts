@@ -147,6 +147,70 @@ export interface ProjectState {
   knowledgeInstalledAt?: string;
 }
 
+// ---- Workspace API types ----
+
+export interface WorkspaceRecord {
+  id: string;
+  name: string;
+  path: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WorkspaceSyncState {
+  connector: string;
+  source_uri: string;
+  cursor?: string;
+  last_synced_at?: string;
+  event_count?: number;
+  status?: string;
+}
+
+export interface WorkspaceStatus {
+  workspace?: WorkspaceRecord;
+  event_count?: number;
+  entity_count?: number;
+  mismatch_count?: number;
+  syncs?: WorkspaceSyncState[];
+}
+
+// ---- Graph types ----
+
+export interface GraphEntityAlias {
+  name: string;
+  source_id: string;
+  source: string;
+  layer: string;
+  confidence: number;
+}
+
+export interface GraphEntityCandidate {
+  alias: string;
+  layer: string;
+  confidence: number;
+  accepted: boolean;
+}
+
+export interface GraphEntity {
+  id: string;
+  name: string;
+  type: string;
+  source: string;
+  confidence: number;
+  needs_human?: boolean;
+  conflict_reason?: string;
+  evidence?: string[];
+  aliases?: GraphEntityAlias[];
+  candidates?: GraphEntityCandidate[];
+}
+
+export interface GraphData {
+  workspace_id: string;
+  entity_type?: string;
+  count: number;
+  entities: GraphEntity[];
+}
+
 // ---- Chat types ----
 
 export type ChatRole = "user" | "assistant" | "system";

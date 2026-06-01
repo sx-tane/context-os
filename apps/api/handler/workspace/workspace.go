@@ -18,6 +18,8 @@ const workspaceRequestTimeout = 10 * time.Second
 type Handler struct {
 	workspaces  repository.WorkspaceRepository
 	events      repository.EventRepository
+	entities    repository.EntityRepository
+	mismatches  repository.MismatchRepository
 	connSync    repository.SyncRepository
 }
 
@@ -25,11 +27,15 @@ type Handler struct {
 func NewHandler(
 	workspaces repository.WorkspaceRepository,
 	events repository.EventRepository,
+	entities repository.EntityRepository,
+	mismatches repository.MismatchRepository,
 	connSync repository.SyncRepository,
 ) *Handler {
 	return &Handler{
 		workspaces: workspaces,
 		events:     events,
+		entities:   entities,
+		mismatches: mismatches,
 		connSync:   connSync,
 	}
 }
@@ -164,10 +170,27 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Entity and mismatch counts are best-effort — missing repositories return 0.
+	var entityCount, mismatchCount int
+	if h.entities != nil {
+		entityList, eErr := h.entities.ListEntities(ctx, ws.ID, "")
+		if eErr == nil {
+			entityCount = len(entityList)
+		}
+	}
+	if h.mismatches != nil {
+		mismatchList, mErr := h.mismatches.ListByWorkspace(ctx, ws.ID, "", 0)
+		if mErr == nil {
+			mismatchCount = len(mismatchList)
+		}
+	}
+
 	response.WriteJSON(w, http.StatusOK, map[string]any{
-		"workspace":   ws,
-		"event_count": eventCount,
-		"syncs":       syncs,
+		"workspace":      ws,
+		"event_count":    eventCount,
+		"entity_count":   entityCount,
+		"mismatch_count": mismatchCount,
+		"syncs":          syncs,
 	})
 }
 

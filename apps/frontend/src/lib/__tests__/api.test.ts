@@ -4,6 +4,9 @@ import {
   postIngest,
   postFindings,
   postFilesystemUpload,
+  getGraphData,
+  upsertWorkspace,
+  getWorkspaceStatus,
 } from "../api";
 
 // makeResponse builds a minimal fetch Response mock for readJSON (calls res.text()).
@@ -172,5 +175,88 @@ describe("postFilesystemUpload", () => {
       "/api/filesystem/upload",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+// ---- getGraphData ----
+
+describe("getGraphData", () => {
+  it("returns GraphData when response is 2xx", async () => {
+    const body = { workspace_id: "ws1", count: 2, entities: [{ id: "e1", name: "Auth", type: "service", confidence: 0.9 }] };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await getGraphData("/workspace");
+    expect(result).toEqual(body);
+  });
+
+  it("sends workspace_id as query parameter", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ count: 0, entities: [] }, true, 200));
+    await getGraphData("/my/project");
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("workspace_id=%2Fmy%2Fproject");
+  });
+
+  it("sends entity_type query parameter when provided", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ count: 0, entities: [] }, true, 200));
+    await getGraphData("/proj", "feature");
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("entity_type=feature");
+  });
+
+  it("returns null when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    expect(await getGraphData("/workspace")).toBeNull();
+  });
+
+  it("returns null when fetch throws", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    expect(await getGraphData("/workspace")).toBeNull();
+  });
+});
+
+// ---- upsertWorkspace ----
+
+describe("upsertWorkspace", () => {
+  it("returns WorkspaceRecord when response is 2xx", async () => {
+    const ws = { id: "ws1", name: "My Project", path: "/proj" };
+    fetchMock.mockResolvedValue(makeResponse(ws, true, 200));
+    const result = await upsertWorkspace("/proj", "My Project");
+    expect(result).toEqual(ws);
+  });
+
+  it("posts to /api/workspace/upsert", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await upsertWorkspace("/proj", "My Project");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace/upsert",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns null when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    expect(await upsertWorkspace("/proj", "name")).toBeNull();
+  });
+});
+
+// ---- getWorkspaceStatus ----
+
+describe("getWorkspaceStatus", () => {
+  it("returns WorkspaceStatus when response is 2xx", async () => {
+    const status = { event_count: 5, entity_count: 3, mismatch_count: 1 };
+    fetchMock.mockResolvedValue(makeResponse(status, true, 200));
+    const result = await getWorkspaceStatus("/proj");
+    expect(result).toEqual(status);
+  });
+
+  it("encodes workspace path in query string", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await getWorkspaceStatus("/my/project");
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("path=%2Fmy%2Fproject");
+  });
+
+  it("returns null when fetch throws", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    expect(await getWorkspaceStatus("/proj")).toBeNull();
   });
 });

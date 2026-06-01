@@ -7,10 +7,10 @@ import (
 	"log"
 
 	"context-os/domain/contracts"
+	"context-os/domain/entities"
 	"context-os/domain/events"
 	"context-os/domain/pipelines"
 	"context-os/domain/repository"
-	"context-os/domain/types"
 	"context-os/internal/classification"
 	"context-os/internal/extraction"
 	"context-os/internal/graph"
@@ -36,40 +36,62 @@ type Stores struct {
 	Entities repository.EntityRepository
 	// Mismatches stores reasoning findings.
 	Mismatches repository.MismatchRepository
+	// ParsedWriter, when non-nil, persists NormalizedDocuments to storage/parsed/
+	// for offline replay and debug inspection.
+	ParsedWriter *normalization.DocumentWriter
+	// SemanticMatcher, when non-nil, enables the Layer-2 semantic identity pass
+	// using embedding cosine similarity alongside the default deterministic layers.
+	SemanticMatcher identity.Matcher
 }
 
 // Run executes the full pipeline: ingest → normalize → classify → extract → resolve → relate → reason.
-// If stores is non-nil and WorkspaceID is set, ingested events, entities, and mismatches are
+// If stores is non-nil and WorkspaceID is set, ingested events, entities, relationships, and mismatches are
 // persisted after the in-memory run completes.
 func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.SourceRequest, stores *Stores) (pipelines.Result, error) {
 	rawEvents, err := sourcePipeline.Ingest(ctx, req)
 	if err != nil {
 		return pipelines.Result{}, err
 	}
+	var semanticMatcher identity.Matcher
+	if stores != nil {
+		semanticMatcher = stores.SemanticMatcher // nil is safe: ResolveWithMatcher falls back to LocalMatcher
+	}
+
 	contextGraph := graph.New()
 	for _, event := range rawEvents {
 		doc := normalization.Normalize(event)
+		if stores != nil && stores.ParsedWriter != nil {
+			if err := stores.ParsedWriter.Write(stores.WorkspaceID, doc); err != nil {
+				log.Printf("pipeline: write parsed doc %s: %v", doc.ID, err)
+			}
+		}
 		classified := classification.Classify(doc)
 		extracted := extraction.Extract(classified)
-		canonical := identity.Resolve(extracted)
+		var canonical []entities.CanonicalEntity
+		if semanticMatcher != nil {
+			canonical = identity.ResolveWithMatcher(extracted, semanticMatcher, identity.MatchOptions{})
+		} else {
+			canonical = identity.Resolve(extracted)
+		}
 		rels := relationship.Build(canonical)
 		contextGraph.AddEntities(canonical)
 		contextGraph.AddRelationships(rels)
 	}
 	result := pipelines.Result{
-		Entities:   contextGraph.AllEntities(),
-		Mismatches: reasoning.DetectMismatches(contextGraph),
+		Entities:      contextGraph.AllEntities(),
+		Relationships: contextGraph.AllRelationships(),
+		Mismatches:    reasoning.DetectMismatches(contextGraph),
 	}
 
 	if stores != nil && stores.WorkspaceID != "" {
-		persistResult(ctx, stores, req, rawEvents, result)
+		persistResult(ctx, stores, req, rawEvents, contextGraph, result)
 	}
 	return result, nil
 }
 
-// persistResult writes pipeline outputs to the backing store.  Errors are logged
-// and do not fail the caller — pipeline semantics are unchanged by storage failures.
-func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequest, rawEvents []events.Event, result pipelines.Result) {
+// persistResult writes pipeline outputs to the backing store and saves a filesystem snapshot.
+// Errors are logged and do not fail the caller — pipeline semantics are unchanged by storage failures.
+func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequest, rawEvents []events.Event, contextGraph *graph.ContextGraph, result pipelines.Result) {
 	if stores.Events != nil {
 		ingestEvents := make([]repository.IngestEvent, 0, len(rawEvents))
 		for _, e := range rawEvents {
@@ -101,8 +123,7 @@ func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequ
 		if err := stores.Entities.UpsertEntities(ctx, stores.WorkspaceID, result.Entities); err != nil {
 			log.Printf("pipeline: persist entities: %v", err)
 		}
-		// Relationships are not yet surfaced in pipelines.Result; pass empty slice.
-		if err := stores.Entities.UpsertRelationships(ctx, stores.WorkspaceID, []types.Relationship{}); err != nil {
+		if err := stores.Entities.UpsertRelationships(ctx, stores.WorkspaceID, result.Relationships); err != nil {
 			log.Printf("pipeline: persist relationships: %v", err)
 		}
 	}
@@ -111,5 +132,15 @@ func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequ
 		if err := stores.Mismatches.UpsertMismatches(ctx, stores.WorkspaceID, result.Mismatches, stores.TraceID); err != nil {
 			log.Printf("pipeline: persist mismatches: %v", err)
 		}
+	}
+
+	// Save a deterministic filesystem snapshot so organizational memory is
+	// available offline and for replay even without Postgres.
+	snapshotName := stores.WorkspaceID
+	if stores.TraceID != "" {
+		snapshotName = stores.WorkspaceID + "_" + stores.TraceID
+	}
+	if _, err := contextGraph.SaveSnapshot("storage/snapshots", snapshotName); err != nil {
+		log.Printf("pipeline: save snapshot: %v", err)
 	}
 }

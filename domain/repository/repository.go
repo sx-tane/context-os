@@ -122,3 +122,29 @@ type SyncRepository interface {
 	// ListByWorkspace returns all connector syncs for a workspace.
 	ListByWorkspace(ctx context.Context, workspaceID string) ([]ConnectorSync, error)
 }
+
+// AuditEvent is a record of a significant action performed against a workspace.
+type AuditEvent struct {
+	// WorkspaceID is the workspace this audit event belongs to.
+	WorkspaceID string
+	// EventType identifies the action, e.g. "workspace.registered" or "ingest.completed".
+	EventType string
+	// Actor is the originator of the action, e.g. a user ID or service name.
+	Actor string
+	// Connector is the involved connector name, empty when not applicable.
+	Connector string
+	// SourceURI is the ingested URI, empty when not applicable.
+	SourceURI string
+	// EntityID is the affected entity, empty when not applicable.
+	EntityID string
+	// TraceID links the audit record to a pipeline run trace.
+	TraceID string
+	// Payload carries additional key-value context about the action.
+	Payload map[string]string
+}
+
+// AuditRepository appends immutable audit log entries.
+type AuditRepository interface {
+	// Log appends an audit event to the audit log table.
+	Log(ctx context.Context, e AuditEvent) error
+}

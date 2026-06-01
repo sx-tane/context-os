@@ -489,6 +489,38 @@ func (s *SyncStore) ListByWorkspace(ctx context.Context, workspaceID string) ([]
 	return out, rows.Err()
 }
 
+// ─── Audit ────────────────────────────────────────────────────────────────────
+
+// AuditStore is the PostgreSQL-backed AuditRepository.
+type AuditStore struct {
+	db *sql.DB
+}
+
+// NewAuditStore returns an AuditStore backed by the provided connection pool.
+func NewAuditStore(db *sql.DB) *AuditStore {
+	return &AuditStore{db: db}
+}
+
+// Log appends an audit event to the audit_log table.
+func (s *AuditStore) Log(ctx context.Context, e repository.AuditEvent) error {
+	payloadJSON, err := json.Marshal(e.Payload)
+	if err != nil {
+		return fmt.Errorf("store: marshal audit payload: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO audit_log
+			(workspace_id, event_type, actor, connector, source_uri, entity_id, trace_id, payload, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+	`,
+		e.WorkspaceID, e.EventType, e.Actor, e.Connector,
+		e.SourceURI, e.EntityID, e.TraceID, payloadJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("store: log audit event: %w", err)
+	}
+	return nil
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // workspaceIDFromPath converts an absolute path into a stable workspace ID

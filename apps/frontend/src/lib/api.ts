@@ -4,9 +4,12 @@ import type {
   ConnectorKind,
   FindingsRequest,
   FindingsResult,
+  GraphData,
   IngestRequest,
   IngestResult,
   ServiceStatus,
+  WorkspaceRecord,
+  WorkspaceStatus,
 } from "$lib/types";
 
 export const API_URL = "/api";
@@ -196,6 +199,58 @@ async function readLogStream(
   await readEventStream(res, (message) => {
     if (message.data) onLog(message.data);
   });
+}
+
+// ---- Workspace API helpers ----
+
+/** Register or update a workspace by path. Returns the stored record or null on error. */
+export async function upsertWorkspace(
+  path: string,
+  name: string,
+): Promise<WorkspaceRecord | null> {
+  try {
+    const res = await fetch(`${API_URL}/workspace/upsert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, name }),
+    });
+    if (!res.ok) return null;
+    const body = await readJSON(res);
+    return (body as unknown as WorkspaceRecord) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch workspace status (event counts, sync states). Returns null on error. */
+export async function getWorkspaceStatus(
+  path: string,
+): Promise<WorkspaceStatus | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/workspace/status?path=${encodeURIComponent(path)}`,
+    );
+    if (!res.ok) return null;
+    return (await readJSON(res)) as unknown as WorkspaceStatus;
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch entity graph data for a workspace, optionally filtered by entity type. */
+export async function getGraphData(
+  workspacePath: string,
+  entityType?: string,
+): Promise<GraphData | null> {
+  try {
+    const params = new URLSearchParams({ workspace_id: workspacePath });
+    if (entityType) params.set("entity_type", entityType);
+    const res = await fetch(`${API_URL}/graph?${params.toString()}`);
+    if (!res.ok) return null;
+    return (await readJSON(res)) as unknown as GraphData;
+  } catch {
+    return null;
+  }
 }
 
 async function readEventStream(

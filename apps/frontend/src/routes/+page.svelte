@@ -26,6 +26,7 @@
   import ChatThread from "$lib/components/chat/ChatThread.svelte";
   import ChatInput from "$lib/components/chat/ChatInput.svelte";
   import KnowledgeInstall from "$lib/components/knowledge/KnowledgeInstall.svelte";
+  import GraphPanel from "$lib/components/graph/GraphPanel.svelte";
 
   // ---- service status ----
   let apiStatus: ServiceStatus = "checking";
@@ -39,6 +40,7 @@
   let busy = false;
   let showKnowledge = false;
   let sidebarOpen = false;
+  let showGraph = false;
 
   // ---- project path (workspace) ----
   let workspacePath = "/workspace";
@@ -386,7 +388,15 @@ Or ask anything in natural language and I'll try to find relevant findings.`;
     <nav class="nav-links">
       <a href="/connectors">Connector debug ↗</a>
       <a href="/findings">Advanced findings ↗</a>
+      <button class="graph-btn" on:click={() => (showGraph = !showGraph)}>
+        {showGraph ? "▾ Hide graph" : "▸ Entity graph"}
+      </button>
     </nav>
+
+    <!-- graph panel -->
+    <div class="graph-panel-container">
+      <GraphPanel {workspacePath} open={showGraph} />
+    </div>
   </aside>
 
   <!-- main chat area -->
@@ -651,6 +661,23 @@ Or ask anything in natural language and I'll try to find relevant findings.`;
   }
   .nav-links a:hover {
     color: #e5e7eb;
+  }
+  .graph-btn {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+  }
+  .graph-btn:hover {
+    color: #e5e7eb;
+  }
+  .graph-panel-container {
+    flex: 1;
+    overflow: hidden;
+    border-top: 1px solid #374151;
   }
 
   /* ---- chat area ---- */

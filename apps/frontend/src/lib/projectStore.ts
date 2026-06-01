@@ -6,6 +6,7 @@ import type {
   KnowledgeStatus,
   ProjectState,
 } from "$lib/types";
+import { upsertWorkspace, getWorkspaceStatus } from "$lib/api";
 
 const STORAGE_KEY_PREFIX = "contextos_project_";
 const CHAT_KEY_PREFIX = "contextos_chat_";
@@ -77,6 +78,8 @@ export function openProject(workspacePath: string): void {
   const m = loadMessages(workspacePath);
   _project.set(p);
   _messages.set(m);
+  // Fire-and-forget: register workspace with the backend (non-blocking).
+  upsertWorkspace(workspacePath, p.name).catch(() => {/* ignore offline */});
 }
 
 /** Update project name. */
@@ -118,6 +121,32 @@ export function markKnowledgeInstalled(): void {
   }));
 }
 
+/** Return a snapshot of the current project state. */
+export function getProject(): ProjectState {
+  return get(_project);
+}
+
+/**
+ * Fetch workspace status from the API and update connector event counts in the store.
+ * Silently no-ops when the API is unreachable.
+ */
+export async function loadWorkspaceStatus(workspacePath: string): Promise<void> {
+  try {
+    const status = await getWorkspaceStatus(workspacePath);
+    if (!status?.syncs) return;
+    _project.update((p) => {
+      const updated = p.connectors.map((ck) => {
+        const sync = status.syncs?.find((s) => s.connector === ck.connector);
+        if (!sync) return ck;
+        return { ...ck, eventCount: sync.event_count ?? ck.eventCount };
+      });
+      return { ...p, connectors: updated };
+    });
+  } catch {
+    // ignore when backend is offline
+  }
+}
+
 /** Add a chat message. */
 export function addMessage(msg: ChatMessage): void {
   _messages.update((m) => [...m, msg]);
@@ -131,9 +160,4 @@ export function replaceMessage(id: string, msg: ChatMessage): void {
 /** Clear all chat history for the current project. */
 export function clearChat(): void {
   _messages.set([]);
-}
-
-/** Return the current project snapshot without subscribing. */
-export function getProject(): ProjectState {
-  return get(_project);
 }

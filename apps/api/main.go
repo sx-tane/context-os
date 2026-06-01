@@ -9,16 +9,19 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	_ "context-os/apps/api/docs"
 	handlercodex "context-os/apps/api/handler/codex"
 	"context-os/apps/api/handler/filesystem"
 	"context-os/apps/api/handler/github"
 	googledrive "context-os/apps/api/handler/googledrive"
+	handlergraph "context-os/apps/api/handler/graph"
 	"context-os/apps/api/handler/health"
 	"context-os/apps/api/handler/jira"
 	notion "context-os/apps/api/handler/notion"
@@ -27,7 +30,12 @@ import (
 	"context-os/apps/api/handler/slack"
 	handlerworkspace "context-os/apps/api/handler/workspace"
 	"context-os/apps/api/middleware"
+	"context-os/internal/aiworker"
+	"context-os/internal/execution"
+	"context-os/internal/identity"
+	"context-os/internal/normalization"
 	"context-os/internal/store"
+	internalsync "context-os/internal/sync"
 	sqlmigrations "context-os/migrations"
 	"context-os/storage/db"
 
@@ -56,11 +64,34 @@ func main() {
 	mux := http.NewServeMux()
 
 	var wsHandler *handlerworkspace.Handler
-	if dbErr == nil {		wsHandler = handlerworkspace.NewHandler(
-			store.NewWorkspaceStore(sqlDB),
-			store.NewEventStore(sqlDB),
-			store.NewSyncStore(sqlDB),
+	var presentationHandler *presentation.Handler
+	var graphHandler *handlergraph.Handler
+	if dbErr == nil {
+		wsStore := store.NewWorkspaceStore(sqlDB)
+		evStore := store.NewEventStore(sqlDB)
+		syncStore := store.NewSyncStore(sqlDB)
+		mismatchStore := store.NewMismatchStore(sqlDB)
+		entityStore := store.NewEntityStore(sqlDB)
+
+	wsHandler = handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore)
+
+		// Build optional persistence helpers that write to the local storage/ directories.
+		embCache := aiworker.NewEmbeddingCache("storage/embeddings")
+		aiClient := aiworker.New(aiworker.WithEmbeddingCache(embCache))
+		parsedWriter := normalization.NewDocumentWriter("storage/parsed")
+		tplExec := execution.TemplateExecutor{PromptsDir: "prompts"}
+
+		presentationHandler = presentation.NewHandler(
+			wsStore, evStore, mismatchStore, entityStore, syncStore,
+			presentation.WithParsedWriter(parsedWriter),
+			presentation.WithSemanticMatcher(identity.WorkerMatcher{Embedder: aiClient}),
+			presentation.WithExecutor(tplExec),
 		)
+		graphHandler = handlergraph.NewHandler(wsStore, entityStore)
+
+		// Start background incremental sync worker.
+		syncWorker := internalsync.NewWorker(wsStore, syncStore, evStore)
+		go syncWorker.Run(context.Background(), 15*time.Minute)
 	}
 
 	routes := []route{
@@ -76,7 +107,6 @@ func main() {
 		{pattern: "/sharepoint/ingest", handler: http.HandlerFunc(sharepoint.Ingest), cors: true},
 		{pattern: "/sharepoint/ingest/stream", handler: http.HandlerFunc(sharepoint.IngestStream), cors: true},
 		{pattern: "/presentation/status", handler: http.HandlerFunc(presentation.Status), cors: true},
-		{pattern: "/presentation/findings", handler: http.HandlerFunc(presentation.Findings), cors: true},
 		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(github.IngestStream), cors: true},
 		{pattern: "/github/status", handler: http.HandlerFunc(github.Status), cors: true},
 		{pattern: "/jira/status", handler: http.HandlerFunc(jira.Status), cors: true},
@@ -100,6 +130,20 @@ func main() {
 			route{pattern: "/workspace", handler: http.HandlerFunc(wsHandler.List), cors: true},
 			route{pattern: "/workspace/upsert", handler: http.HandlerFunc(wsHandler.Upsert), cors: true},
 			route{pattern: "/workspace/status", handler: http.HandlerFunc(wsHandler.Status), cors: true},
+		)
+	}
+	if presentationHandler != nil {
+		routes = append(routes,
+			route{pattern: "/presentation/findings", handler: http.HandlerFunc(presentationHandler.Findings), cors: true},
+		)
+	} else {
+		routes = append(routes,
+			route{pattern: "/presentation/findings", handler: http.HandlerFunc(presentation.Findings), cors: true},
+		)
+	}
+	if graphHandler != nil {
+		routes = append(routes,
+			route{pattern: "/graph", handler: http.HandlerFunc(graphHandler.Query), cors: true},
 		)
 	}
 

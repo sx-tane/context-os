@@ -674,6 +674,81 @@ export interface paths {
       };
     };
   };
+  "/workspace": {
+    /** Returns all registered ContextOS workspaces. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+    /** Creates or updates a workspace record by its path. */
+    post: {
+      parameters: {
+        body: {
+          /** Workspace upsert request */
+          body: definitions["workspace.upsertRequest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["repository.Workspace"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/workspace/status": {
+    /** Returns event counts and connector sync states for a workspace. */
+    get: {
+      parameters: {
+        query: {
+          /** Absolute workspace path */
+          path: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
 }
 
 export interface definitions {
@@ -707,6 +782,18 @@ export interface definitions {
     | "relationship.created"
     | "mismatch.detected"
     | "codex.analysis.completed";
+  "repository.Workspace": {
+    /** @description CreatedAt is the UTC timestamp when the workspace was first registered. */
+    createdAt?: string;
+    /** @description ID is the primary key derived from the workspace path. */
+    id?: string;
+    /** @description Name is the human-readable workspace name. */
+    name?: string;
+    /** @description Path is the absolute local folder path used as the project key. */
+    path?: string;
+    /** @description UpdatedAt is the UTC timestamp of the last write to the workspace row. */
+    updatedAt?: string;
+  };
   "request.FilesystemIngest": {
     /** @example Optional raw content instead of reading from URI */
     content?: string;
@@ -782,6 +869,8 @@ export interface definitions {
     content?: string;
     /** @example eyJsYXN0X2lkIjoiMTIzIn0= */
     cursor?: string;
+    /** @description ForceRefresh bypasses the findings cache and always re-ingests from source. */
+    force_refresh?: boolean;
     include_execution?: boolean;
     metadata?: { [key: string]: string };
     /** @example token */
@@ -792,6 +881,12 @@ export interface definitions {
     token?: string;
     /** @example storage/raw/context.txt */
     uri?: string;
+    /**
+     * @description WorkspaceID is the optional workspace path used to scope and persist results.
+     * When set the pipeline output is written to Postgres and cache-hit logic applies.
+     * @example /home/user/myproject
+     */
+    workspace_id?: string;
   };
   "request.SharePointIngest": {
     /** @example 11111111-1111-1111-1111-111111111111 */
@@ -896,6 +991,12 @@ export interface definitions {
     summary?: string;
     /** @description stable category for the detection rule that produced this finding */
     type?: string;
+  };
+  "workspace.upsertRequest": {
+    /** @description Name is the optional human-readable workspace name. */
+    name?: string;
+    /** @description Path is the absolute local folder path for the workspace. */
+    path?: string;
   };
 }
 
