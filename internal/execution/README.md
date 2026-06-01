@@ -71,6 +71,13 @@ flowchart TD
 - Real executors should preserve input context, command metadata, runtime errors, and output provenance.
 - Keep local-first behavior: the default path should work without SaaS dependencies.
 
+## Current Integration Status
+
+- `apps/api/handler/presentation` now invokes `LocalStubExecutor` as a hidden assistive step when building findings output.
+- The execution request carries trace metadata (`trace_id`, connector, role, mismatch IDs/count).
+- The execution response is returned under API `execution` metadata and never mutates deterministic mismatch findings.
+- Execution calls use context deadlines so cancellation and timeout behavior remains explicit and auditable.
+
 ## Production Requirements
 
 - Run local analysis with cancellation, timeouts, structured errors, and trace metadata.

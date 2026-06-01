@@ -56,6 +56,85 @@ export interface ApiErrorBody {
   message?: string;
 }
 
+export type PresentationRole =
+  | "pmo"
+  | "presentation_layer"
+  | "service_layer"
+  | "qa"
+  | "architecture";
+
+export interface RoleSummaryView {
+  role: PresentationRole;
+  summary: string;
+  mismatch_ids: string[];
+  next_actions: string[];
+  finding_count: number;
+}
+
+export interface PMOSummary {
+  facts: string[];
+  risks: string[];
+  impacts: string[];
+  confidence: Record<string, number>;
+  evidence: Record<string, string[]>;
+  recommended_decisions: string[];
+}
+
+export interface Mismatch {
+  id: string;
+  type: string;
+  summary: string;
+  entity_ids: string[];
+  severity: string;
+  confidence: number;
+  impact: string;
+  evidence: string[];
+  affected_roles: string[];
+  recommended: string;
+}
+
+export interface ExecutionEvidence {
+  enabled: boolean;
+  assistive: boolean;
+  summary: string;
+  metadata: Record<string, string>;
+  error?: string;
+}
+
+export interface FindingsViews {
+  pmo: RoleSummaryView;
+  presentation_layer: RoleSummaryView;
+  service_layer: RoleSummaryView;
+  qa: RoleSummaryView;
+  architecture: RoleSummaryView;
+}
+
+export interface FindingsRequest {
+  connector: ConnectorKind;
+  uri?: string;
+  content?: string;
+  provider?: IngestProvider;
+  token?: string;
+  role?: PresentationRole;
+  include_execution?: boolean;
+  metadata?: Record<string, string>;
+}
+
+export interface FindingsResult {
+  connector: string;
+  uri: string;
+  role: PresentationRole;
+  trace_id: string;
+  summary: string;
+  mismatch_count: number;
+  severity_count: Record<string, number>;
+  mismatch_ids: string[];
+  mismatches: Mismatch[];
+  views: FindingsViews;
+  pmo: PMOSummary;
+  execution: ExecutionEvidence;
+}
+
 export interface SourceMetadataField {
   key: string;
   label: string;

@@ -2,6 +2,8 @@ import type {
   ApiErrorBody,
   CodexConnectorKind,
   ConnectorKind,
+  FindingsRequest,
+  FindingsResult,
   IngestRequest,
   IngestResult,
   ServiceStatus,
@@ -66,6 +68,34 @@ export async function postIngest(
       ok: true,
       status: res.status,
       body: responseBody as unknown as IngestResult,
+    };
+  }
+  return {
+    ok: false,
+    status: res.status,
+    body: responseBody,
+  };
+}
+
+export async function postFindings(
+  body: FindingsRequest,
+  options: RequestOptions = {},
+): Promise<
+  | { ok: true; status: number; body: FindingsResult }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  const res = await fetch(`${API_URL}/presentation/findings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  const responseBody = await readJSON(res);
+  if (res.ok) {
+    return {
+      ok: true,
+      status: res.status,
+      body: responseBody as unknown as FindingsResult,
     };
   }
   return {

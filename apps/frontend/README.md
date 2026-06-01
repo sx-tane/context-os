@@ -5,6 +5,8 @@ SvelteKit application surface for ContextOS presentation views.
 Current local workflow:
 
 - probes API and worker health from the main page;
+- keeps the main page as connector debug workflow;
+- exposes `/findings` for role-based PMO/presentation/service/QA/architecture outputs;
 - shows Codex CLI install/login/plugin status;
 - supports Codex device-auth login and plugin re-auth streams;
 - runs GitHub MCP ingestion through either direct token/env auth or the Codex GitHub plugin;
@@ -45,6 +47,11 @@ Production responsibility:
 - keep findings tied to evidence and impacted artifacts;
 - separate facts, confidence, impact, and recommended next actions;
 - support fast local workflows for inspecting delivery misalignment.
+
+## Routes
+
+- `/` — connector and ingestion debug workspace.
+- `/findings` — graph-backed findings UI with role-specific summaries, PMO view model, and assistive execution metadata.
 
 ## Type generation
 

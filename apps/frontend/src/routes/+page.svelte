@@ -72,6 +72,10 @@
 
 <main>
   <h1>ContextOS</h1>
+  <p class="nav-link">
+    This page is the connector debug surface. For role-based output views, open
+    <a href="/findings">/findings</a>.
+  </p>
 
   <StatusSection
     {apiStatus}
@@ -159,5 +163,10 @@
   h1 {
     font-size: 1.75rem;
     margin-bottom: 1.5rem;
+  }
+
+  .nav-link {
+    margin-bottom: 1rem;
+    color: #374151;
   }
 </style>

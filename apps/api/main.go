@@ -21,6 +21,7 @@ import (
 	"context-os/apps/api/handler/health"
 	"context-os/apps/api/handler/jira"
 	notion "context-os/apps/api/handler/notion"
+	presentation "context-os/apps/api/handler/presentation"
 	sharepoint "context-os/apps/api/handler/sharepoint"
 	"context-os/apps/api/handler/slack"
 	"context-os/apps/api/middleware"
@@ -56,6 +57,8 @@ func main() {
 		{pattern: "/sharepoint/status", handler: http.HandlerFunc(sharepoint.Status), cors: true},
 		{pattern: "/sharepoint/ingest", handler: http.HandlerFunc(sharepoint.Ingest), cors: true},
 		{pattern: "/sharepoint/ingest/stream", handler: http.HandlerFunc(sharepoint.IngestStream), cors: true},
+		{pattern: "/presentation/status", handler: http.HandlerFunc(presentation.Status), cors: true},
+		{pattern: "/presentation/findings", handler: http.HandlerFunc(presentation.Findings), cors: true},
 		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(github.IngestStream), cors: true},
 		{pattern: "/github/status", handler: http.HandlerFunc(github.Status), cors: true},
 		{pattern: "/jira/status", handler: http.HandlerFunc(jira.Status), cors: true},

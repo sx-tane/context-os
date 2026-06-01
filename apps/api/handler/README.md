@@ -16,6 +16,7 @@ Shared plumbing lives in `shared/`.
 | [`jira/`](jira/README.md)             | `/jira/*`       | `Status`, `Ingest`, `IngestStream`                        |
 | [`notion/`](notion/README.md)         | `/notion/*`     | `Status`, `Ingest`, `IngestStream`                        |
 | [`sharepoint/`](sharepoint/README.md) | `/sharepoint/*` | `Status`, `Ingest`, `IngestStream`                        |
+| [`presentation/`](presentation/README.md) | `/presentation/*` | `Status`, `Findings`                                   |
 | [`slack/`](slack/README.md)           | `/slack/*`      | `Status`, `Connect`, `Callback`, `Ingest`, `IngestStream` |
 | [`filesystem/`](filesystem/README.md) | `/filesystem/*` | `Ingest`, `Upload`                                        |
 | [`shared/`](shared/README.md)         | —               | Ingest helpers, SSE infrastructure                        |

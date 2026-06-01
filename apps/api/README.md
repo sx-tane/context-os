@@ -35,6 +35,7 @@ apps/api/
     filesystem/           — filesystem path ingest and browser upload staging
     notion/               — Notion status, page/database ingest, and Codex stream ingest
     sharepoint/           — SharePoint/OneDrive status, Graph ingest, and Codex stream ingest
+    presentation/         — role-based graph-backed findings and PMO summaries
     slack/                — Slack status, OAuth, direct/token ingest, and Codex stream ingest
     codex/                — Codex CLI status, login, and plugin reauth streams
     README.md             — handler package docs, patterns, and new-connector checklist
@@ -88,6 +89,8 @@ apps/api/
 | GET    | `/sharepoint/status`    | Checks SharePoint access token or client credentials readiness                           |
 | POST   | `/sharepoint/ingest`    | Ingest a SharePoint or OneDrive item via Microsoft Graph                                 |
 | POST   | `/sharepoint/ingest/stream` | Stream Codex-backed SharePoint ingest progress over SSE                              |
+| GET    | `/presentation/status`  | Supported connectors/roles and hidden execution mode for role summaries                  |
+| POST   | `/presentation/findings`| Run graph-backed findings output with role summaries, PMO view model, and assistive execution metadata |
 | GET    | `/codex/status`         | Codex CLI install/login/plugin status                                                    |
 | POST   | `/codex/login`          | Run `codex login --device-auth` and stream logs as SSE                                   |
 | POST   | `/codex/plugin-reauth`  | Re-add plugin with `BROWSER=echo`; OAuth URL printed in SSE log (UI not wired — use CLI) |

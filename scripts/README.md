@@ -71,12 +71,30 @@ export GITHUB_TOKEN=ghp_your_token_here
 Once running:
 
 - **http://localhost:5173** — ContextOS UI
+- **http://localhost:5173/findings** — Role-based findings and PMO summary UI
 - **http://localhost:8080/health** — API health endpoint
 - **http://localhost:8080/swagger/** — Interactive Swagger UI
 - **http://localhost:8080/swagger/doc.json** — Raw OpenAPI spec (Postman/Insomnia)
 - **apps/api/\_docs/api.html** — Standalone Redoc HTML (open directly in browser after docs are generated)
 
 Generated docs under `apps/api/_docs/` are local artifacts (gitignored) and are not required for the API to start. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository and are regenerated automatically on each startup.
+
+---
+
+## start-infra.sh
+
+Starts local infrastructure only (Postgres + pgvector and NATS) using Docker Compose.
+
+```bash
+chmod +x scripts/start-infra.sh
+./scripts/start-infra.sh
+```
+
+Infra endpoints:
+
+- **localhost:5432** — PostgreSQL (`contextos/contextos/contextos`)
+- **localhost:4222** — NATS client port
+- **http://localhost:8222** — NATS monitoring endpoint
 
 ---
 

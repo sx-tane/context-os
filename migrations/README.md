@@ -2,7 +2,11 @@
 
 Database migration files for PostgreSQL and pgvector-backed local persistence.
 
-This folder currently contains only this README. Add ordered migration files here when local persistence schemas are introduced.
+This folder stores ordered migration files for local persistence schemas.
+
+Current migrations:
+
+- `0001_enable_pgvector.sql` — enables the `vector` extension for local Postgres instances.
 
 ## Responsibilities
 

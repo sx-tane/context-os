@@ -2,6 +2,7 @@ import {
   probeService,
   getJSON,
   postIngest,
+  postFindings,
   postFilesystemUpload,
 } from "../api";
 
@@ -106,6 +107,41 @@ describe("postIngest", () => {
         method: "POST",
         body: JSON.stringify({ uri: "slack://team/C123", provider: "token" }),
       }),
+    );
+  });
+});
+
+// ---- postFindings ----
+
+describe("postFindings", () => {
+  it("returns ok:true with body when response is 2xx", async () => {
+    const body = { role: "pmo", mismatch_count: 1 };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await postFindings({
+      connector: "filesystem",
+      uri: "inline.txt",
+      content: "frontend expects refundStatus but backend exposes missingRefundState",
+      role: "pmo",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.body).toEqual(body);
+  });
+
+  it("returns ok:false with error body when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse({ message: "invalid_request" }, false, 400),
+    );
+    const result = await postFindings({ connector: "filesystem" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.body.message).toBe("invalid_request");
+  });
+
+  it("posts to /api/presentation/findings", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await postFindings({ connector: "filesystem", uri: "inline.txt" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/presentation/findings",
+      expect.objectContaining({ method: "POST" }),
     );
   });
 });

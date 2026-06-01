@@ -72,6 +72,13 @@ summary := presentation.RenderSummary(presentation.PresentationLayer, result.Mis
 - Role-specific wording can grow here, but it should not hide severity, impact, evidence, or recommended actions.
 - When findings become richer, presentation should expose confidence, impact, and evidence in role-friendly language.
 
+## Current Integration Status
+
+- `apps/api/handler/presentation` exposes `/presentation/findings`, which renders role summaries from graph-backed mismatch results.
+- API responses now provide explicit role-specific shapes (`pmo`, `presentation_layer`, `service_layer`, `qa`, `architecture`) and a PMO-specific view model.
+- PMO output separates facts, risks, impacts, confidence, evidence, and recommended decisions while keeping mismatch IDs visible.
+- Frontend route `/findings` consumes these contracts so role-based output is API/UI-visible.
+
 ## Production Requirements
 
 - Render role-specific summaries for PMO, presentation layer, service layer, QA, and architecture without losing evidence.
