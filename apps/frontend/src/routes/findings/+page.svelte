@@ -65,7 +65,7 @@
         }
     }
 
-    $: selectedView = result ? result.views[role] : null;
+    $: selectedView = result ? result.views?.[role] : null;
 </script>
 
 <svelte:head>
@@ -150,9 +150,9 @@
             <p><strong>Role:</strong> {result.role}</p>
             <p><strong>Mismatches:</strong> {result.mismatch_count}</p>
             <p>
-                <strong>Severity:</strong> high {result.severity_count.high},
-                medium {result.severity_count.medium}, low {result
-                    .severity_count.low}
+                <strong>Severity:</strong> high {result.severity_count?.high ?? 0},
+                medium {result.severity_count?.medium ?? 0}, low {result
+                    .severity_count?.low ?? 0}
             </p>
             <pre>{result.summary}</pre>
         </section>
@@ -174,15 +174,15 @@
 
         <section class="card">
             <h2>PMO View Model</h2>
-            <p><strong>Facts:</strong> {result.pmo.facts.length}</p>
-            <p><strong>Risks:</strong> {result.pmo.risks.length}</p>
+            <p><strong>Facts:</strong> {result.pmo?.facts.length ?? 0}</p>
+            <p><strong>Risks:</strong> {result.pmo?.risks.length ?? 0}</p>
             <p>
                 <strong>Impacts:</strong>
-                {result.pmo.impacts.join(", ") || "none"}
+                {result.pmo?.impacts.join(", ") || "none"}
             </p>
             <h3>Recommended Decisions</h3>
             <ul>
-                {#each result.pmo.recommended_decisions as decision}
+                {#each result.pmo?.recommended_decisions ?? [] as decision}
                     <li>{decision}</li>
                 {/each}
             </ul>
@@ -192,38 +192,38 @@
             <h2>Assistive Execution</h2>
             <p>
                 <strong>Enabled:</strong>
-                {result.execution.enabled ? "yes" : "no"}
+                {result.execution?.enabled ? "yes" : "no"}
             </p>
             <p>
                 <strong>Assistive:</strong>
-                {result.execution.assistive ? "yes" : "no"}
+                {result.execution?.assistive ? "yes" : "no"}
             </p>
-            <p><strong>Summary:</strong> {result.execution.summary}</p>
-            {#if result.execution.error}
+            <p><strong>Summary:</strong> {result.execution?.summary ?? "none"}</p>
+            {#if result.execution?.error}
                 <p class="error">{result.execution.error}</p>
             {/if}
         </section>
 
         <section class="card">
             <h2>Mismatches</h2>
-            {#if result.mismatches.length === 0}
+            {#if (result.mismatches?.length ?? 0) === 0}
                 <p>No mismatches detected.</p>
             {:else}
                 <ul>
-                    {#each result.mismatches as mismatch}
+                    {#each result.mismatches ?? [] as mismatch}
                         <li>
                             <strong
-                                >[{mismatch.severity}] {mismatch.summary}</strong
+                                >[{mismatch.severity ?? "review"}] {mismatch.summary ?? mismatch.description ?? mismatch.type ?? mismatch.id}</strong
                             >
                             <div>id: {mismatch.id}</div>
                             <div>confidence: {mismatch.confidence}</div>
                             <div>impact: {mismatch.impact}</div>
                             <div>
-                                evidence: {mismatch.evidence.join(", ") ||
+                                evidence: {mismatch.evidence?.join(", ") ||
                                     "none"}
                             </div>
                             <div>
-                                recommended: {mismatch.recommended || "none"}
+                                recommended: {mismatch.recommended ?? mismatch.recommended_action ?? "none"}
                             </div>
                         </li>
                     {/each}

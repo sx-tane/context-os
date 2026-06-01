@@ -117,6 +117,228 @@ Starts the API, context UI dev server, and AI worker together. Press `Ctrl+C` to
 
 Local connector UI is served from `apps/frontend` and includes GitHub, Jira, Slack, Google Drive, Notion, SharePoint, filesystem, and Codex CLI status/login flows. Filesystem ingestion covers browser-uploaded files/folders, server-visible local paths, spreadsheets, and OpenAPI spec files.
 
+## Current Production Status
+
+This repository is moving toward a production-ready local-first product, but it is not production-ready yet. The working pieces are strong enough for local development, connector experiments, deterministic pipeline tests, and early workspace-scoped querying. The unfinished pieces are mainly around production hardening: real-world connector replay guarantees, graph persistence depth, evaluation fixtures, security controls, and release operations.
+
+### Working Today
+
+| Area | Status |
+| --- | --- |
+| Local API service | Go API starts on `:8080`, exposes health, connector, workspace, artifact, chat, graph, and presentation endpoints. |
+| Local frontend | SvelteKit product workspace exists with workspace selection, DB-backed source setup, chat/search flow, findings view, and connector debug routes. |
+| Workspace model | Workspaces are keyed by local folder path and persisted through PostgreSQL when the database is available. |
+| Database migrations | PostgreSQL migrations create workspaces, ingest events, entities, relationships, mismatches, connector sync state, and audit log tables. |
+| Source connectors | GitHub, Jira, Slack, Google Drive, Notion, SharePoint/OneDrive, filesystem, and Codex status/login endpoints are scaffolded and tested at handler/package level. |
+| Filesystem ingestion | Local paths, browser uploads, recursive folders, text/code/config files, CSV/XLSX, DOCX, PPTX, PDF best-effort text, and OpenAPI JSON/YAML metadata are supported. |
+| Artifact query | `/artifacts` queries locally persisted ingest events by workspace, connector, source URI, date range, text, and limit. It only sees data that has gone through a persistence path such as `/presentation/findings`, not plain `/ingest` responses. |
+| Local chat query | `/chat/query` answers deterministic source questions from local artifacts only. |
+| Pipeline stages | Normalization, classification, extraction, identity, relationship, graph, reasoning, presentation, and execution packages exist with unit tests. |
+| Graph snapshots | In-memory graph can save and load deterministic local JSON snapshots. |
+| Reasoning output | Deterministic mismatch rules emit findings with confidence, evidence, impact, severity, affected roles, and recommended action. |
+| Backend tests | `go test ./...` passes in this workspace. |
+
+### Not Working Yet
+
+| Area | Gap To Close |
+| --- | --- |
+| Production connector reliability | Cloud connectors need broader real-account validation, retry/backoff coverage, cursor replay tests, rate-limit behavior checks, and duplicate prevention under repeated sync. |
+| End-to-end production sync | Background sync exists, but full multi-connector lifecycle testing with real credentials, failures, restarts, and replays is still needed. |
+| Connector debug-to-DB flow | The main `Install Knowledge` flow now uses the DB-backed findings pipeline, but older connector debug pages still call `/api/<connector>/ingest` or `/api/<connector>/ingest/stream`; those routes return events but do not persist them to PostgreSQL. See [Frontend Ingest And Database Audit](docs/FRONTEND_INGEST_DB_AUDIT.md). |
+| Durable raw and parsed storage discipline | Raw, parsed, snapshot, and embedding storage exists, but retention policy, cleanup, schema versioning, and reproducible replay workflows need hardening. |
+| Identity resolution quality | Current identity matching is deterministic and tested, but production needs alias dictionaries, semantic candidate review, conflict workflows, precision/recall targets, and human correction loops. |
+| Relationship intelligence | Relationship extraction still needs richer typed edges, source-span evidence, confidence scoring, and graph constraints beyond basic deterministic linking. |
+| Reasoning quality | Current rules are explainable, but production needs realistic evaluation fixtures, false-positive tracking, PMO-vs-engineering drift rules, and recommendation quality checks. |
+| Execution backend | Execution boundary exists, but generated/assistive analysis still needs a production local executor path with persisted prompts, output provenance, errors, and timeouts. |
+| Frontend production build verification | Frontend Jest tests and Svelte type checks pass with the Node/npm tooling in this workspace, but a production build gate and browser smoke test still need to be added. |
+| Auth and secrets | Local connector secrets work through environment/request/OAuth paths, but production needs secret handling rules, token isolation, audit review, and least-privilege setup docs. |
+| Observability | Some trace/status metadata exists, but production needs structured logs, metrics, trace IDs across every stage, operator-visible failures, and alert thresholds. |
+| Release packaging | Docker files and compose exist, but production needs repeatable release builds, environment validation, migrations strategy, backup/restore, and smoke tests. |
+
+## Phase-By-Phase Production Plan
+
+Use these phases as the build order. Do not treat later AI or dashboard work as production until the earlier replay, storage, and evaluation gates are satisfied.
+
+### Phase 0: Baseline Local Product
+
+Goal: make the current local developer product reliable enough that every new change can be verified.
+
+Working:
+
+- Go API routes, domain packages, migrations, and backend tests.
+- SvelteKit product workspace and connector screens.
+- Local filesystem response-only ingest, persisted findings analysis, and artifact/chat workflows once data is in PostgreSQL.
+
+Not done:
+
+- Frontend production build and browser smoke-test verification.
+- Connector debug pages must be rewired to persist ingested events before marking a connector ready.
+- One-command environment validation that confirms Go, Bun, Python/uv, Docker, Postgres, and Codex readiness.
+- Clear smoke-test script for API, frontend, database, and one sample ingest.
+
+Production exit criteria:
+
+- Calling source setup from the frontend increases `/workspace/status.event_count` and makes `/artifacts` return the ingested item.
+- `go test ./...`, frontend tests, frontend type check, and API smoke tests pass from a fresh setup.
+- `scripts/start-all.sh` gives a clear success/failure summary.
+- README setup steps match reality on a clean machine.
+
+### Phase 1: Replay-Safe Source Ingestion
+
+Goal: every source can be ingested repeatedly without duplicate or unstable records.
+
+Working:
+
+- Connector endpoints and source packages exist.
+- Filesystem has the strongest current extraction and metadata coverage.
+- Database tables support ingest events and connector sync state.
+
+Not done:
+
+- Real credential test matrix for GitHub, Jira, Slack, Google Drive, Notion, and SharePoint.
+- Cursor and modified-time replay tests for every connector.
+- Consistent retry, cancellation, timeout, and partial-failure behavior.
+
+Production exit criteria:
+
+- Re-running the same sync produces stable event IDs and no duplicate facts.
+- Every connector records source URI, object ID, content hash or cursor, status, last error, and event count.
+- Failed syncs can resume without corrupting workspace state.
+
+### Phase 2: Durable Storage And Reproducible Pipeline
+
+Goal: make every pipeline result traceable back to raw input and reproducible from local storage.
+
+Working:
+
+- PostgreSQL schema covers core entities, relationships, mismatches, sync state, and audit log.
+- Local storage folders exist for raw, parsed, snapshots, and embeddings.
+- Graph snapshots can be saved and loaded deterministically.
+
+Not done:
+
+- Strict raw-to-parsed-to-graph replay command.
+- Retention and cleanup policy.
+- Audit log writes for all important stage transitions.
+- Snapshot/version compatibility checks beyond current graph JSON behavior.
+
+Production exit criteria:
+
+- A workspace can be rebuilt from persisted source events and raw/parsed artifacts.
+- Migrations are idempotent and tested against empty and existing databases.
+- Backup/restore instructions are documented and verified.
+
+### Phase 3: Identity Resolution Quality
+
+Goal: resolve the same concept across source systems with explainable confidence.
+
+Working:
+
+- Identity package exists with deterministic matching tests.
+- Entity persistence supports aliases, confidence, match layer, conflict reason, and human-review fields.
+
+Not done:
+
+- Alias dictionary workflow.
+- Human correction flow.
+- Multilingual and naming-convention benchmarks at production scale.
+- Precision/recall targets for canonical entity linking.
+
+Production exit criteria:
+
+- Entity merges include confidence, evidence, and reason.
+- Ambiguous matches are marked for review instead of silently merged.
+- Regression fixtures prevent identity quality from drifting.
+
+### Phase 4: Relationship Graph And Impact Analysis
+
+Goal: build a useful context graph for impact, ownership, and dependency questions.
+
+Working:
+
+- Graph package stores entities, relationships, history, snapshots, neighbors, and impact traversal.
+- Relationship package emits typed relationships with tests.
+- `/graph` endpoint can expose persisted entities when the database is available.
+
+Not done:
+
+- Rich typed relationship vocabulary across requirements, APIs, DB fields, owners, services, risks, and timelines.
+- Relationship source-span evidence.
+- Graph query coverage for real planning and incident workflows.
+
+Production exit criteria:
+
+- Users can ask what is affected by a requirement/API/service change and get traceable answers.
+- Relationships have stable IDs, confidence, evidence, and source provenance.
+- Graph snapshots are part of regression tests.
+
+### Phase 5: Reasoning And Misalignment Detection
+
+Goal: deliver the first production success metric: detect real cross-layer context misalignment automatically.
+
+Working:
+
+- Deterministic reasoning rules detect keyword signals, requirement gaps, API/DB contract drift, and dependency risks.
+- Findings include confidence, impact, evidence, severity, affected roles, and recommended action.
+- Presentation outputs expose findings for UI consumption.
+
+Not done:
+
+- Realistic cross-layer evaluation dataset.
+- False-positive tracking.
+- PMO status vs implementation drift detection.
+- Recommendation quality review.
+
+Production exit criteria:
+
+- A realistic fixture set proves expected findings and blocks regressions.
+- False positives are tracked and kept below an agreed threshold.
+- Findings always cite source evidence and never depend only on generated text.
+
+### Phase 6: Product Workflow And Operator Experience
+
+Goal: make the product usable repeatedly by a real operator, not just a developer.
+
+Working:
+
+- Main frontend product window supports workspace selection, source setup, chat, and truth panel workflows.
+- Connector debug and findings pages exist for deeper inspection.
+
+Not done:
+
+- Production-grade empty, loading, error, and recovery states across every flow.
+- Clear source health, last sync, and next action guidance.
+- Role-specific reports that users can trust without reading raw logs.
+
+Production exit criteria:
+
+- A user can add a workspace, connect sources, sync, ask questions, inspect evidence, and recover from connector errors without touching code.
+- Every important answer links back to local artifacts or findings.
+- UI build, type check, and test suite pass in CI.
+
+### Phase 7: Security, Operations, And Release
+
+Goal: make the local-first product safe to install, run, update, and recover.
+
+Working:
+
+- Docker files, compose file, setup scripts, and local service scripts exist.
+- API starts even if the database is temporarily unavailable, with DB-backed endpoints disabled.
+
+Not done:
+
+- Secret storage policy and token rotation guidance.
+- Structured logs and metrics.
+- Release artifacts and versioned upgrade path.
+- Backup/restore and disaster recovery drill.
+- CI gate that runs backend, frontend, migration, and smoke tests.
+
+Production exit criteria:
+
+- Fresh install, upgrade, backup, restore, and uninstall are documented and tested.
+- Logs expose failures without leaking secrets.
+- CI blocks broken migrations, broken API contracts, failing tests, and broken frontend builds.
+
 ## Production Delivery Plan
 
 The plan below targets production-grade organizational intelligence with local-first operation, replay-safe ingestion, durable graph memory, and explainable misalignment findings.
@@ -234,7 +456,7 @@ ContextOS should be judged by delivery outcomes, not model novelty.
 - apps: deployable surfaces (api, context UI, ai-worker)
 - internal: domain implementations and orchestration logic
 - domain: cross-domain contracts, entities, events, and pipeline types
-- storage: local-first data layers by processing stage
+- storage: local runtime files and derived artifacts; PostgreSQL is the current product source of truth. See [docs/STORAGE_DB_REPLAN.md](docs/STORAGE_DB_REPLAN.md)
 - tests: pipeline-level validation and integration checks
 - docs: architecture and connector specifications
 

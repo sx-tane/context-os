@@ -10,6 +10,12 @@ export type EventType = definitions["events.Type"];
 export type ServiceStatus = "checking" | "ok" | "unreachable";
 
 export type IngestProvider = "token" | "codex";
+export type PresentationRole =
+  | "pmo"
+  | "presentation_layer"
+  | "service_layer"
+  | "qa"
+  | "architecture";
 
 export type ConnectorKind =
   | "github"
@@ -91,6 +97,7 @@ export interface SourceConnectorConfig {
 // ---- Findings / presentation types ----
 
 export interface FindingsRequest {
+  workspace_id?: string;
   connector: ConnectorKind;
   uri?: string;
   token?: string;
@@ -100,29 +107,66 @@ export interface FindingsRequest {
   content?: string;
   metadata?: Record<string, string>;
   include_execution?: boolean;
+  force_refresh?: boolean;
 }
 
 export interface FindingsMismatch {
   id?: string;
+  type?: string;
+  summary?: string;
   entity_name?: string;
   mismatch_type?: string;
   severity?: string;
   description?: string;
+  entity_ids?: string[];
+  affected_roles?: string[];
   evidence?: string[];
   confidence?: number;
   impact?: string;
+  recommended?: string;
   recommended_action?: string;
+}
+
+export interface FindingsRoleView {
+  role: PresentationRole | string;
+  summary: string;
+  mismatch_ids: string[];
+  next_actions: string[];
+  finding_count: number;
+}
+
+export interface FindingsPMO {
+  facts: string[];
+  risks: string[];
+  impacts: string[];
+  confidence: Record<string, number>;
+  evidence: Record<string, string[]>;
+  recommended_decisions: string[];
+}
+
+export interface FindingsExecution {
+  enabled: boolean;
+  assistive: boolean;
+  summary: string;
+  metadata?: Record<string, string>;
+  error?: string;
 }
 
 export interface FindingsResult {
   connector?: string;
   uri?: string;
-  role?: string;
+  role?: PresentationRole | string;
+  trace_id?: string;
   summary?: string;
   mismatches?: FindingsMismatch[];
-  entity_count?: number;
+  event_count?: number;
   mismatch_count?: number;
-  trace_id?: string;
+  severity_count?: Record<"high" | "medium" | "low", number>;
+  mismatch_ids?: string[];
+  views?: Record<string, FindingsRoleView>;
+  pmo?: FindingsPMO;
+  execution?: FindingsExecution;
+  entity_count?: number;
   error?: string;
 }
 
@@ -174,6 +218,64 @@ export interface WorkspaceStatus {
   syncs?: WorkspaceSyncState[];
 }
 
+export interface WorkspaceList {
+  workspaces: WorkspaceRecord[];
+  count: number;
+}
+
+// ---- Local artifact / chat query types ----
+
+export interface Artifact {
+  id: string;
+  workspace_id: string;
+  connector: string;
+  source_uri: string;
+  event_type: string;
+  title: string;
+  body: string;
+  preview: string;
+  content_hash: string;
+  metadata?: Record<string, string>;
+  schema_version: string;
+  ingested_at: string;
+}
+
+export interface ArtifactList {
+  workspace_id: string;
+  workspace_path: string;
+  connector?: string;
+  source_uri?: string;
+  query?: string;
+  count: number;
+  artifacts: Artifact[];
+}
+
+export interface ChatQueryRequest {
+  workspace_id: string;
+  workspace_path?: string;
+  message: string;
+  connector?: string;
+  source_uri?: string;
+  timezone?: string;
+  local_date?: string;
+  limit?: number;
+}
+
+export interface ChatQueryResult {
+  intent: "artifacts" | "findings" | "status" | "unsupported" | string;
+  workspace_id: string;
+  workspace_path: string;
+  connector?: string;
+  source_uri?: string;
+  answer: string;
+  summary: string;
+  range_start?: string;
+  range_end?: string;
+  artifact_count: number;
+  artifacts: Artifact[];
+  syncs?: WorkspaceSyncState[];
+}
+
 // ---- Graph types ----
 
 export interface GraphEntityAlias {
@@ -214,12 +316,13 @@ export interface GraphData {
 // ---- Chat types ----
 
 export type ChatRole = "user" | "assistant" | "system";
-export type ChatCardKind = "ingest" | "findings" | "status" | "onboarding";
+export type ChatCardKind = "ingest" | "findings" | "status" | "onboarding" | "query";
 
 export interface ChatCard {
   kind: ChatCardKind;
   ingestResult?: IngestResult;
   findingsResult?: FindingsResult;
+  chatResult?: ChatQueryResult;
   statusMap?: Record<string, boolean>;
   onboardingConnectors?: ConnectorKnowledge[];
 }

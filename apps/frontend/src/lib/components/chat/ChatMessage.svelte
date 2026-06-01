@@ -8,7 +8,7 @@
     const hasCard = !!message.card;
     const card = message.card;
 
-    function severityClass(s: string): string {
+    function severityClass(s?: string): string {
         if (s === "critical" || s === "high") return "sev-high";
         if (s === "medium") return "sev-med";
         return "sev-low";
@@ -59,7 +59,7 @@
                         <h4>Ingestion complete</h4>
                         <p>
                             {r.event_count ?? 0} events · trace
-                            <code>{r.trace_id ?? "—"}</code>
+                            <code>{r.event?.trace_id ?? "—"}</code>
                         </p>
                     </div>
                 {/if}
@@ -77,7 +77,7 @@
                             <ul class="mismatches">
                                 {#each f.mismatches.slice(0, 5) as m}
                                     <li class={severityClass(m.severity)}>
-                                        <strong>{m.severity}</strong> · {m.summary}
+                                        <strong>{m.severity ?? "review"}</strong> · {m.summary ?? m.description ?? m.type ?? m.id}
                                         {#if m.recommended}
                                             <span class="rec"
                                                 >→ {m.recommended}</span

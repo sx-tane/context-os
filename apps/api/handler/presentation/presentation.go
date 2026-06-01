@@ -50,8 +50,8 @@ type Handler struct {
 	entities        repository.EntityRepository
 	syncRepo        repository.SyncRepository
 	parsedWriter    *normalization.DocumentWriter // persists NormalizedDocuments to storage/parsed/
-	semanticMatcher identity.Matcher             // optional Layer-2 semantic identity pass
-	executor        execution.CodexExecutor      // optional assistive execution backend
+	semanticMatcher identity.Matcher              // optional Layer-2 semantic identity pass
+	executor        execution.CodexExecutor       // optional assistive execution backend
 }
 
 // HandlerOption configures optional capabilities on a Handler.
@@ -245,7 +245,7 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 			Connector:    strings.ToLower(strings.TrimSpace(req.Connector)),
 			SourceURI:    strings.TrimSpace(req.URI),
 			LastSyncedAt: &now,
-			EventCount:   0,
+			EventCount:   result.EventCount,
 			Status:       "idle",
 		})
 		scancel()
@@ -278,6 +278,7 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 		Role:          string(role),
 		TraceID:       traceID,
 		Summary:       stagepresentation.RenderSummary(role, result.Mismatches),
+		EventCount:    result.EventCount,
 		MismatchCount: len(result.Mismatches),
 		SeverityCount: severityCount(result.Mismatches),
 		MismatchIDs:   mismatchIDs,

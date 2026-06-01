@@ -43,6 +43,8 @@ apps/api/
   response/
     error.go       — WriteJSON, WriteError, WriteConnectorError helpers
     ingest.go      — shared ingest response contract and connector aliases
+    artifact.go    — local artifact query response projection
+    chat.go        — local chat query response projection
   middleware/
     cors.go        — WithCORS middleware
   docs/
@@ -67,6 +69,11 @@ apps/api/
 | Method | Path                    | Description                                                                              |
 | ------ | ----------------------- | ---------------------------------------------------------------------------------------- |
 | GET    | `/health`               | Liveness check — returns `{"status":"ok"}`                                               |
+| GET    | `/workspace`            | Lists registered local workspaces                                                        |
+| POST   | `/workspace/upsert`     | Registers or updates a local workspace path                                              |
+| GET    | `/workspace/status`     | Returns local event/entity/mismatch counts and connector sync state                      |
+| GET    | `/artifacts`            | Queries local ingested artifacts by workspace, connector, source URI, date range, and text |
+| POST   | `/chat/query`           | Deterministic local natural-language query over workspace artifacts, sync state, and status |
 | GET    | `/github/status`        | Checks `GITHUB_TOKEN` and returns account identity                                       |
 | GET    | `/googledrive/status`   | Checks Google Drive OAuth/service-account/folder setup                                   |
 | POST   | `/googledrive/ingest`   | Ingest Docs, Sheets, and Slides from a Drive folder                                      |
@@ -92,6 +99,10 @@ apps/api/
 | POST   | `/codex/login`          | Run `codex login --device-auth` and stream logs as SSE                                   |
 | POST   | `/codex/plugin-reauth`  | Re-add plugin with `BROWSER=echo`; OAuth URL printed in SSE log (UI not wired — use CLI) |
 | GET    | `/swagger/`             | Interactive Swagger UI (served from generated docs)                                      |
+
+`/artifacts` is DB-backed and does not call live connectors. It requires a workspace scope and accepts optional `connector`, `source_uri`, `q`, `since`, `until`, and `limit` query parameters. `/chat/query` is also local-only: source questions such as "today Slack messages", "recent Jira tickets", or "latest Drive docs" route to artifact queries instead of presentation findings.
+
+Workspace endpoints return explicit API response objects with snake_case JSON fields such as `path`, `created_at`, `event_count`, and `source_uri`; handlers do not expose raw repository structs.
 
 GitHub, Jira, and Slack ingest requests accept `provider`. Use `"token"` or omit it for direct API-token ingestion. Use `"codex"` for Codex CLI plugin ingestion; streaming clients should call the matching `/ingest/stream` endpoint.
 

@@ -78,6 +78,7 @@ func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.S
 		contextGraph.AddRelationships(rels)
 	}
 	result := pipelines.Result{
+		EventCount:    len(rawEvents),
 		Entities:      contextGraph.AllEntities(),
 		Relationships: contextGraph.AllRelationships(),
 		Mismatches:    reasoning.DetectMismatches(contextGraph),

@@ -5,7 +5,7 @@
      */
     import { createEventDispatcher } from "svelte";
     import type { CodexPlugin, ConnectorKind } from "$lib/types";
-    import { runConnectorIngest } from "$lib/ingestRunner";
+    import { postFindings } from "$lib/api";
     import {
         setConnectorKnowledge,
         markKnowledgeInstalled,
@@ -14,6 +14,7 @@
 
     export let codexLoggedIn: boolean;
     export let codexPlugins: CodexPlugin[];
+    export let embedded = false;
     /** Called when user dismisses the panel. */
     export let onClose: () => void = () => {};
 
@@ -148,6 +149,8 @@
 
     async function installAll() {
         installing = true;
+        allDone = false;
+        let completed = 0;
         const toRun = REQUIRED.filter(
             (r) => enabled[r.connector] && uris[r.connector].trim() !== "",
         );
@@ -155,39 +158,37 @@
         for (const r of toRun) {
             const uri = uris[r.connector].trim();
             statuses[r.connector] = "running";
-            logs[r.connector] = "";
+            logs[r.connector] = "Persisting source into the local workspace database...\n";
             setConnectorKnowledge(r.connector, uri, "ingesting");
 
             try {
-                await runConnectorIngest({
+                const res = await postFindings({
+                    workspace_id: $project.workspacePath,
                     connector: r.connector,
                     uri,
                     provider: r.codexPlugin ? "codex" : "token",
-                    setLoading: () => {},
-                    setError: (msg) => {
-                        if (msg) {
-                            logs[r.connector] += "[error] " + msg + "\n";
-                            statuses[r.connector] = "error";
-                            setConnectorKnowledge(r.connector, uri, "error", {
-                                error: msg,
-                            });
-                        }
-                    },
-                    setResult: (res) => {
-                        if (res) {
-                            statuses[r.connector] = "done";
-                            setConnectorKnowledge(r.connector, uri, "ready", {
-                                eventCount: res.event_count ?? 0,
-                            });
-                        }
-                    },
-                    setLiveLog: (update) => {
-                        logs[r.connector] =
-                            typeof update === "function"
-                                ? update(logs[r.connector])
-                                : update;
-                    },
-                    setElapsed: () => {},
+                    role: "pmo",
+                    include_execution: false,
+                    force_refresh: true,
+                });
+                if (!res.ok) {
+                    const msg =
+                        res.body?.message ??
+                        res.body?.error ??
+                        `Request failed with status ${res.status}`;
+                    logs[r.connector] += "[error] " + msg + "\n";
+                    statuses[r.connector] = "error";
+                    setConnectorKnowledge(r.connector, uri, "error", {
+                        error: msg,
+                    });
+                    continue;
+                }
+
+                completed += 1;
+                statuses[r.connector] = "done";
+                logs[r.connector] += `Persisted ${res.body.event_count ?? 0} event(s), ${res.body.mismatch_count ?? 0} finding(s).\n`;
+                setConnectorKnowledge(r.connector, uri, "ready", {
+                    eventCount: res.body.event_count ?? 0,
                 });
             } catch (e) {
                 statuses[r.connector] = "error";
@@ -198,10 +199,12 @@
             }
         }
 
-        markKnowledgeInstalled();
-        allDone = true;
+        allDone = toRun.length > 0 && completed === toRun.length;
+        if (allDone) {
+            markKnowledgeInstalled();
+            dispatch("done");
+        }
         installing = false;
-        dispatch("done");
     }
 
     $: anyEnabled = REQUIRED.some(
@@ -209,29 +212,31 @@
     );
 
     function statusIcon(s: "idle" | "running" | "done" | "error") {
-        if (s === "done") return "✅";
-        if (s === "running") return "⏳";
-        if (s === "error") return "❌";
-        return "⬜";
+        if (s === "done") return "ready";
+        if (s === "running") return "running";
+        if (s === "error") return "error";
+        return "";
     }
 </script>
 
-<div class="ki-overlay">
-    <div class="ki-panel">
+<div class={embedded ? "ki-inline" : "ki-overlay"}>
+    <div class="ki-panel" class:inline={embedded}>
         <div class="ki-header">
             <h2>Install Project Knowledge</h2>
             <p class="subtitle">
                 Connect your data sources. ContextOS will ingest each one and
                 build a knowledge graph you can query in chat.
             </p>
-            <button class="close-btn" on:click={onClose} aria-label="Close"
-                >✕</button
-            >
+            {#if !embedded}
+                <button class="close-btn" on:click={onClose} aria-label="Close"
+                    >Close</button
+                >
+            {/if}
         </div>
 
         {#if !codexLoggedIn}
             <div class="warn-banner">
-                ⚠ Codex CLI is not logged in. Run <code
+                Codex CLI is not logged in. Run <code
                     >codex login --device-auth</code
                 > in your terminal, then reload this page to unlock all connectors.
             </div>
@@ -309,10 +314,10 @@
         <div class="ki-footer">
             {#if allDone}
                 <p class="success-msg">
-                    ✅ Knowledge installed! You can now chat about your project.
+                    Knowledge installed. You can now chat about this workspace.
                 </p>
                 <button class="btn primary" on:click={onClose}
-                    >Start chatting →</button
+                    >Start chatting</button
                 >
             {:else}
                 <button
@@ -341,6 +346,10 @@
         z-index: 100;
     }
 
+    .ki-inline {
+        width: 100%;
+    }
+
     .ki-panel {
         background: #fff;
         border-radius: 1rem;
@@ -351,11 +360,19 @@
         flex-direction: column;
         box-shadow: 0 20px 40px rgba(0 0 0 / 0.2);
     }
+    .ki-panel.inline {
+        width: 100%;
+        max-height: none;
+        border-radius: 0.75rem;
+        border: 1px solid #ddd8cf;
+        box-shadow: none;
+        background: #f4f1e9;
+    }
 
     .ki-header {
         position: sticky;
         top: 0;
-        background: #fff;
+        background: inherit;
         padding: 1.25rem 1.5rem 0.75rem;
         border-bottom: 1px solid #f3f4f6;
     }
@@ -421,8 +438,8 @@
         box-shadow: 0 0 0 3px #eff6ff;
     }
     .connector-card.checked {
-        border-color: #2563eb;
-        background: #f0f7ff;
+        border-color: #1c1b18;
+        background: #ebe8e0;
     }
     .connector-card.disabled {
         opacity: 0.5;
@@ -464,8 +481,13 @@
         color: #6b7280;
     }
     .status-icon {
-        font-size: 0.85rem;
-        margin-left: auto;
+        font-size: 0.65rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #1c1b18;
+        border: 1px solid #8a8678;
+        border-radius: 999px;
+        padding: 1px 6px;
     }
 
     .card-checkbox {

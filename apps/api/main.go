@@ -17,6 +17,8 @@ import (
 	"time"
 
 	_ "context-os/apps/api/docs"
+	handlerartifacts "context-os/apps/api/handler/artifacts"
+	handlerchat "context-os/apps/api/handler/chat"
 	handlercodex "context-os/apps/api/handler/codex"
 	"context-os/apps/api/handler/filesystem"
 	"context-os/apps/api/handler/github"
@@ -31,6 +33,7 @@ import (
 	handlerworkspace "context-os/apps/api/handler/workspace"
 	"context-os/apps/api/middleware"
 	"context-os/internal/aiworker"
+	internalchat "context-os/internal/chat"
 	"context-os/internal/execution"
 	"context-os/internal/identity"
 	"context-os/internal/normalization"
@@ -66,6 +69,8 @@ func main() {
 	var wsHandler *handlerworkspace.Handler
 	var presentationHandler *presentation.Handler
 	var graphHandler *handlergraph.Handler
+	var artifactsHandler *handlerartifacts.Handler
+	var chatHandler *handlerchat.Handler
 	if dbErr == nil {
 		wsStore := store.NewWorkspaceStore(sqlDB)
 		evStore := store.NewEventStore(sqlDB)
@@ -73,7 +78,7 @@ func main() {
 		mismatchStore := store.NewMismatchStore(sqlDB)
 		entityStore := store.NewEntityStore(sqlDB)
 
-	wsHandler = handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore)
+		wsHandler = handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore)
 
 		// Build optional persistence helpers that write to the local storage/ directories.
 		embCache := aiworker.NewEmbeddingCache("storage/embeddings")
@@ -88,6 +93,8 @@ func main() {
 			presentation.WithExecutor(tplExec),
 		)
 		graphHandler = handlergraph.NewHandler(wsStore, entityStore)
+		artifactsHandler = handlerartifacts.NewHandler(wsStore, evStore)
+		chatHandler = handlerchat.NewHandler(internalchat.NewService(wsStore, evStore, syncStore))
 
 		// Start background incremental sync worker.
 		syncWorker := internalsync.NewWorker(wsStore, syncStore, evStore)
@@ -144,6 +151,16 @@ func main() {
 	if graphHandler != nil {
 		routes = append(routes,
 			route{pattern: "/graph", handler: http.HandlerFunc(graphHandler.Query), cors: true},
+		)
+	}
+	if artifactsHandler != nil {
+		routes = append(routes,
+			route{pattern: "/artifacts", handler: http.HandlerFunc(artifactsHandler.Query), cors: true},
+		)
+	}
+	if chatHandler != nil {
+		routes = append(routes,
+			route{pattern: "/chat/query", handler: http.HandlerFunc(chatHandler.Query), cors: true},
 		)
 	}
 

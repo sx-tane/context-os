@@ -27,6 +27,11 @@ Single source of truth for all communication with the Go API (`/api`).
 | `getJSON<T>(path)`                                   | Generic `GET` that deserialises JSON or returns `null` on any error.                                                                             |
 | `postIngest(connector, body, opts)`                  | `POST /<connector>/ingest` with a JSON body; returns a typed discriminated union `{ ok: true, body: IngestResult }                               | { ok: false, body: ApiErrorBody }`. |
 | `postFilesystemUpload(formData, opts)`               | `POST /filesystem/upload` with `multipart/form-data`; same discriminated-union return.                                                           |
+| `getWorkspaces()`                                    | Fetches registered API workspaces and returns an empty list when unavailable.                                                                     |
+| `upsertWorkspace(path, name)`                        | Registers or updates a local workspace path.                                                                                                     |
+| `getWorkspaceStatus(path)`                           | Fetches workspace event/entity/mismatch counts and connector sync state.                                                                          |
+| `getArtifacts(params)`                               | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit.                            |
+| `postChatQuery(body, opts)`                          | Sends deterministic local chat questions to `POST /chat/query`; source questions return artifact-backed answers instead of presentation findings.  |
 | `streamCodexIngest(connector, body, handlers, opts)` | Opens an SSE stream to `POST /<connector>/ingest` for Codex-backed connectors; dispatches `onLog`, `onStatus`, `onResult`, and `onError` events. |
 | `streamCodexReauth(plugin, onLog, opts)`             | Opens an SSE stream to `POST /codex/plugin-reauth?plugin=…`; forwards each log line to `onLog`.                                                  |
 | `streamCodexLogin(onLog, opts)`                      | Opens an SSE stream to `POST /codex/login`; forwards each log line to `onLog`.                                                                   |
@@ -53,7 +58,7 @@ Central type registry for the frontend.
 | --------------------------- | ------------------------------------------------------------------------------------- |
 | `ServiceStatus`             | `"checking" \| "ok" \| "unreachable"` — health probe result.                          |
 | `IngestProvider`            | `"token" \| "codex"` — how a connector is authenticated.                              |
-| `ConnectorKind`             | `"github" \| "slack" \| "jira" \| "filesystem"` — all known connectors.               |
+| `ConnectorKind`             | `"github" \| "slack" \| "jira" \| "filesystem" \| "googledrive" \| "notion" \| "sharepoint"` — all known connectors. |
 | `CodexConnectorKind`        | Subset of `ConnectorKind` that supports Codex SSE streaming.                          |
 | `DirectSourceConnectorKind` | Complement of `CodexConnectorKind`; connectors that only use direct POST.             |
 | `CodexPlugin`               | Name, `installed`, and `enabled` flags from the Codex status API.                     |
@@ -62,6 +67,10 @@ Central type registry for the frontend.
 | `SourceMetadataField`       | Descriptor for a metadata field rendered inside `SourceConnector`.                    |
 | `SupportedFormat`           | One row in a supported-formats table (format name, extensions, extraction note).      |
 | `SourceConnectorConfig`     | Full static config that drives a `SourceConnector` card.                              |
+| `WorkspaceList`             | API response for registered local workspaces.                                        |
+| `ArtifactList`              | API response for local ingested source artifacts.                                    |
+| `ChatQueryRequest`          | Request body for deterministic local chat queries.                                   |
+| `ChatQueryResult`           | Local chat answer with intent, answer text, artifact evidence, range, and sync state. |
 
 ---
 

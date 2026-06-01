@@ -1,43 +1,39 @@
 # Frontend App
 
-SvelteKit application surface for ContextOS — chat-first, project-scoped delivery intelligence.
+SvelteKit application surface for ContextOS — local-first, workspace-scoped delivery intelligence.
 
 ## Routes
 
 | Route | Purpose |
 |---|---|
-| `/` | **Chat-first homepage.** Conversational interface for delivery analysis. Sidebar shows project identity, connector knowledge state, and Codex CLI status. |
-| `/connectors` | Connector debug surface (preserved from previous homepage). Useful for testing individual connector ingestion flows. |
-| `/findings` | Advanced findings viewer. Role-based PMO/presentation/service/QA/architecture findings with mismatch detail. |
+| `/` | **Single-window product workspace.** Left rail lists workspaces and sources, center surface handles dashboard/search/chat commands, right truth panel shows answer, evidence, analysis, and graph. |
+| `/connectors` | Connector debug surface, preserved by direct URL but not linked from the main product window. |
+| `/findings` | Advanced findings viewer, preserved by direct URL but not linked from the main product window. |
 
-## Chat-First Workflow
+## Product Window Workflow
 
 On first visit:
-1. The **Knowledge Installation Wizard** opens automatically (`+ Install Knowledge` button).
-2. Select the connectors you want to enable — GitHub, Jira, Slack, Notion, SharePoint/OneDrive, Google Drive, or Filesystem.
-3. Enter the URI for each connector (repo, channel, project URL, etc.).
-4. Click **Install Knowledge** — each connector is ingested sequentially with live progress streaming.
-5. Once complete, chat with your project. Try asking:
-   - `show findings`
-   - `status`
-   - `help`
+1. Pick or add a workspace from the left rail. Workspace state is local and path-scoped.
+2. Open **ADD SOURCE** to configure GitHub, Jira, Slack, Notion, SharePoint/OneDrive, Google Drive, or Filesystem.
+3. Source setup appears inline inside the product window instead of as a blocking modal.
+4. Ask local source questions in the command bar, for example `give me today slack messages`, `recent jira tickets`, or `latest drive docs`.
+5. The right truth panel shows the local answer, cited artifacts, analysis findings, and graph entities.
 
 ## Project Identity
 
-Projects are keyed by **workspace folder path** (stored in `localStorage`). Click the project name in the sidebar to change the path. Each workspace gets its own chat history and knowledge state.
+Projects are keyed by **workspace folder path** (stored in `localStorage` and mirrored to the API workspace table). The home screen can list, add, and switch multiple workspaces. Each workspace gets its own chat history and connector knowledge state.
 
 ## Chat Commands
 
 | Command | Behavior |
 |---|---|
-| `show findings` | Run analysis and show mismatches for latest ingested connector |
-| `status` | Show connector and Codex plugin readiness |
-| `install knowledge` | Open the Knowledge Installation Wizard |
+| source question | Calls `POST /chat/query` and answers from local ingested artifacts only |
+| `show findings` | Runs analysis and shows mismatches for the latest ready connector |
+| `status` | Routed through local chat status handling |
+| `install knowledge` / `add source` | Opens the inline source setup panel |
 | `clear` | Clear chat history for current project |
-| `connectors` | Navigate to connector debug page |
-| `help` | Show command reference |
 
-Natural language is also routed — questions about mismatches, delivery gaps, or status are matched to the appropriate backend call.
+Natural language source questions do not fall back to findings. If no matching local artifact exists, the answer says no local data was found.
 
 ## Initial Knowledge Installment
 
@@ -62,13 +58,16 @@ The `KnowledgeInstall` component (`src/lib/components/knowledge/KnowledgeInstall
 
 ```mermaid
 flowchart TD
-    CHAT[/ chat homepage] --> STORE[projectStore.ts]
+    CHAT[/ product workspace] --> STORE[projectStore.ts]
     CHAT --> CMDS[Chat command router]
+    CMDS --> QUERY[postChatQuery]
     CMDS --> INGEST[runConnectorIngest]
     CMDS --> FINDINGS[postFindings]
-    CMDS --> STATUS[checkCodexStatus]
+    CHAT --> GRAPH[getGraphData]
     INGEST --> API[api.ts]
+    QUERY --> API
     FINDINGS --> API
+    GRAPH --> API
     STORE --> LS[(localStorage)]
     KI[KnowledgeInstall.svelte] --> INGEST
     API --> BACKEND[Go API]
@@ -103,12 +102,6 @@ Connectors are **Codex-only by default**. The wizard shows a warning and disable
 | Word document | `.docx` | Paragraph text |
 | PDF | `.pdf` | Best-effort page text |
 | PowerPoint | `.pptx` | Slide text |
-
-
-## Routes
-
-- `/` — connector and ingestion debug workspace.
-- `/findings` — graph-backed findings UI with role-specific summaries, PMO view model, and assistive execution metadata.
 
 ## Type generation
 

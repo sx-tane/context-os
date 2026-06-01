@@ -1,0 +1,21 @@
+package request
+
+// ChatQuery is the JSON body accepted by POST /chat/query.
+type ChatQuery struct {
+	// WorkspaceID is the selected workspace path or stored workspace identifier.
+	WorkspaceID string `json:"workspace_id" example:"/home/user/myproject"`
+	// WorkspacePath is an optional explicit workspace path; it takes precedence over WorkspaceID.
+	WorkspacePath string `json:"workspace_path" example:"/home/user/myproject"`
+	// Message is the user question to answer from local ContextOS data.
+	Message string `json:"message" example:"give me today's Slack messages"`
+	// Connector optionally pins the query to a connector such as slack, github, jira, or filesystem.
+	Connector string `json:"connector" example:"slack"`
+	// SourceURI optionally pins the query to a channel, repository, folder, or document URI.
+	SourceURI string `json:"source_uri" example:"#delivery-team"`
+	// Timezone is the user's IANA timezone, used for local date words such as today.
+	Timezone string `json:"timezone" example:"Asia/Kuala_Lumpur"`
+	// LocalDate is the user's current local date in YYYY-MM-DD form.
+	LocalDate string `json:"local_date" example:"2026-06-01"`
+	// Limit caps returned artifacts.
+	Limit int `json:"limit" example:"20"`
+}

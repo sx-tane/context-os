@@ -4,6 +4,84 @@
  */
 
 export interface paths {
+  "/artifacts": {
+    /** Returns workspace-scoped source artifacts filtered by connector, source, time range, and text. */
+    get: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+          /** Connector name */
+          connector?: string;
+          /** Source URI, channel, repository, or folder */
+          source_uri?: string;
+          /** Text search */
+          q?: string;
+          /** RFC3339 inclusive lower bound */
+          since?: string;
+          /** RFC3339 exclusive upper bound */
+          until?: string;
+          /** Maximum artifacts */
+          limit?: number;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.ArtifactList"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/chat/query": {
+    /** Answers local source, status, and findings-intent questions without falling back to mismatch analysis. */
+    post: {
+      parameters: {
+        body: {
+          /** Local chat query */
+          body: definitions["request.ChatQuery"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.ChatQuery"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/codex/login": {
     /** Runs `codex login --device-auth` and streams log lines as SSE events. */
     post: {
@@ -272,6 +350,37 @@ export interface paths {
         };
         /** Method Not Allowed */
         405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/graph": {
+    /** Returns persisted canonical entities for a workspace, optionally filtered by entity type. */
+    get: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+          /** Filter by entity type (e.g. feature, person, service) */
+          entity_type?: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
           schema: { [key: string]: string };
         };
       };
@@ -782,6 +891,24 @@ export interface definitions {
     | "relationship.created"
     | "mismatch.detected"
     | "codex.analysis.completed";
+  "repository.ConnectorSync": {
+    /** @description Connector is the source connector name. */
+    connector?: string;
+    /** @description Cursor is the replay checkpoint used for incremental sync. */
+    cursor?: string;
+    /** @description EventCount is the number of events ingested in the last sync run. */
+    eventCount?: number;
+    /** @description LastError is the last error message, empty if no error. */
+    lastError?: string;
+    /** @description LastSyncedAt is when the last successful sync completed, nil if never. */
+    lastSyncedAt?: string;
+    /** @description SourceURI is the URI this sync record covers. */
+    sourceURI?: string;
+    /** @description Status is the current sync state: idle | syncing | error. */
+    status?: string;
+    /** @description WorkspaceID links the record to its workspace. */
+    workspaceID?: string;
+  };
   "repository.Workspace": {
     /** @description CreatedAt is the UTC timestamp when the workspace was first registered. */
     createdAt?: string;
@@ -793,6 +920,48 @@ export interface definitions {
     path?: string;
     /** @description UpdatedAt is the UTC timestamp of the last write to the workspace row. */
     updatedAt?: string;
+  };
+  "request.ChatQuery": {
+    /**
+     * @description Connector optionally pins the query to a connector such as slack, github, jira, or filesystem.
+     * @example slack
+     */
+    connector?: string;
+    /**
+     * @description Limit caps returned artifacts.
+     * @example 20
+     */
+    limit?: number;
+    /**
+     * @description LocalDate is the user's current local date in YYYY-MM-DD form.
+     * @example 2026-06-01
+     */
+    local_date?: string;
+    /**
+     * @description Message is the user question to answer from local ContextOS data.
+     * @example give me today's Slack messages
+     */
+    message?: string;
+    /**
+     * @description SourceURI optionally pins the query to a channel, repository, folder, or document URI.
+     * @example #delivery-team
+     */
+    source_uri?: string;
+    /**
+     * @description Timezone is the user's IANA timezone, used for local date words such as today.
+     * @example Asia/Kuala_Lumpur
+     */
+    timezone?: string;
+    /**
+     * @description WorkspaceID is the selected workspace path or stored workspace identifier.
+     * @example /home/user/myproject
+     */
+    workspace_id?: string;
+    /**
+     * @description WorkspacePath is an optional explicit workspace path; it takes precedence over WorkspaceID.
+     * @example /home/user/myproject
+     */
+    workspace_path?: string;
   };
   "request.FilesystemIngest": {
     /** @example Optional raw content instead of reading from URI */
@@ -912,6 +1081,43 @@ export interface definitions {
     token?: string;
     /** @example slack://C1234567890 */
     uri?: string;
+  };
+  "response.Artifact": {
+    body?: string;
+    connector?: string;
+    content_hash?: string;
+    event_type?: string;
+    id?: string;
+    ingested_at?: string;
+    metadata?: { [key: string]: string };
+    preview?: string;
+    schema_version?: string;
+    source_uri?: string;
+    title?: string;
+    workspace_id?: string;
+  };
+  "response.ArtifactList": {
+    artifacts?: definitions["response.Artifact"][];
+    connector?: string;
+    count?: number;
+    query?: string;
+    source_uri?: string;
+    workspace_id?: string;
+    workspace_path?: string;
+  };
+  "response.ChatQuery": {
+    answer?: string;
+    artifact_count?: number;
+    artifacts?: definitions["response.Artifact"][];
+    connector?: string;
+    intent?: string;
+    range_end?: string;
+    range_start?: string;
+    source_uri?: string;
+    summary?: string;
+    syncs?: definitions["repository.ConnectorSync"][];
+    workspace_id?: string;
+    workspace_path?: string;
   };
   "response.ExecutionEvidence": {
     assistive?: boolean;

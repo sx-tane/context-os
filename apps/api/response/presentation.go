@@ -9,6 +9,7 @@ type PresentationFindings struct {
 	Role          string            `json:"role"`
 	TraceID       string            `json:"trace_id"`
 	Summary       string            `json:"summary"`
+	EventCount    int               `json:"event_count"`
 	MismatchCount int               `json:"mismatch_count"`
 	SeverityCount map[string]int    `json:"severity_count"`
 	MismatchIDs   []string          `json:"mismatch_ids"`

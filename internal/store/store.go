@@ -75,7 +75,7 @@ func (s *WorkspaceStore) List(ctx context.Context) ([]repository.Workspace, erro
 	if err != nil {
 		return nil, fmt.Errorf("store: list workspaces: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []repository.Workspace
 	for rows.Next() {
@@ -108,6 +108,9 @@ func (s *EventStore) UpsertBatch(ctx context.Context, workspaceID string, evts [
 	}
 	var inserted int
 	for _, e := range evts {
+		if e.IngestedAt.IsZero() {
+			e.IngestedAt = time.Now().UTC()
+		}
 		metaJSON, err := json.Marshal(e.Metadata)
 		if err != nil {
 			return inserted, fmt.Errorf("store: marshal metadata for event %s: %w", e.ID, err)
@@ -133,19 +136,43 @@ func (s *EventStore) UpsertBatch(ctx context.Context, workspaceID string, evts [
 
 // ListByWorkspace returns events for a workspace ordered by ingested_at desc.
 func (s *EventStore) ListByWorkspace(ctx context.Context, workspaceID, connector string, limit int) ([]repository.IngestEvent, error) {
+	return s.Query(ctx, workspaceID, repository.EventQuery{
+		Connector: connector,
+		Limit:     limit,
+	})
+}
+
+// Query returns events for a workspace ordered by ingested_at desc using optional artifact filters.
+func (s *EventStore) Query(ctx context.Context, workspaceID string, eventQuery repository.EventQuery) ([]repository.IngestEvent, error) {
 	query := `SELECT id, workspace_id, connector, source_uri, event_type, title, body,
 	                 content_hash, metadata, schema_version, ingested_at
 	          FROM ingest_events
 	          WHERE workspace_id = $1`
 	args := []any{workspaceID}
 
-	if connector != "" {
-		args = append(args, connector)
+	if eventQuery.Connector != "" {
+		args = append(args, strings.ToLower(strings.TrimSpace(eventQuery.Connector)))
 		query += fmt.Sprintf(" AND connector = $%d", len(args))
 	}
+	if eventQuery.SourceURI != "" {
+		args = append(args, strings.TrimSpace(eventQuery.SourceURI))
+		query += fmt.Sprintf(" AND source_uri = $%d", len(args))
+	}
+	if eventQuery.Since != nil {
+		args = append(args, eventQuery.Since.UTC())
+		query += fmt.Sprintf(" AND ingested_at >= $%d", len(args))
+	}
+	if eventQuery.Until != nil {
+		args = append(args, eventQuery.Until.UTC())
+		query += fmt.Sprintf(" AND ingested_at < $%d", len(args))
+	}
+	if eventQuery.Text != "" {
+		args = append(args, "%"+strings.ToLower(strings.TrimSpace(eventQuery.Text))+"%")
+		query += fmt.Sprintf(" AND (LOWER(title) LIKE $%d OR LOWER(body) LIKE $%d OR LOWER(source_uri) LIKE $%d)", len(args), len(args), len(args))
+	}
 	query += " ORDER BY ingested_at DESC"
-	if limit > 0 {
-		args = append(args, limit)
+	if eventQuery.Limit > 0 {
+		args = append(args, eventQuery.Limit)
 		query += fmt.Sprintf(" LIMIT $%d", len(args))
 	}
 
@@ -153,7 +180,7 @@ func (s *EventStore) ListByWorkspace(ctx context.Context, workspaceID, connector
 	if err != nil {
 		return nil, fmt.Errorf("store: list events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []repository.IngestEvent
 	for rows.Next() {
@@ -288,7 +315,7 @@ func (s *EntityStore) ListEntities(ctx context.Context, workspaceID, entityType 
 	if err != nil {
 		return nil, fmt.Errorf("store: list entities: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []entities.CanonicalEntity
 	for rows.Next() {
@@ -386,7 +413,7 @@ func (s *MismatchStore) ListByWorkspace(ctx context.Context, workspaceID, severi
 	if err != nil {
 		return nil, fmt.Errorf("store: list mismatches: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []types.Mismatch
 	for rows.Next() {
@@ -473,7 +500,7 @@ func (s *SyncStore) ListByWorkspace(ctx context.Context, workspaceID string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("store: list connector syncs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []repository.ConnectorSync
 	for rows.Next() {

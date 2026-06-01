@@ -13,11 +13,11 @@ import (
 // Workspace is the stored record for a ContextOS workspace.
 type Workspace struct {
 	// ID is the primary key derived from the workspace path.
-	ID        string
+	ID string
 	// Name is the human-readable workspace name.
-	Name      string
+	Name string
 	// Path is the absolute local folder path used as the project key.
-	Path      string
+	Path string
 	// CreatedAt is the UTC timestamp when the workspace was first registered.
 	CreatedAt time.Time
 	// UpdatedAt is the UTC timestamp of the last write to the workspace row.
@@ -27,47 +27,63 @@ type Workspace struct {
 // IngestEvent is the stored record for one raw source event captured by ingestion.
 type IngestEvent struct {
 	// ID is the replay-stable event identifier from the source connector.
-	ID            string
+	ID string
 	// WorkspaceID links the event to its workspace.
-	WorkspaceID   string
+	WorkspaceID string
 	// Connector is the source connector name, e.g. "github" or "slack".
-	Connector     string
+	Connector string
 	// SourceURI is the URI of the source resource that produced the event.
-	SourceURI     string
+	SourceURI string
 	// EventType is the domain event type, e.g. "document.ingested".
-	EventType     string
+	EventType string
 	// Title is the trimmed subject line of the source artifact.
-	Title         string
+	Title string
 	// Body is the trimmed content body of the source artifact.
-	Body          string
+	Body string
 	// ContentHash is the SHA-256 of the normalised body used for deduplication.
-	ContentHash   string
+	ContentHash string
 	// Metadata holds key-value pairs carried from the source event.
-	Metadata      map[string]string
+	Metadata map[string]string
 	// SchemaVersion is the event envelope schema version.
 	SchemaVersion string
 	// IngestedAt is the UTC time this event was persisted.
-	IngestedAt    time.Time
+	IngestedAt time.Time
+}
+
+// EventQuery describes workspace-scoped filters for ingested source artifacts.
+type EventQuery struct {
+	// Connector filters artifacts to one connector when non-empty.
+	Connector string
+	// SourceURI filters artifacts to one channel, repository, folder, or source URI when non-empty.
+	SourceURI string
+	// Text filters artifacts whose title, body, or source URI contains the value when non-empty.
+	Text string
+	// Since filters artifacts ingested at or after this timestamp when set.
+	Since *time.Time
+	// Until filters artifacts ingested before this timestamp when set.
+	Until *time.Time
+	// Limit caps result count when greater than zero.
+	Limit int
 }
 
 // ConnectorSync is the stored cursor and sync state for one connector in a workspace.
 type ConnectorSync struct {
 	// WorkspaceID links the record to its workspace.
-	WorkspaceID   string
+	WorkspaceID string
 	// Connector is the source connector name.
-	Connector     string
+	Connector string
 	// SourceURI is the URI this sync record covers.
-	SourceURI     string
+	SourceURI string
 	// Cursor is the replay checkpoint used for incremental sync.
-	Cursor        string
+	Cursor string
 	// LastSyncedAt is when the last successful sync completed, nil if never.
-	LastSyncedAt  *time.Time
+	LastSyncedAt *time.Time
 	// EventCount is the number of events ingested in the last sync run.
-	EventCount    int
+	EventCount int
 	// Status is the current sync state: idle | syncing | error.
-	Status        string
+	Status string
 	// LastError is the last error message, empty if no error.
-	LastError     string
+	LastError string
 }
 
 // WorkspaceRepository manages workspace records.
@@ -88,6 +104,8 @@ type EventRepository interface {
 	// ListByWorkspace returns events for a workspace ordered by ingested_at desc.
 	// If connector is non-empty, results are filtered by connector.
 	ListByWorkspace(ctx context.Context, workspaceID, connector string, limit int) ([]IngestEvent, error)
+	// Query returns events for a workspace ordered by ingested_at desc using optional artifact filters.
+	Query(ctx context.Context, workspaceID string, query EventQuery) ([]IngestEvent, error)
 	// Count returns the total number of events for a workspace and optional connector.
 	Count(ctx context.Context, workspaceID, connector string) (int, error)
 }

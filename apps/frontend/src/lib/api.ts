@@ -1,5 +1,8 @@
 import type {
   ApiErrorBody,
+  ArtifactList,
+  ChatQueryRequest,
+  ChatQueryResult,
   CodexConnectorKind,
   ConnectorKind,
   FindingsRequest,
@@ -9,6 +12,7 @@ import type {
   IngestResult,
   ServiceStatus,
   WorkspaceRecord,
+  WorkspaceSyncState,
   WorkspaceStatus,
 } from "$lib/types";
 
@@ -203,6 +207,17 @@ async function readLogStream(
 
 // ---- Workspace API helpers ----
 
+/** Fetch all registered workspaces. Returns an empty list on error. */
+export async function getWorkspaces(): Promise<WorkspaceRecord[]> {
+  try {
+    const res = await fetch(`${API_URL}/workspace`);
+    if (!res.ok) return [];
+    return normalizeWorkspaceList(await readJSON(res));
+  } catch {
+    return [];
+  }
+}
+
 /** Register or update a workspace by path. Returns the stored record or null on error. */
 export async function upsertWorkspace(
   path: string,
@@ -216,7 +231,7 @@ export async function upsertWorkspace(
     });
     if (!res.ok) return null;
     const body = await readJSON(res);
-    return (body as unknown as WorkspaceRecord) ?? null;
+    return normalizeWorkspaceRecord(body);
   } catch {
     return null;
   }
@@ -231,10 +246,161 @@ export async function getWorkspaceStatus(
       `${API_URL}/workspace/status?path=${encodeURIComponent(path)}`,
     );
     if (!res.ok) return null;
-    return (await readJSON(res)) as unknown as WorkspaceStatus;
+    return normalizeWorkspaceStatus(await readJSON(res));
   } catch {
     return null;
   }
+}
+
+function normalizeWorkspaceList(body: unknown): WorkspaceRecord[] {
+  const record = asRecord(body);
+  const rawWorkspaces = asArray(record?.workspaces ?? record?.Workspaces);
+  return rawWorkspaces
+    .map(normalizeWorkspaceRecord)
+    .filter((workspace): workspace is WorkspaceRecord => workspace !== null);
+}
+
+function normalizeWorkspaceRecord(body: unknown): WorkspaceRecord | null {
+  const record = asRecord(body);
+  if (!record) return null;
+  const path = stringField(record, "path", "Path").trim();
+  if (!path) return null;
+  const name =
+    stringField(record, "name", "Name").trim() ||
+    path.split("/").filter(Boolean).pop() ||
+    "workspace";
+  const workspace: WorkspaceRecord = {
+    id: stringField(record, "id", "ID").trim() || path,
+    name,
+    path,
+  };
+  const createdAt = stringField(record, "created_at", "CreatedAt").trim();
+  if (createdAt) workspace.created_at = createdAt;
+  const updatedAt = stringField(record, "updated_at", "UpdatedAt").trim();
+  if (updatedAt) workspace.updated_at = updatedAt;
+  return workspace;
+}
+
+function normalizeWorkspaceStatus(body: unknown): WorkspaceStatus {
+  const record = asRecord(body);
+  if (!record) return {};
+  const status: WorkspaceStatus = {};
+  const workspace = normalizeWorkspaceRecord(record.workspace ?? record.Workspace);
+  if (workspace) status.workspace = workspace;
+  const eventCount = numberField(record, "event_count", "EventCount");
+  if (eventCount !== undefined) status.event_count = eventCount;
+  const entityCount = numberField(record, "entity_count", "EntityCount");
+  if (entityCount !== undefined) status.entity_count = entityCount;
+  const mismatchCount = numberField(record, "mismatch_count", "MismatchCount");
+  if (mismatchCount !== undefined) status.mismatch_count = mismatchCount;
+  const syncs = asArray(record.syncs ?? record.Syncs)
+    .map(normalizeWorkspaceSync)
+    .filter((sync): sync is WorkspaceSyncState => sync !== null);
+  if (syncs.length > 0) status.syncs = syncs;
+  return status;
+}
+
+function normalizeWorkspaceSync(body: unknown): WorkspaceSyncState | null {
+  const record = asRecord(body);
+  if (!record) return null;
+  const connector = stringField(record, "connector", "Connector").trim();
+  const sourceURI = stringField(record, "source_uri", "SourceURI").trim();
+  if (!connector && !sourceURI) return null;
+  const sync: WorkspaceSyncState = {
+    connector,
+    source_uri: sourceURI,
+  };
+  const cursor = stringField(record, "cursor", "Cursor").trim();
+  if (cursor) sync.cursor = cursor;
+  const lastSyncedAt = stringField(record, "last_synced_at", "LastSyncedAt").trim();
+  if (lastSyncedAt) sync.last_synced_at = lastSyncedAt;
+  const eventCount = numberField(record, "event_count", "EventCount");
+  if (eventCount !== undefined) sync.event_count = eventCount;
+  const currentStatus = stringField(record, "status", "Status").trim();
+  if (currentStatus) sync.status = currentStatus;
+  return sync;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function stringField(
+  record: Record<string, unknown>,
+  snakeKey: string,
+  legacyKey: string,
+): string {
+  const value = record[snakeKey] ?? record[legacyKey];
+  return typeof value === "string" ? value : "";
+}
+
+function numberField(
+  record: Record<string, unknown>,
+  snakeKey: string,
+  legacyKey: string,
+): number | undefined {
+  const value = record[snakeKey] ?? record[legacyKey];
+  return typeof value === "number" ? value : undefined;
+}
+
+/** Query local source artifacts from the workspace database. */
+export async function getArtifacts(params: {
+  workspace_id: string;
+  connector?: string;
+  source_uri?: string;
+  q?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+}): Promise<ArtifactList | null> {
+  try {
+    const query = new URLSearchParams({ workspace_id: params.workspace_id });
+    if (params.connector) query.set("connector", params.connector);
+    if (params.source_uri) query.set("source_uri", params.source_uri);
+    if (params.q) query.set("q", params.q);
+    if (params.since) query.set("since", params.since);
+    if (params.until) query.set("until", params.until);
+    if (params.limit) query.set("limit", String(params.limit));
+    const res = await fetch(`${API_URL}/artifacts?${query.toString()}`);
+    if (!res.ok) return null;
+    return (await readJSON(res)) as unknown as ArtifactList;
+  } catch {
+    return null;
+  }
+}
+
+/** Ask a deterministic local chat question over workspace source artifacts. */
+export async function postChatQuery(
+  body: ChatQueryRequest,
+  options: RequestOptions = {},
+): Promise<
+  | { ok: true; status: number; body: ChatQueryResult }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  const res = await fetch(`${API_URL}/chat/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  const responseBody = await readJSON(res);
+  if (res.ok) {
+    return {
+      ok: true,
+      status: res.status,
+      body: responseBody as unknown as ChatQueryResult,
+    };
+  }
+  return {
+    ok: false,
+    status: res.status,
+    body: responseBody,
+  };
 }
 
 /** Fetch entity graph data for a workspace, optionally filtered by entity type. */

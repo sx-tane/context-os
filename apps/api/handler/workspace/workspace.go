@@ -63,10 +63,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
 	}
-	response.WriteJSON(w, http.StatusOK, map[string]any{
-		"workspaces": ws,
-		"count":      len(ws),
-	})
+	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceList(ws))
 }
 
 // Upsert handles POST /workspace.
@@ -117,7 +114,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
 	}
-	response.WriteJSON(w, http.StatusOK, ws)
+	response.WriteJSON(w, http.StatusOK, response.NewWorkspace(ws))
 }
 
 // Status handles GET /workspace/status?path=<path>.
@@ -185,13 +182,7 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	response.WriteJSON(w, http.StatusOK, map[string]any{
-		"workspace":      ws,
-		"event_count":    eventCount,
-		"entity_count":   entityCount,
-		"mismatch_count": mismatchCount,
-		"syncs":          syncs,
-	})
+	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceStatus(*ws, eventCount, entityCount, mismatchCount, syncs))
 }
 
 // upsertRequest is the decoded body for POST /workspace.
