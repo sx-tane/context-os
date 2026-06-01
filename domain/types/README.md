@@ -5,29 +5,18 @@ Package `domain/types` contains the serializable data structures shared across p
 ## Normalized Documents
 
 ```go
-type SourceSpan struct {
-    Field string `json:"field"`
-    Start int    `json:"start"`
-    End   int    `json:"end"`
-    Line  int    `json:"line"`
-    Path  string `json:"path"`
-}
-
 type NormalizedDocument struct {
-    ID            string            `json:"id"`
-    Source        string            `json:"source"`
-    SourceType    string            `json:"source_type"`
-    Title         string            `json:"title"`
-    Body          string            `json:"body"`
-    ContentHash   string            `json:"content_hash"`
-    SchemaVersion string            `json:"schema_version"`
-    Spans         []SourceSpan      `json:"spans"`
-    Metadata      map[string]string `json:"metadata"`
-    NormalizedAt  time.Time         `json:"normalized_at"`
+    ID           string            `json:"id"`
+    Source       string            `json:"source"`
+    SourceType   string            `json:"source_type"`
+    Title        string            `json:"title"`
+    Body         string            `json:"body"`
+    Metadata     map[string]string `json:"metadata"`
+    NormalizedAt time.Time         `json:"normalized_at"`
 }
 ```
 
-Normalized documents are the common processing unit after ingestion. They should preserve source identity and enough metadata to trace back to the original artifact. `ContentHash` is the hex SHA-256 of the canonical title+body and enables replay and change detection; `SchemaVersion` is carried from the originating event; `Spans` locate canonical text back inside the source artifact via `SourceSpan`.
+Normalized documents are the common processing unit after ingestion. They should preserve source identity and enough metadata to trace back to the original artifact.
 
 ## Classification
 
@@ -47,24 +36,14 @@ const (
 ```
 
 ```go
-type ScoredLabel struct {
-    Classification Classification `json:"classification"`
-    Confidence     float64        `json:"confidence"`
-    Rule           string         `json:"rule"`
-    Evidence       []string       `json:"evidence"`
-}
-
 type ClassifiedDocument struct {
     Document       NormalizedDocument `json:"document"`
     Classification Classification     `json:"classification"`
     Confidence     float64            `json:"confidence"`
-    Labels         []ScoredLabel      `json:"labels"`
-    MatchedRules   []string           `json:"matched_rules"`
-    Evidence       []string           `json:"evidence"`
 }
 ```
 
-Classification routes a document toward domain-specific extraction and reasoning behavior. The current classifier is deterministic and confidence values are rule scores. `Labels` records every signal that fired (not just the winning one) so ambiguous multi-signal documents lose no information; `MatchedRules` and `Evidence` make each classification explainable.
+Classification routes a document toward domain-specific extraction and reasoning behavior. The current classifier is deterministic and confidence values are rule scores.
 
 ## Entities
 
@@ -83,20 +62,16 @@ const (
 
 ```go
 type Entity struct {
-    ID               string            `json:"id"`
-    Type             EntityType        `json:"type"`
-    Name             string            `json:"name"`
-    RawMention       string            `json:"raw_mention"`
-    SourceID         string            `json:"source_id"`
-    Confidence       float64           `json:"confidence"`
-    ExtractionMethod string            `json:"extraction_method"`
-    Spans            []SourceSpan      `json:"spans"`
-    Aliases          []string          `json:"aliases"`
-    Metadata         map[string]string `json:"metadata"`
+    ID       string            `json:"id"`
+    Type     EntityType        `json:"type"`
+    Name     string            `json:"name"`
+    SourceID string            `json:"source_id"`
+    Aliases  []string          `json:"aliases"`
+    Metadata map[string]string `json:"metadata"`
 }
 ```
 
-Entities are candidate or canonical domain concepts depending on stage. `SourceID` links back to the normalized document or source event. `RawMention` preserves the exact text fragment the entity came from, `Confidence` and `ExtractionMethod` explain how certain the extraction is and how it was produced, and `Spans` locate the mention inside the source artifact.
+Entities are candidate or canonical domain concepts depending on stage. `SourceID` links back to the normalized document or source event.
 
 ## Relationships
 

@@ -40,6 +40,27 @@ type GoogleDriveIngest struct {
 	Metadata           map[string]string `json:"metadata"`
 }
 
+// NotionIngest is the JSON body accepted by POST /notion/ingest.
+type NotionIngest struct {
+	URI      string            `json:"uri"      example:"notion://page/abc12345-1234-1234-1234-abcdefabcdef"`
+	Content  string            `json:"content"  example:"Optional raw content instead of fetching from Notion"`
+	Token    string            `json:"token"    example:"secret_xxxx"`
+	Provider string            `json:"provider" example:"token"`
+	Metadata map[string]string `json:"metadata"`
+}
+
+// SharePointIngest is the JSON body accepted by POST /sharepoint/ingest.
+type SharePointIngest struct {
+	URI          string            `json:"uri"           example:"sharepoint://sites/mysite/items/abcdef01"`
+	Content      string            `json:"content"       example:"Optional raw content instead of fetching from Graph"`
+	Token        string            `json:"token"         example:"eyJ0..."`
+	TenantID     string            `json:"tenant_id"     example:"00000000-0000-0000-0000-000000000000"`
+	ClientID     string            `json:"client_id"     example:"11111111-1111-1111-1111-111111111111"`
+	ClientSecret string            `json:"client_secret" example:"secret~value"`
+	Provider     string            `json:"provider"      example:"token"`
+	Metadata     map[string]string `json:"metadata"`
+}
+
 // FilesystemIngest is the JSON body accepted by POST /filesystem/ingest for local files or folders.
 type FilesystemIngest struct {
 	URI      string            `json:"uri"     example:"storage/raw/README.md"`

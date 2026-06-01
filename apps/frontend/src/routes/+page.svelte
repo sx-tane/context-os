@@ -6,6 +6,8 @@
   import StatusSection from "$lib/components/feedback/StatusSection.svelte";
   import GitHubConnector from "$lib/components/connectors/GitHubConnector.svelte";
   import GoogleDriveConnector from "$lib/components/connectors/GoogleDriveConnector.svelte";
+  import NotionConnector from "$lib/components/connectors/NotionConnector.svelte";
+  import SharePointConnector from "$lib/components/connectors/SharePointConnector.svelte";
   import JiraConnector from "$lib/components/connectors/JiraConnector.svelte";
   import SlackConnector from "$lib/components/connectors/SlackConnector.svelte";
   import SourceConnector from "$lib/components/connectors/SourceConnector.svelte";
@@ -105,6 +107,20 @@
   />
 
   <GoogleDriveConnector
+    {codexLoggedIn}
+    {codexAccount}
+    {codexPlugins}
+    refreshCodexStatus={checkCodexStatus}
+  />
+
+  <NotionConnector
+    {codexLoggedIn}
+    {codexAccount}
+    {codexPlugins}
+    refreshCodexStatus={checkCodexStatus}
+  />
+
+  <SharePointConnector
     {codexLoggedIn}
     {codexAccount}
     {codexPlugins}

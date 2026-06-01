@@ -69,6 +69,26 @@ Connector form for Slack channel/message ingestion via the Codex Slack plugin or
 
 ---
 
+### NotionConnector
+
+Connector form for Notion page/database ingestion via the Notion Codex plugin or a direct integration token.
+
+- **Codex mode**: SSE stream; plugin must be installed and enabled.
+- **Token mode**: `postIngest` with `NOTION_TOKEN` sourced from env or the token field.
+- URI formats: `notion://page/<id>`, `notion://database/<id>`, or a `notion.so` URL.
+
+---
+
+### SharePointConnector
+
+Connector form for SharePoint and OneDrive file ingestion via the SharePoint Codex plugin, a direct access token, or OAuth2 client credentials.
+
+- **Codex mode**: SSE stream; plugin must be installed and enabled.
+- **Token/credentials mode**: `postIngest` with access token OR tenant/client/secret fields.
+- URI formats: `sharepoint://sites/<siteId>/items/<itemId>`, `sharepoint://drives/<driveId>/items/<itemId>`.
+
+---
+
 ### CodexBadge
 
 Inline status badge for a Codex plugin. Displays `installed` / `enabled` state with coloured dots. Used inside the Codex-backed connector forms to surface plugin health at a glance.

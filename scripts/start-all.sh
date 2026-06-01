@@ -55,13 +55,15 @@ is_headless() {
 
 if command -v codex >/dev/null 2>&1; then
   echo "Codex CLI: $(codex --version)"
-  echo "Ensuring Codex GitHub, Atlassian Rovo, and Slack plugins are installed..."
+  echo "Ensuring Codex GitHub, Atlassian Rovo, Slack, and Google Drive plugins are installed..."
   codex plugin add github@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install GitHub Codex plugin."
   codex plugin add atlassian-rovo@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Atlassian Rovo Codex plugin."
   codex plugin add slack@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Slack Codex plugin."
+  codex plugin add googledrive@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Google Drive Codex plugin."
   if ! codex login status >/dev/null 2>&1; then
     if is_headless; then
       echo
@@ -109,6 +111,14 @@ fi
 if [[ -z "${GITHUB_TOKEN:-}" ]]; then
   echo "[warn] GITHUB_TOKEN is not set — the GitHub connector will only reach public repos."
   echo "       To authenticate: export GITHUB_TOKEN=ghp_... then re-run this script."
+fi
+
+if [[ -z "${GOOGLE_DRIVE_FOLDER_ID:-}" ]] && \
+   [[ -z "${GOOGLE_DRIVE_OAUTH_CREDENTIALS_PATH:-}" ]] && \
+   [[ -z "${GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH:-}" ]]; then
+  echo "[info] Google Drive env vars are not set — the Google Drive connector will require credentials per request."
+  echo "       To configure: set GOOGLE_DRIVE_OAUTH_CREDENTIALS_PATH, GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH,"
+  echo "       or use the Codex Google Drive plugin (no credentials needed once codex login is done)."
 fi
 
 if command -v swag >/dev/null 2>&1; then

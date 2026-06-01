@@ -2,14 +2,12 @@ package types
 
 import "time" // used for the normalization timestamp on NormalizedDocument
 
-// SourceSpan locates a slice of canonical text back inside its source artifact so
-// downstream stages can route findings to the exact place they came from.
+// SourceSpan locates a slice of normalized text back in the artifact it came from.
 type SourceSpan struct {
-	Field string `json:"field"` // canonical field the span belongs to, e.g. "title" or "body"
-	Start int    `json:"start"` // inclusive byte offset of the span within Field
-	End   int    `json:"end"`   // exclusive byte offset of the span within Field
-	Line  int    `json:"line"`  // 1-based line number the span begins on within Field
-	Path  string `json:"path"`  // optional structured pointer, e.g. a JSON pointer or cell reference
+	Field string `json:"field"` // which normalized field the span refers to, e.g. "title" or "body"
+	Start int    `json:"start"` // inclusive start offset (in runes) within the field
+	End   int    `json:"end"`   // exclusive end offset (in runes) within the field
+	Path  string `json:"path"`  // optional structured pointer into the source, e.g. a JSON pointer or cell ref
 }
 
 // NormalizedDocument is the canonical form every source artifact is converted into.
@@ -19,10 +17,11 @@ type NormalizedDocument struct {
 	SourceType    string            `json:"source_type"`    // event type string, e.g. "document.ingested"
 	Title         string            `json:"title"`          // trimmed subject line of the artifact
 	Body          string            `json:"body"`           // trimmed content body of the artifact
-	ContentHash   string            `json:"content_hash"`   // hex SHA-256 of canonical title+body for replay/change detection
-	SchemaVersion string            `json:"schema_version"` // schema version carried from the originating event
-	Spans         []SourceSpan      `json:"spans"`          // source spans locating canonical text back in the artifact
 	Metadata      map[string]string `json:"metadata"`       // key-value pairs carried from the source event
+	ContentHash   string            `json:"content_hash"`   // deterministic hash of the canonical text for replay detection
+	SchemaVersion string            `json:"schema_version"` // event schema version this document was normalized under
+	RuleVersion   string            `json:"rule_version"`   // version of the normalization rules that produced this document
+	Spans         []SourceSpan      `json:"spans"`          // offsets locating canonical text back in the source artifact
 	NormalizedAt  time.Time         `json:"normalized_at"`  // UTC timestamp of when normalization ran
 }
 
@@ -40,13 +39,12 @@ const (
 	Unknown         Classification = "unknown"          // document did not match any known signal pattern
 )
 
-// ScoredLabel records one classification signal detected in a document along with the
-// evidence and rule that produced it, so multi-signal documents lose no information.
+// ScoredLabel is one delivery-signal category a document matched, with its supporting evidence.
 type ScoredLabel struct {
-	Classification Classification `json:"classification"` // the signal category this label represents
-	Confidence     float64        `json:"confidence"`     // 0.0–1.0 score for how certain this label is
-	Rule           string         `json:"rule"`           // name of the rule that matched
-	Evidence       []string       `json:"evidence"`       // matched snippets supporting this label
+	Classification Classification `json:"classification"` // the matched signal category
+	Confidence     float64        `json:"confidence"`     // 0.0–1.0 score for how strongly this category matched
+	Rule           string         `json:"rule"`           // name of the rule that produced this label
+	Evidence       []string       `json:"evidence"`       // matched keyword snippets supporting this label
 }
 
 // ClassifiedDocument pairs a normalized document with its detected classification and confidence.
@@ -54,9 +52,9 @@ type ClassifiedDocument struct {
 	Document       NormalizedDocument `json:"document"`       // the normalized artifact being classified
 	Classification Classification     `json:"classification"` // the best matching signal category
 	Confidence     float64            `json:"confidence"`     // 0.0–1.0 score for how certain the classification is
-	Labels         []ScoredLabel      `json:"labels"`         // every matching signal, ranked, for ambiguous documents
-	MatchedRules   []string           `json:"matched_rules"`  // names of every rule that fired, in priority order
-	Evidence       []string           `json:"evidence"`       // matched snippets supporting the primary classification
+	Labels         []ScoredLabel      `json:"labels"`         // every category the document matched, ordered by confidence
+	MatchedRules   []string           `json:"matched_rules"`  // names of all classification rules that fired
+	Evidence       []string           `json:"evidence"`       // keyword snippets supporting the primary classification
 }
 
 // EntityType describes what kind of concept an extracted entity represents.
@@ -76,33 +74,54 @@ type Entity struct {
 	ID               string            `json:"id"`                // unique identifier combining source and canonical key
 	Type             EntityType        `json:"type"`              // what kind of concept this entity is
 	Name             string            `json:"name"`              // the surface form of the entity as it appeared in the text
-	RawMention       string            `json:"raw_mention"`       // the exact text fragment the entity was extracted from
+	RawMention       string            `json:"raw_mention"`       // original text exactly as it appeared before normalization
 	SourceID         string            `json:"source_id"`         // ID of the document this entity was extracted from
 	Confidence       float64           `json:"confidence"`        // 0.0–1.0 score for how certain the extraction is
-	ExtractionMethod string            `json:"extraction_method"` // how the entity was extracted, e.g. "regex_token" or "openapi"
-	Spans            []SourceSpan      `json:"spans"`             // source spans locating the mention back in the artifact
+	ExtractionMethod string            `json:"extraction_method"` // how this entity was extracted, e.g. "regex_token" or "openapi"
+	Spans            []SourceSpan      `json:"spans"`             // offsets or structured pointers locating the mention in the source
 	Aliases          []string          `json:"aliases"`           // all known name variants merged during identity resolution
 	Metadata         map[string]string `json:"metadata"`          // additional context attached during extraction
 }
 
+// RelationshipKind is the stable vocabulary describing how two entities relate.
+type RelationshipKind string
+
+const (
+	// CoOccursInDocument links two entities that appeared together in the same source artifact.
+	CoOccursInDocument RelationshipKind = "co_occurs_in_document"
+	// RequirementAffectsAPI links a requirement to an API field it constrains or drives.
+	RequirementAffectsAPI RelationshipKind = "requirement_affects_api"
+	// RequirementAffectsService links a requirement to a service responsible for delivering it.
+	RequirementAffectsService RelationshipKind = "requirement_affects_service"
+	// APIBackedByDB links an API field to the database column that persists it.
+	APIBackedByDB RelationshipKind = "api_backed_by_db"
+	// EnumConstrainsField links an enum to the API field or column whose values it restricts.
+	EnumConstrainsField RelationshipKind = "enum_constrains_field"
+	// ServiceDependsOn links a service to a dependency it relies on.
+	ServiceDependsOn RelationshipKind = "service_depends_on"
+)
+
 // Relationship describes a directed link between two entities.
 type Relationship struct {
-	ID       string            `json:"id"`       // deterministic ID built from the two entity IDs
-	FromID   string            `json:"from_id"`  // ID of the source entity
-	ToID     string            `json:"to_id"`    // ID of the target entity
-	Kind     string            `json:"kind"`     // label describing how the two entities relate
-	Metadata map[string]string `json:"metadata"` // extra context attached by the relationship builder
+	ID         string            `json:"id"`         // deterministic ID built from the two entity IDs and kind
+	FromID     string            `json:"from_id"`    // ID of the source entity
+	ToID       string            `json:"to_id"`      // ID of the target entity
+	Kind       RelationshipKind  `json:"kind"`       // typed label describing how the two entities relate
+	Confidence float64           `json:"confidence"` // 0.0–1.0 score for how certain the edge is
+	Evidence   []string          `json:"evidence"`   // source artifact references supporting this edge
+	Metadata   map[string]string `json:"metadata"`   // extra context attached by the relationship builder
 }
 
 // Mismatch describes a detected delivery misalignment between teams or artifacts.
 type Mismatch struct {
-	ID          string   `json:"id"`          // unique identifier for this mismatch finding
-	Type        string   `json:"type"`        // stable category for the detection rule that produced this finding
-	Summary     string   `json:"summary"`     // human-readable description of what was found
-	EntityIDs   []string `json:"entity_ids"`  // IDs of the entities involved in the mismatch
-	Severity    string   `json:"severity"`    // impact level: low, medium, or high
-	Confidence  float64  `json:"confidence"`  // 0.0-1.0 score for how certain the reasoning stage is
-	Impact      string   `json:"impact"`      // expected business or delivery impact level
-	Evidence    []string `json:"evidence"`    // source artifact references supporting this finding
-	Recommended string   `json:"recommended"` // suggested action for the team to resolve this
+	ID            string   `json:"id"`             // unique identifier for this mismatch finding
+	Type          string   `json:"type"`           // stable category for the detection rule that produced this finding
+	Summary       string   `json:"summary"`        // human-readable description of what was found
+	EntityIDs     []string `json:"entity_ids"`     // IDs of the entities involved in the mismatch
+	Severity      string   `json:"severity"`       // impact level: low, medium, or high
+	Confidence    float64  `json:"confidence"`     // 0.0-1.0 score for how certain the reasoning stage is
+	Impact        string   `json:"impact"`         // expected business or delivery impact level
+	Evidence      []string `json:"evidence"`       // source artifact references supporting this finding
+	AffectedRoles []string `json:"affected_roles"` // delivery roles that need to act on this finding
+	Recommended   string   `json:"recommended"`    // suggested action for the team to resolve this
 }

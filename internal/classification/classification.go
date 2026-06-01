@@ -1,31 +1,90 @@
 package classification
 
 import (
+	"sort"    // used to order multi-label results by confidence
 	"strings" // used to lowercase and search the document body
 
 	"context-os/domain/types" // NormalizedDocument input and ClassifiedDocument output
 )
 
-// Classify assigns a signal category and confidence score to a normalized document using keyword rules.
+// unknownConfidence is the low score assigned when no classification rule fires.
+const unknownConfidence = 0.4
+
+// rule is one ordered keyword classification rule. Earlier rules take precedence for the primary label.
+type rule struct {
+	name           string               // stable rule identifier surfaced as evidence provenance
+	classification types.Classification // category this rule assigns when it fires
+	confidence     float64              // confidence score for a match
+	keywords       []string             // any keyword presence triggers the rule
+}
+
+// rules lists classification rules in descending priority order.
+var rules = []rule{
+	{name: "blocker_keyword", classification: types.Blocker, confidence: 0.9, keywords: []string{"blocker", "blocked"}},
+	{name: "decision_keyword", classification: types.Decision, confidence: 0.85, keywords: []string{"decision", "decided"}},
+	{name: "pmo_risk_keyword", classification: types.PMORisk, confidence: 0.8, keywords: []string{"risk", "delay"}},
+	{name: "consumer_concern_keyword", classification: types.ConsumerConcern, confidence: 0.75, keywords: []string{"frontend", "fe", "screen", "presentation layer"}},
+	{name: "producer_concern_keyword", classification: types.ProducerConcern, confidence: 0.75, keywords: []string{"backend", "be", "database", "service layer"}},
+	{name: "api_discussion_keyword", classification: types.APIDiscussion, confidence: 0.75, keywords: []string{"api", "endpoint"}},
+	{name: "business_logic_keyword", classification: types.BusinessLogic, confidence: 0.75, keywords: []string{"requirement", "business logic"}},
+}
+
+// Classify assigns a primary signal category plus every matching label, with confidence and evidence.
 func Classify(doc types.NormalizedDocument) types.ClassifiedDocument {
 	body := strings.ToLower(doc.Title + " " + doc.Body) // merge title and body into one lowercase string for matching
-	classification := types.Unknown                      // default to Unknown if no keyword matches
-	score := 0.4                                         // default confidence is low when no rule fires
-	switch {
-	case strings.Contains(body, "blocker") || strings.Contains(body, "blocked"):
-		classification, score = types.Blocker, 0.9 // blockers are high confidence because the keyword is unambiguous
-	case strings.Contains(body, "decision") || strings.Contains(body, "decided"):
-		classification, score = types.Decision, 0.85 // decisions are also clear signals
-	case strings.Contains(body, "risk") || strings.Contains(body, "delay"):
-		classification, score = types.PMORisk, 0.8 // risk language indicates a PMO concern
-	case strings.Contains(body, "frontend") || strings.Contains(body, "fe") || strings.Contains(body, "screen") || strings.Contains(body, "presentation layer"):
-		classification, score = types.ConsumerConcern, 0.75 // presentation-layer keywords suggest a consumer-side concern
-	case strings.Contains(body, "backend") || strings.Contains(body, "be") || strings.Contains(body, "database") || strings.Contains(body, "service layer"):
-		classification, score = types.ProducerConcern, 0.75 // service-layer keywords suggest a producer-side concern
-	case strings.Contains(body, "api") || strings.Contains(body, "endpoint"):
-		classification, score = types.APIDiscussion, 0.75 // API keywords indicate a contract discussion
-	case strings.Contains(body, "requirement") || strings.Contains(body, "business logic"):
-		classification, score = types.BusinessLogic, 0.75 // requirement language signals a business rule
+
+	labels := []types.ScoredLabel{} // every rule that fired, in priority order
+	matchedRules := []string{}      // names of all rules that fired, for explainability
+	for _, r := range rules {
+		matched := matchedKeywords(body, r.keywords) // keywords from this rule present in the text
+		if len(matched) == 0 {
+			continue // rule did not fire
+		}
+		labels = append(labels, types.ScoredLabel{
+			Classification: r.classification,
+			Confidence:     r.confidence,
+			Rule:           r.name,
+			Evidence:       matched,
+		})
+		matchedRules = append(matchedRules, r.name)
 	}
-	return types.ClassifiedDocument{Document: doc, Classification: classification, Confidence: score} // pack result and return
+
+	if len(labels) == 0 {
+		return types.ClassifiedDocument{
+			Document:       doc,
+			Classification: types.Unknown,
+			Confidence:     unknownConfidence,
+			Labels:         []types.ScoredLabel{},
+			MatchedRules:   []string{},
+			Evidence:       []string{},
+		}
+	}
+
+	primary := labels[0] // first matching rule wins the primary label because rules are priority-ordered
+
+	ordered := make([]types.ScoredLabel, len(labels))
+	copy(ordered, labels)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return ordered[i].Confidence > ordered[j].Confidence // present strongest signals first while keeping rule order on ties
+	})
+
+	return types.ClassifiedDocument{
+		Document:       doc,
+		Classification: primary.Classification,
+		Confidence:     primary.Confidence,
+		Labels:         ordered,
+		MatchedRules:   matchedRules,
+		Evidence:       primary.Evidence,
+	}
+}
+
+// matchedKeywords returns the keywords from the rule that appear in the lowercased text.
+func matchedKeywords(body string, keywords []string) []string {
+	matched := []string{}
+	for _, kw := range keywords {
+		if strings.Contains(body, kw) {
+			matched = append(matched, kw)
+		}
+	}
+	return matched
 }

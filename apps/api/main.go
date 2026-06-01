@@ -20,6 +20,8 @@ import (
 	googledrive "context-os/apps/api/handler/googledrive"
 	"context-os/apps/api/handler/health"
 	"context-os/apps/api/handler/jira"
+	notion "context-os/apps/api/handler/notion"
+	sharepoint "context-os/apps/api/handler/sharepoint"
 	"context-os/apps/api/handler/slack"
 	"context-os/apps/api/middleware"
 
@@ -48,6 +50,12 @@ func main() {
 		{pattern: "/googledrive/status", handler: http.HandlerFunc(googledrive.Status), cors: true},
 		{pattern: "/googledrive/ingest", handler: http.HandlerFunc(googledrive.Ingest), cors: true},
 		{pattern: "/googledrive/ingest/stream", handler: http.HandlerFunc(googledrive.IngestStream), cors: true},
+		{pattern: "/notion/status", handler: http.HandlerFunc(notion.Status), cors: true},
+		{pattern: "/notion/ingest", handler: http.HandlerFunc(notion.Ingest), cors: true},
+		{pattern: "/notion/ingest/stream", handler: http.HandlerFunc(notion.IngestStream), cors: true},
+		{pattern: "/sharepoint/status", handler: http.HandlerFunc(sharepoint.Status), cors: true},
+		{pattern: "/sharepoint/ingest", handler: http.HandlerFunc(sharepoint.Ingest), cors: true},
+		{pattern: "/sharepoint/ingest/stream", handler: http.HandlerFunc(sharepoint.IngestStream), cors: true},
 		{pattern: "/github/ingest/stream", handler: http.HandlerFunc(github.IngestStream), cors: true},
 		{pattern: "/github/status", handler: http.HandlerFunc(github.Status), cors: true},
 		{pattern: "/jira/status", handler: http.HandlerFunc(jira.Status), cors: true},

@@ -5,8 +5,8 @@ The classification domain assigns a document category and confidence score. This
 ## Responsibility
 
 - Inspect normalized document text.
-- Assign one `types.Classification`.
-- Provide an explainable confidence score.
+- Assign a primary `types.Classification` with an explainable confidence score.
+- Emit every matching label, the matched rule names, and keyword evidence.
 
 ## Input And Output
 
@@ -27,7 +27,9 @@ func Classify(doc types.NormalizedDocument) types.ClassifiedDocument
 
 ## Rule Order
 
-The classifier lowercases `Title + " " + Body` and applies the first matching rule.
+The classifier lowercases `Title + " " + Body` and evaluates every rule. The highest-priority
+rule that fires becomes the primary `Classification`; all firing rules are returned in `Labels`
+(ordered by confidence), `MatchedRules`, and the primary rule's keywords in `Evidence`.
 
 | Match                                            | Classification    | Confidence |
 | ------------------------------------------------ | ----------------- | ---------- |
@@ -60,8 +62,8 @@ classified := classification.Classify(doc)
 
 ## Implementation Notes
 
-- Rule order matters. A document containing both `blocker` and `api` becomes `Blocker`.
-- Keep confidence values explainable. If ML or LLM classification is added, store reasoning evidence or rule traces.
+- Rule order matters. A document containing both `blocker` and `api` has primary `Blocker` while still surfacing `APIDiscussion` in `Labels`.
+- Keep confidence values explainable. Matched rule names and keyword evidence travel with each label.
 - Avoid broadening keywords without tests; short tokens like `fe` and `be` can match ordinary words.
 
 ## Production Requirements
@@ -70,3 +72,7 @@ classified := classification.Classify(doc)
 - Track confidence calibration against an evaluation set.
 - Support multi-label or ambiguous classification when one document carries multiple delivery signals.
 - Keep deterministic fallbacks available even when AI-assisted classification is enabled.
+
+## Status
+
+Evidence (`Evidence`), matched-rule tracking (`MatchedRules`), and multi-label output (`Labels`) are implemented and covered by tests in `classification_test.go`. The primary `Classification`/`Confidence` remain backward compatible.

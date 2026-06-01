@@ -8,6 +8,10 @@ interface IngestRunnerOptions {
   content?: string;
   cursor?: string;
   metadata?: Record<string, string>;
+  // SharePoint-specific top-level fields
+  tenant_id?: string;
+  client_id?: string;
+  client_secret?: string;
   provider: IngestProvider;
   setLoading: (loading: boolean) => void;
   setError: (message: string) => void;
@@ -78,6 +82,9 @@ export async function runConnectorIngest(
         cursor: options.cursor || undefined,
         metadata: cleanMetadata(options.metadata),
         provider: options.provider,
+        tenant_id: options.tenant_id || undefined,
+        client_id: options.client_id || undefined,
+        client_secret: options.client_secret || undefined,
       },
       { signal: options.signal },
     );
@@ -107,12 +114,14 @@ function isAbortError(err: unknown): boolean {
 
 function supportsCodex(
   connector: ConnectorKind,
-): connector is "github" | "jira" | "slack" | "googledrive" {
+): connector is "github" | "jira" | "slack" | "googledrive" | "notion" | "sharepoint" {
   return (
     connector === "github" ||
     connector === "jira" ||
     connector === "slack" ||
-    connector === "googledrive"
+    connector === "googledrive" ||
+    connector === "notion" ||
+    connector === "sharepoint"
   );
 }
 

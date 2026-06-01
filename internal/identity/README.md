@@ -5,9 +5,10 @@ Identity resolution is the core ContextOS domain. It merges candidate entities t
 ## Responsibility
 
 - Convert extracted `types.Entity` values into `entities.CanonicalEntity` values.
-- Preserve aliases for names that collapse to the same canonical key.
-- Return canonical entities in first-seen order.
-- Surface confidence and human-review state.
+- Merge equivalent names through deterministic exact-key and naming-convention layers.
+- Propose (but never auto-merge) semantic candidates for human review.
+- Preserve aliases, provenance evidence, and source IDs through resolution.
+- Return canonical entities in first-seen order with confidence and human-review state.
 
 ## Input And Output
 
@@ -25,13 +26,19 @@ flowchart LR
 
 ```go
 func Resolve(input []types.Entity) []entities.CanonicalEntity
+func ResolveWithMatcher(input []types.Entity, matcher Matcher, opts MatchOptions) []entities.CanonicalEntity
 func CanonicalKey(value string) string
+func ConventionAliases(name string) []string
 ```
 
-Internal helper:
+Matchers:
 
 ```go
-func appendUnique(values []string, next string) []string
+type Matcher interface{ Similarity(a, b string) float64 }
+type Embedder interface{ Embed(texts []string) ([][]float64, error) }
+
+type LocalMatcher struct{}            // default, network-free trigram-cosine matcher
+type WorkerMatcher struct{ Embedder } // opt-in, embedding-service backed matcher
 ```
 
 ## Canonical Key Rules
@@ -49,12 +56,40 @@ Examples:
 | `Refund Status` | `refundstatus` |
 | `refund-status` | `refundstatus` |
 
-## Resolve Behavior
+## Resolution Layers
 
-1. Create a canonical map keyed by `CanonicalKey(entity.Name)`.
-2. For the first entity with a key, append its name as the first alias and store confidence `1` with `NeedsHuman=false`.
-3. For later entities with the same key, append the new name to aliases if unique.
-4. Return canonical entities in first-seen key order.
+Resolution runs in deterministic layers so the default pipeline stays hermetic and replay-safe:
+
+1. **Exact** — `Resolve` groups entities by `CanonicalKey(entity.Name)` and merges identical keys.
+2. **Convention** — when merged surface forms differ (e.g. `refundStatus` vs `refund_status`),
+   the merge is recorded with `MatchLayerConvention` evidence. `ConventionAliases` exposes the
+   snake/kebab/camel/Pascal/SCREAMING variants of a name.
+3. **Semantic (opt-in)** — `ResolveWithMatcher` runs the exact and convention layers, then uses a
+   `Matcher` to propose semantic candidates between distinct canonical entities. Semantic matches
+   are recorded as `MergeCandidate` values and set `NeedsHuman=true`; they are **never auto-merged**,
+   so downstream stages remain deterministic.
+
+`Resolve` is the default used by the pipeline. `ResolveWithMatcher` with a nil matcher falls back
+to `LocalMatcher` (a deterministic character-trigram cosine, no network). `WorkerMatcher` is only
+used when a caller explicitly passes it with an `Embedder` (the `internal/aiworker` client).
+
+## Conflict Handling
+
+When merged aliases disagree on `EntityType`, the canonical entity is flagged with
+`NeedsHuman=true`, a reduced `Confidence`, and a `ConflictReason`. Semantic candidates also set
+`NeedsHuman=true` with a review reason, keeping high-impact ambiguous merges out of the automatic path.
+
+## Benchmark
+
+A labelled dataset at [`tests/harness/fixtures/identity/benchmark-dataset.csv`](../../tests/harness/fixtures/identity/benchmark-dataset.csv)
+covers exact, convention, multilingual, and synonym aliases plus negative pairs. Run it with:
+
+```sh
+go test ./internal/identity/... -run BenchmarkIdentityResolution -v
+```
+
+The benchmark reports precision, recall, false-merge, conflict, and needs-human counts and gates on
+precision ≥ 0.99, recall ≥ 0.90, and zero false merges.
 
 ## Dependencies
 
@@ -80,10 +115,11 @@ canonical := identity.Resolve(extracted)
 
 ## Implementation Notes
 
-- Current matching is exact after normalization. It does not yet handle semantic similarity, multilingual aliases, or conflict scoring.
-- `Confidence` is currently binary because the algorithm is deterministic.
-- Future fuzzy or semantic matching should preserve evidence, explain confidence, and set `NeedsHuman` for ambiguous merges.
+- Exact and convention layers are deterministic and run by default; semantic matching is opt-in and only proposes review candidates.
+- `Confidence` is `1` for clean deterministic merges, reduced when a type conflict needs review.
+- Semantic and conflict merges preserve evidence, explain confidence, and set `NeedsHuman` for ambiguous cases.
 - Keep alias order stable. It is useful for deterministic tests and human inspection.
+- `WorkerMatcher` fails closed (returns score `0`) on any embedding error so the pipeline never panics.
 
 ## Production Requirements
 

@@ -42,4 +42,46 @@ func TestClassifyDefaultsUnknown(t *testing.T) {
 	if got.Confidence != 0.4 {
 		t.Fatalf("Confidence = %v, want 0.4", got.Confidence)
 	}
+	if len(got.Labels) != 0 {
+		t.Fatalf("Labels length = %d, want 0", len(got.Labels))
+	}
+	if len(got.MatchedRules) != 0 {
+		t.Fatalf("MatchedRules length = %d, want 0", len(got.MatchedRules))
+	}
+}
+
+// TestClassifyRecordsPrimaryEvidenceAndMatchedRule verifies the primary label carries matched-keyword evidence and a rule name.
+func TestClassifyRecordsPrimaryEvidenceAndMatchedRule(t *testing.T) {
+	got := classification.Classify(types.NormalizedDocument{Body: "this work is blocked"})
+
+	if got.Classification != types.Blocker {
+		t.Fatalf("Classification = %q, want %q", got.Classification, types.Blocker)
+	}
+	if len(got.Evidence) != 1 || got.Evidence[0] != "blocked" {
+		t.Fatalf("Evidence = %v, want [blocked]", got.Evidence)
+	}
+	if len(got.MatchedRules) != 1 || got.MatchedRules[0] != "blocker_keyword" {
+		t.Fatalf("MatchedRules = %v, want [blocker_keyword]", got.MatchedRules)
+	}
+}
+
+// TestClassifyEmitsAllMatchingLabelsOrderedByConfidence verifies multi-signal documents retain every matching label ranked by confidence.
+func TestClassifyEmitsAllMatchingLabelsOrderedByConfidence(t *testing.T) {
+	got := classification.Classify(types.NormalizedDocument{Body: "api rollout is blocked"})
+
+	if got.Classification != types.Blocker {
+		t.Fatalf("Classification = %q, want %q", got.Classification, types.Blocker)
+	}
+	if len(got.Labels) != 2 {
+		t.Fatalf("Labels length = %d, want 2", len(got.Labels))
+	}
+	if got.Labels[0].Classification != types.Blocker {
+		t.Errorf("Labels[0] = %q, want blocker", got.Labels[0].Classification)
+	}
+	if got.Labels[1].Classification != types.APIDiscussion {
+		t.Errorf("Labels[1] = %q, want api_discussion", got.Labels[1].Classification)
+	}
+	if got.Labels[0].Confidence < got.Labels[1].Confidence {
+		t.Errorf("labels not ordered by confidence: %v then %v", got.Labels[0].Confidence, got.Labels[1].Confidence)
+	}
 }

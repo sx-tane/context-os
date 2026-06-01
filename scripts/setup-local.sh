@@ -107,13 +107,15 @@ install_codex() {
     sudo npm install -g @openai/codex
   fi
 
-  info "Installing Codex GitHub, Atlassian Rovo, and Slack plugins"
+  info "Installing Codex GitHub, Atlassian Rovo, Slack, and Google Drive plugins"
   codex plugin add github@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install GitHub Codex plugin." >&2
   codex plugin add atlassian-rovo@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Atlassian Rovo Codex plugin." >&2
   codex plugin add slack@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Slack Codex plugin." >&2
+  codex plugin add googledrive@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Google Drive Codex plugin." >&2
 
   if ! codex login status >/dev/null 2>&1; then
     if is_headless; then

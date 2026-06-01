@@ -11,6 +11,9 @@ services:
       # can authenticate. Set it in your shell before running docker compose up:
       #   export GITHUB_TOKEN=ghp_...
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      # Address of the AI worker used by the identity stage's opt-in WorkerMatcher
+      # for semantic embedding. Uses the Docker service name on the shared network.
+      WORKER_URL: "http://worker:8081"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 10s

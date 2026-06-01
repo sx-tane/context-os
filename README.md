@@ -115,7 +115,7 @@ go test ./...
 
 Starts the API, context UI dev server, and AI worker together. Press `Ctrl+C` to stop all processes. If `uv` is not found, the AI worker is skipped automatically.
 
-Local connector UI is served from `apps/frontend` and includes GitHub, Jira, Slack, filesystem, and Codex CLI status/login flows. Filesystem ingestion covers browser-uploaded files/folders, server-visible local paths, spreadsheets, and OpenAPI spec files.
+Local connector UI is served from `apps/frontend` and includes GitHub, Jira, Slack, Google Drive, Notion, SharePoint, filesystem, and Codex CLI status/login flows. Filesystem ingestion covers browser-uploaded files/folders, server-visible local paths, spreadsheets, and OpenAPI spec files.
 
 ## Production Delivery Plan
 
@@ -139,7 +139,7 @@ Exit criteria:
 
 Goals:
 
-- production-ready connectors for GitHub, Slack, Jira, and filesystem
+- production-ready connectors for GitHub, Slack, Jira, Google Drive, Notion, SharePoint, and filesystem
 - robust parsing for code, tickets, discussions, OpenAPI specs, spreadsheets, and documents
 - snapshot versioning for reproducible analysis
 

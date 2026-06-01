@@ -74,6 +74,10 @@ const (
 	PluginAtlassianRovo = "atlassian-rovo"
 	// PluginGoogleDrive routes Google Drive requests through the Google Drive Codex plugin.
 	PluginGoogleDrive = "googledrive"
+	// PluginNotion routes Notion requests through the Notion Codex plugin.
+	PluginNotion = "notion"
+	// PluginSharePoint routes SharePoint / OneDrive requests through the SharePoint Codex plugin.
+	PluginSharePoint = "sharepoint"
 
 	defaultCommand = "codex"
 )

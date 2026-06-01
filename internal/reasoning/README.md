@@ -22,28 +22,30 @@ flowchart LR
 ## Key API
 
 ```go
-func DetectMismatches(g EntityReader) []types.Mismatch
+func DetectMismatches(g GraphReader) []types.Mismatch
 ```
 
-`EntityReader` is the narrow interface consumed by reasoning:
+`GraphReader` is the narrow interface consumed by reasoning:
 
 ```go
-type EntityReader interface {
+type GraphReader interface {
   AllEntities() []entities.CanonicalEntity
+  AllRelationships() []types.Relationship
 }
 ```
 
-## Current Detection Rule
+## Current Detection Rules
 
-For every canonical entity in the graph, lowercase the entity name and emit a mismatch when it contains any of:
+Reasoning currently runs four deterministic rules:
 
-- `missing`
-- `mismatch`
-- `outdated`
+- `keyword_signal`: emit when entity names contain `missing`, `mismatch`, or `outdated`.
+- `requirement_gap`: emit when a `Requirement` has no `requirement_affects_api` or `requirement_affects_service` edge.
+- `cross_layer_contract_drift`: emit when an `APIField` has explicit contract exposure context (typed edge other than `co_occurs_in_document`) but no `api_backed_by_db` edge.
+- `dependency_risk`: emit for every `service_depends_on` edge.
 
-The emitted finding uses:
+For keyword findings, the emitted mismatch uses:
 
-- `ID`: `mismatch:<entity id>`
+- `ID`: `keyword_signal:<entity id>`
 - `Type`: `keyword_signal`
 - `Summary`: `Potential delivery mismatch around <entity name>`
 - `EntityIDs`: the single matching entity ID
@@ -52,6 +54,14 @@ The emitted finding uses:
 - `Impact`: `medium`
 - `Evidence`: source URI plus entity fragment when available, otherwise the entity source ID
 - `Recommended`: confirmation guidance across knowledge layers (presentation, service, PMO)
+
+All findings include:
+
+- confidence in `[0,1]`
+- evidence references
+- severity and impact
+- affected roles
+- recommended action
 
 ## Dependencies
 
@@ -64,7 +74,7 @@ flowchart TD
   presentation[internal/presentation]
   pipeline[domain/pipelines]
 
-  reasoning -. EntityReader .-> ctxgraph
+  reasoning -. GraphReader .-> ctxgraph
   reasoning --> entities
   reasoning --> types
   presentation --> reasoning

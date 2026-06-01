@@ -16,11 +16,13 @@ export type ConnectorKind =
   | "slack"
   | "jira"
   | "filesystem"
-  | "googledrive";
+  | "googledrive"
+  | "notion"
+  | "sharepoint";
 
 export type CodexConnectorKind = Extract<
   ConnectorKind,
-  "github" | "slack" | "jira" | "googledrive"
+  "github" | "slack" | "jira" | "googledrive" | "notion" | "sharepoint"
 >;
 
 export type DirectSourceConnectorKind = Exclude<
@@ -43,6 +45,10 @@ export interface IngestRequest {
   content?: string;
   cursor?: string;
   metadata?: Record<string, string>;
+  // SharePoint-specific fields (mapped to SharePointIngest struct fields)
+  tenant_id?: string;
+  client_id?: string;
+  client_secret?: string;
 }
 
 export interface ApiErrorBody {
