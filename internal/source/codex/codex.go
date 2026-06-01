@@ -73,7 +73,7 @@ const (
 	// PluginAtlassianRovo routes Jira requests through the Atlassian Rovo Codex plugin.
 	PluginAtlassianRovo = "atlassian-rovo"
 	// PluginGoogleDrive routes Google Drive requests through the Google Drive Codex plugin.
-	PluginGoogleDrive = "googledrive"
+	PluginGoogleDrive = "google-drive"
 	// PluginNotion routes Notion requests through the Notion Codex plugin.
 	PluginNotion = "notion"
 	// PluginSharePoint routes SharePoint / OneDrive requests through the SharePoint Codex plugin.
@@ -149,6 +149,10 @@ func (c connector) ingestWithProgress(ctx context.Context, req contracts.SourceR
 			envOverrides = append(envOverrides, "GITHUB_TOKEN="+tok)
 		case PluginSlack:
 			envOverrides = append(envOverrides, "SLACK_BOT_TOKEN="+tok)
+		case PluginNotion:
+			envOverrides = append(envOverrides, "NOTION_TOKEN="+tok)
+		case PluginSharePoint:
+			envOverrides = append(envOverrides, "SHAREPOINT_TOKEN="+tok)
 		}
 	}
 
@@ -287,6 +291,10 @@ func promptFor(plugin, uri string) string {
 		return "Use the Atlassian Rovo Codex plugin to read the Jira context identified by " + uri + ". Return the relevant issue or project content with issue keys, summaries, statuses, descriptions, comments, links, fields, changelog entries, timestamps, authors, and source URLs when available. Do not modify Jira or Atlassian data."
 	case PluginGoogleDrive:
 		return "Use the Google Drive Codex plugin to read files from the Google Drive folder identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, and links when available. Do not modify any files."
+	case PluginNotion:
+		return "Use the Notion Codex plugin to read pages and database entries from " + uri + ". Return the relevant content with source identifiers, page IDs, titles, properties, and links when available. Do not modify Notion."
+	case PluginSharePoint:
+		return "Use the SharePoint Codex plugin to read files and pages from the SharePoint or OneDrive location identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, authors, and links when available. Do not modify any files or pages."
 	default:
 		return "Read source context for " + uri + " using the installed Codex plugin."
 	}
@@ -294,7 +302,7 @@ func promptFor(plugin, uri string) string {
 
 func isSupportedPlugin(plugin string) bool {
 	switch plugin {
-	case PluginGitHub, PluginSlack, PluginAtlassianRovo, PluginGoogleDrive:
+	case PluginGitHub, PluginSlack, PluginAtlassianRovo, PluginGoogleDrive, PluginNotion, PluginSharePoint:
 		return true
 	default:
 		return false

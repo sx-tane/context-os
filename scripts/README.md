@@ -38,6 +38,13 @@ What it does:
 - Runs `uv sync` in `apps/ai-worker` if `uv` is available
 - Regenerates OpenAPI docs (`swag init` → `apps/api/_docs/`) and Redoc HTML if `swag` is installed
 - Regenerates frontend TypeScript types from the OpenAPI spec (`bun run codegen` in `apps/frontend`)
+- **Installs all required Codex plugins** — runs `codex plugin add` for each plugin with explicit status reporting; warns if a plugin fails but does not abort startup:
+  - `github@openai-curated`
+  - `atlassian-rovo@openai-curated`
+  - `slack@openai-curated`
+  - `google-drive@openai-curated`
+  - `notion@openai-curated`
+  - `sharepoint@openai-curated`
 - Starts the Go API (`go run ./apps/api`) in the background
 - Starts the SvelteKit context UI dev server (`bun run dev`) in the background
 - Shuts down both processes cleanly when you press `Ctrl+C`
@@ -70,7 +77,8 @@ export GITHUB_TOKEN=ghp_your_token_here
 
 Once running:
 
-- **http://localhost:5173** — ContextOS UI
+- **http://localhost:5173** — ContextOS chat-first UI (homepage is now the chat interface)
+- **http://localhost:5173/connectors** — Connector debug surface (individual ingest + reauth)
 - **http://localhost:5173/findings** — Role-based findings and PMO summary UI
 - **http://localhost:8080/health** — API health endpoint
 - **http://localhost:8080/swagger/** — Interactive Swagger UI

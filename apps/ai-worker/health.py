@@ -77,8 +77,11 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)
+
+    # log_message writes request logs with a worker prefix for easier filtering.
+    def log_message(
         self, format: str, *args: object
-    ) -> None:  # noqa: A002 — override the default log format
+    ) -> None:  # noqa: A002 - override the default log format
         print(
             f"[worker] {self.address_string()} - {format % args}",  # prefix log lines with [worker] for easy filtering
             file=sys.stderr,  # write to stderr so it doesn't mix with stdout output

@@ -9,6 +9,7 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -24,7 +25,11 @@ import (
 	presentation "context-os/apps/api/handler/presentation"
 	sharepoint "context-os/apps/api/handler/sharepoint"
 	"context-os/apps/api/handler/slack"
+	handlerworkspace "context-os/apps/api/handler/workspace"
 	"context-os/apps/api/middleware"
+	"context-os/internal/store"
+	sqlmigrations "context-os/migrations"
+	"context-os/storage/db"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )
@@ -44,8 +49,21 @@ func main() {
 		addr = defaultAddr
 	}
 
+	// Open DB and run migrations.  Failure is non-fatal so the API starts even
+	// if Postgres is not yet available; workspace endpoints return 500 in that case.
+	sqlDB, dbErr := openDB()
+
 	mux := http.NewServeMux()
-	registerRoutes(mux, []route{
+
+	var wsHandler *handlerworkspace.Handler
+	if dbErr == nil {		wsHandler = handlerworkspace.NewHandler(
+			store.NewWorkspaceStore(sqlDB),
+			store.NewEventStore(sqlDB),
+			store.NewSyncStore(sqlDB),
+		)
+	}
+
+	routes := []route{
 		{pattern: "/health", handler: http.HandlerFunc(health.Health), cors: true},
 		{pattern: "/github/ingest", handler: http.HandlerFunc(github.Ingest), cors: true},
 		{pattern: "/googledrive/status", handler: http.HandlerFunc(googledrive.Status), cors: true},
@@ -75,12 +93,33 @@ func main() {
 		{pattern: "/slack/connect", handler: http.HandlerFunc(slack.Connect), cors: true},
 		{pattern: "/slack/callback", handler: http.HandlerFunc(slack.Callback)},
 		{pattern: "/swagger/", handler: httpSwagger.WrapHandler},
-	})
+	}
+
+	if wsHandler != nil {
+		routes = append(routes,
+			route{pattern: "/workspace", handler: http.HandlerFunc(wsHandler.List), cors: true},
+			route{pattern: "/workspace/upsert", handler: http.HandlerFunc(wsHandler.Upsert), cors: true},
+			route{pattern: "/workspace/status", handler: http.HandlerFunc(wsHandler.Status), cors: true},
+		)
+	}
+
+	registerRoutes(mux, routes)
 
 	log.Printf("context-os api listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("api server error: %v", err)
 	}
+}
+
+// openDB opens the Postgres connection pool and runs pending migrations.
+func openDB() (*sql.DB, error) {
+	conn, err := db.Open(sqlmigrations.Files)
+	if err != nil {
+		log.Printf("db: unavailable, workspace endpoints disabled: %v", err)
+		return nil, err
+	}
+	log.Printf("db: connected and migrations applied")
+	return conn, nil
 }
 
 func registerRoutes(mux *http.ServeMux, routes []route) {

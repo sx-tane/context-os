@@ -114,7 +114,7 @@ install_codex() {
     echo "[warn] Could not install Atlassian Rovo Codex plugin." >&2
   codex plugin add slack@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Slack Codex plugin." >&2
-  codex plugin add googledrive@openai-curated >/dev/null 2>&1 || \
+  codex plugin add google-drive@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Google Drive Codex plugin." >&2
 
   if ! codex login status >/dev/null 2>&1; then

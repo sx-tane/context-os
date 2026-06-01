@@ -213,6 +213,72 @@ Production readiness means the system can be replayed, audited, and trusted loca
 
 Use [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) to track the open issue backlog against these production requirements.
 
+## Frontend UI Architecture
+
+The frontend is a **chat-first, project-scoped** interface. The homepage (`/`) replaces the old connector debug view, which now lives at `/connectors`.
+
+```mermaid
+flowchart TD
+    HOME["/ (Chat Homepage)"]
+    SIDEBAR[Sidebar: project + knowledge state]
+    CHAT[Chat thread + input]
+    KI[KnowledgeInstall wizard]
+    ROUTER[Chat command router]
+    FINDINGS[POST /presentation/findings]
+    INGEST[connector /ingest/stream]
+    STATUS[GET /codex/status]
+    STORE[projectStore.ts — localStorage]
+
+    HOME --> SIDEBAR
+    HOME --> CHAT
+    HOME --> KI
+    CHAT --> ROUTER
+    ROUTER --> FINDINGS
+    ROUTER --> INGEST
+    ROUTER --> STATUS
+    KI --> INGEST
+    SIDEBAR --> STORE
+    CHAT --> STORE
+    STORE --> LS[(localStorage)]
+```
+
+### Knowledge Installation Wizard
+
+The `KnowledgeInstall` component is the entry point for first-run setup. It:
+1. Shows all seven supported connectors with their Codex plugin requirements.
+2. Disables connectors whose plugin is not installed.
+3. Accepts a URI per connector.
+4. Runs each enabled connector sequentially via the SSE ingest stream endpoint.
+5. Streams live progress per connector.
+6. Stamps `knowledgeInstalledAt` on the project via `projectStore` when complete.
+
+The wizard is opened automatically on first visit (when `knowledgeInstalledAt` is unset) and is accessible at any time via `+ Install Knowledge` in the sidebar.
+
+### Project State Persistence
+
+Projects are scoped to a **workspace folder path**. State is stored in `localStorage` under `contextos_project_<path>` and `contextos_chat_<path>`. Switching workspace path switches projects. Chat history is capped at 200 messages.
+
+### Chat Routing
+
+The chat input is routed by intent keywords before making API calls:
+
+| Keyword pattern | Action |
+|---|---|
+| `help` | Show command reference card |
+| `clear` | Clear chat history |
+| `install knowledge` / `setup` | Open knowledge wizard |
+| `status` | Show connector + Codex readiness map |
+| `show findings` / `findings` / `analyse` / `mismatches` | Run `/presentation/findings` |
+| anything else | Route to findings with the message as context |
+
+### Route Map
+
+| Route | Purpose |
+|---|---|
+| `/` | Chat-first homepage (current default view) |
+| `/connectors` | Connector debug surface (individual ingest + reauth) |
+| `/findings` | Advanced role-based findings viewer |
+
 ## Implementation Rules
 
 - Keep the flow traceable from source request to mismatch finding.

@@ -115,31 +115,7 @@ go test ./...
 
 Starts the API, context UI dev server, and AI worker together. Press `Ctrl+C` to stop all processes. If `uv` is not found, the AI worker is skipped automatically.
 
-### 4) Optional: start local DB and queue infra
-
-ContextOS now provides local-first infra services via Docker Compose:
-
-- PostgreSQL + pgvector on `localhost:5432`
-- NATS on `localhost:4222` (monitor at `http://localhost:8222`)
-
-Start only infra services:
-
-```bash
-./scripts/start-infra.sh
-```
-
-Or start all containerized services (api, worker, frontend, db, nats):
-
-```bash
-docker compose up --build
-```
-
 Local connector UI is served from `apps/frontend` and includes GitHub, Jira, Slack, Google Drive, Notion, SharePoint, filesystem, and Codex CLI status/login flows. Filesystem ingestion covers browser-uploaded files/folders, server-visible local paths, spreadsheets, and OpenAPI spec files.
-
-Frontend pages:
-
-- `http://localhost:5173/` — connector/debug workspace
-- `http://localhost:5173/findings` — role-based output and PMO summary page
 
 ## Production Delivery Plan
 

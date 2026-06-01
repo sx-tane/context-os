@@ -201,7 +201,7 @@ export interface paths {
     };
   };
   "/googledrive/ingest": {
-    /** Lists Google Docs, Sheets, and Slides in a configured folder and emits one raw ingest event per file. */
+    /** Lists Google Docs, Sheets, and Slides in a configured folder and emits one raw ingest event per file. Set provider=codex to route through the Google Drive Codex plugin. */
     post: {
       parameters: {
         body: {
@@ -232,6 +232,31 @@ export interface paths {
         };
         /** Service Unavailable */
         503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/googledrive/ingest/stream": {
+    /** Streams Google Drive Codex plugin progress via SSE, then emits a result event. */
+    post: {
+      parameters: {
+        body: {
+          /** Google Drive ingest request (provider must be codex) */
+          body: definitions["request.GoogleDriveIngest"];
+        };
+      };
+      responses: {
+        /** SSE stream */
+        200: {
+          schema: string;
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
           schema: { [key: string]: string };
         };
       };
@@ -327,6 +352,204 @@ export interface paths {
   };
   "/jira/status": {
     /** Returns whether Jira base URL and authentication environment variables are configured. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/notion/ingest": {
+    /** Fetches Notion page blocks or database entries by URI and returns a provenance-rich event. Set provider=codex to route through the Notion Codex plugin. */
+    post: {
+      parameters: {
+        body: {
+          /** Notion ingest request */
+          body: definitions["request.NotionIngest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.Ingest"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/notion/ingest/stream": {
+    /** Streams Notion Codex plugin progress via SSE, then emits a result event. */
+    post: {
+      parameters: {
+        body: {
+          /** Notion ingest request (provider must be codex) */
+          body: definitions["request.NotionIngest"];
+        };
+      };
+      responses: {
+        /** SSE stream */
+        200: {
+          schema: string;
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/notion/status": {
+    /** Returns whether a Notion integration token environment variable is configured. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/presentation/findings": {
+    /** Runs ingestion and pipeline reasoning, then renders role-specific summaries with evidence, confidence, impact, and assistive execution metadata. */
+    post: {
+      parameters: {
+        body: {
+          /** Presentation findings request */
+          body: definitions["request.PresentationFindings"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.PresentationFindings"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/presentation/status": {
+    /** Returns supported connectors and roles for graph-backed findings output. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/sharepoint/ingest": {
+    /** Fetches a SharePoint or OneDrive file by URI using Microsoft Graph and returns a provenance-rich event. Set provider=codex to route through the SharePoint Codex plugin. */
+    post: {
+      parameters: {
+        body: {
+          /** SharePoint ingest request */
+          body: definitions["request.SharePointIngest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.Ingest"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/sharepoint/ingest/stream": {
+    /** Streams SharePoint Codex plugin progress via SSE, then emits a result event. */
+    post: {
+      parameters: {
+        body: {
+          /** SharePoint ingest request (provider must be codex) */
+          body: definitions["request.SharePointIngest"];
+        };
+      };
+      responses: {
+        /** SSE stream */
+        200: {
+          schema: string;
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/sharepoint/status": {
+    /** Returns whether a SharePoint access token or client credentials are configured for Microsoft Graph ingest. */
     get: {
       responses: {
         /** OK */
@@ -515,6 +738,8 @@ export interface definitions {
     /** @example 1234567890 */
     folder_id?: string;
     metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
     /** @example /Users/name/.config/context-os/google-service-account.json */
     service_account_path?: string;
     /** @example https://drive.google.com/drive/folders/1234567890 */
@@ -539,6 +764,52 @@ export interface definitions {
     /** @example https://mysite.atlassian.net/browse/PROJ-123 */
     uri?: string;
   };
+  "request.NotionIngest": {
+    /** @example Optional raw content instead of fetching from Notion */
+    content?: string;
+    metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
+    /** @example secret_xxxx */
+    token?: string;
+    /** @example notion://page/abc12345-1234-1234-1234-abcdefabcdef */
+    uri?: string;
+  };
+  "request.PresentationFindings": {
+    /** @example filesystem */
+    connector?: string;
+    /** @example frontend expects refundStatus but backend exposes missingRefundState */
+    content?: string;
+    /** @example eyJsYXN0X2lkIjoiMTIzIn0= */
+    cursor?: string;
+    include_execution?: boolean;
+    metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
+    /** @example pmo */
+    role?: string;
+    /** @example ghp_xxxx */
+    token?: string;
+    /** @example storage/raw/context.txt */
+    uri?: string;
+  };
+  "request.SharePointIngest": {
+    /** @example 11111111-1111-1111-1111-111111111111 */
+    client_id?: string;
+    /** @example secret~value */
+    client_secret?: string;
+    /** @example Optional raw content instead of fetching from Graph */
+    content?: string;
+    metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
+    /** @example 00000000-0000-0000-0000-000000000000 */
+    tenant_id?: string;
+    /** @example eyJ0... */
+    token?: string;
+    /** @example sharepoint://sites/mysite/items/abcdef01 */
+    uri?: string;
+  };
   "request.SlackIngest": {
     /** @example token */
     provider?: string;
@@ -546,6 +817,13 @@ export interface definitions {
     token?: string;
     /** @example slack://C1234567890 */
     uri?: string;
+  };
+  "response.ExecutionEvidence": {
+    assistive?: boolean;
+    enabled?: boolean;
+    error?: string;
+    metadata?: { [key: string]: string };
+    summary?: string;
   };
   "response.Ingest": {
     capabilities?: string[];
@@ -560,6 +838,64 @@ export interface definitions {
     /** @example Issue #1: Fix connector README — requesting updated setup steps. */
     preview?: string;
     previews?: string[];
+  };
+  "response.PMOSummary": {
+    confidence?: { [key: string]: number };
+    evidence?: { [key: string]: string[] };
+    facts?: string[];
+    impacts?: string[];
+    recommended_decisions?: string[];
+    risks?: string[];
+  };
+  "response.PresentationFindings": {
+    connector?: string;
+    execution?: definitions["response.ExecutionEvidence"];
+    mismatch_count?: number;
+    mismatch_ids?: string[];
+    mismatches?: definitions["types.Mismatch"][];
+    pmo?: definitions["response.PMOSummary"];
+    role?: string;
+    severity_count?: { [key: string]: number };
+    summary?: string;
+    trace_id?: string;
+    uri?: string;
+    views?: definitions["response.RoleViews"];
+  };
+  "response.RoleSummaryView": {
+    finding_count?: number;
+    mismatch_ids?: string[];
+    next_actions?: string[];
+    role?: string;
+    summary?: string;
+  };
+  "response.RoleViews": {
+    architecture?: definitions["response.RoleSummaryView"];
+    pmo?: definitions["response.RoleSummaryView"];
+    presentation_layer?: definitions["response.RoleSummaryView"];
+    qa?: definitions["response.RoleSummaryView"];
+    service_layer?: definitions["response.RoleSummaryView"];
+  };
+  "types.Mismatch": {
+    /** @description delivery roles that need to act on this finding */
+    affected_roles?: string[];
+    /** @description 0.0-1.0 score for how certain the reasoning stage is */
+    confidence?: number;
+    /** @description IDs of the entities involved in the mismatch */
+    entity_ids?: string[];
+    /** @description source artifact references supporting this finding */
+    evidence?: string[];
+    /** @description unique identifier for this mismatch finding */
+    id?: string;
+    /** @description expected business or delivery impact level */
+    impact?: string;
+    /** @description suggested action for the team to resolve this */
+    recommended?: string;
+    /** @description impact level: low, medium, or high */
+    severity?: string;
+    /** @description human-readable description of what was found */
+    summary?: string;
+    /** @description stable category for the detection rule that produced this finding */
+    type?: string;
   };
 }
 

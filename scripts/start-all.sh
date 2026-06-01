@@ -53,17 +53,29 @@ is_headless() {
   return 1
 }
 
+install_codex_plugin() {
+  local name="$1" registry_name="$2"
+  local plugin_id="${registry_name%%@*}"
+  # codex plugin list displays friendly names (e.g. "Google Drive"), not slugs.
+  # Match against both the slug and the friendly display name.
+  if codex plugin list 2>/dev/null | grep -Eqi "${plugin_id}|${name}"; then
+    echo "  [ok] ${name} plugin already installed"
+    return 0
+  fi
+  codex plugin add "${registry_name}" >/dev/null 2>&1 && \
+    echo "  [ok] ${name} plugin installed" || \
+    echo "  [warn] Could not install ${name} Codex plugin. Run: codex plugin add ${registry_name}"
+}
+
 if command -v codex >/dev/null 2>&1; then
   echo "Codex CLI: $(codex --version)"
-  echo "Ensuring Codex GitHub, Atlassian Rovo, Slack, and Google Drive plugins are installed..."
-  codex plugin add github@openai-curated >/dev/null 2>&1 || \
-    echo "[warn] Could not install GitHub Codex plugin."
-  codex plugin add atlassian-rovo@openai-curated >/dev/null 2>&1 || \
-    echo "[warn] Could not install Atlassian Rovo Codex plugin."
-  codex plugin add slack@openai-curated >/dev/null 2>&1 || \
-    echo "[warn] Could not install Slack Codex plugin."
-  codex plugin add googledrive@openai-curated >/dev/null 2>&1 || \
-    echo "[warn] Could not install Google Drive Codex plugin."
+  echo "Ensuring all required Codex plugins are installed..."
+  install_codex_plugin "GitHub"          "github@openai-curated"
+  install_codex_plugin "Atlassian Rovo"  "atlassian-rovo@openai-curated"
+  install_codex_plugin "Slack"           "slack@openai-curated"
+  install_codex_plugin "Google Drive"    "google-drive@openai-curated"
+  install_codex_plugin "Notion"          "notion@openai-curated"
+  install_codex_plugin "SharePoint"      "sharepoint@openai-curated"
   if ! codex login status >/dev/null 2>&1; then
     if is_headless; then
       echo

@@ -37,10 +37,11 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	clientCredentialsConfigured := tenantConfigured && clientIDConfigured && clientSecretConfigured
 
 	response.WriteJSON(w, http.StatusOK, map[string]any{
-		"connected":                    accessTokenConfigured || clientCredentialsConfigured,
-		"access_token_configured":      accessTokenConfigured,
+		"connected":                     accessTokenConfigured || clientCredentialsConfigured,
+		"access_token_configured":       accessTokenConfigured,
 		"client_credentials_configured": clientCredentialsConfigured,
-		"tenant_configured":            tenantConfigured,
+		"tenant_configured":             tenantConfigured,
+		"codex_plugin":                  "sharepoint@openai-curated",
 	})
 }
 

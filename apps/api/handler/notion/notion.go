@@ -35,6 +35,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	response.WriteJSON(w, http.StatusOK, map[string]any{
 		"connected":        tokenConfigured,
 		"token_configured": tokenConfigured,
+		"codex_plugin":     "notion@openai-curated",
 	})
 }
 

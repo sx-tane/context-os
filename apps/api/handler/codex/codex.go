@@ -207,19 +207,31 @@ func codexPlugins() []codexPluginStatus {
 		{Name: "github@openai-curated"},
 		{Name: "atlassian-rovo@openai-curated"},
 		{Name: "slack@openai-curated"},
+		{Name: "google-drive@openai-curated"},
+		{Name: "notion@openai-curated"},
+		{Name: "sharepoint@openai-curated"},
 	}
 	if err != nil {
 		return plugins
 	}
+	// codex plugin list output wraps long lines across multiple rows, so we
+	// scan the full output for each plugin slug rather than matching a single line.
+	lower := strings.ToLower(out)
 	for i, p := range plugins {
-		for _, line := range strings.Split(out, "\n") {
-			if !strings.HasPrefix(line, p.Name) {
-				continue
-			}
-			lower := strings.ToLower(line)
-			plugins[i].Installed = strings.Contains(lower, "installed")
-			plugins[i].Enabled = strings.Contains(lower, "enabled")
+		slug := strings.ToLower(p.Name)
+		if !strings.Contains(lower, slug) {
+			continue
 		}
+		// Find the segment of text near the slug and check for status words.
+		idx := strings.Index(lower, slug)
+		// Read up to 120 chars after the slug to capture the status column.
+		end := idx + len(slug) + 120
+		if end > len(lower) {
+			end = len(lower)
+		}
+		segment := lower[idx:end]
+		plugins[i].Installed = strings.Contains(segment, "installed")
+		plugins[i].Enabled = strings.Contains(segment, "enabled")
 	}
 	return plugins
 }

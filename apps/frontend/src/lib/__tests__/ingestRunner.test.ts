@@ -178,7 +178,7 @@ describe("runConnectorIngest — codex provider", () => {
     });
 
     expect(s.setError).toHaveBeenCalledWith(
-      expect.stringContaining("GitHub, Jira, and Slack"),
+      expect.stringContaining("not supported"),
     );
     expect(mockStreamCodexIngest).not.toHaveBeenCalled();
   });

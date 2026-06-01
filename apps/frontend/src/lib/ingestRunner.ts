@@ -42,7 +42,7 @@ export async function runConnectorIngest(
       if (!supportsCodex(options.connector)) {
         setIfCurrent(
           options.setError,
-          "Codex streaming is currently available for GitHub, Jira, and Slack connectors.",
+          `Codex streaming is not supported for the "${options.connector}" connector.`,
         );
         return;
       }

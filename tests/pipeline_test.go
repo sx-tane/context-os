@@ -170,7 +170,7 @@ func runPipelineScenario(t *testing.T, scenario pipelineScenario) pipelines.Resu
 		URI:      scenario.Inputs.SourceRequest.URI,
 		Content:  content,
 		Metadata: metadata,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}

@@ -56,85 +56,6 @@ export interface ApiErrorBody {
   message?: string;
 }
 
-export type PresentationRole =
-  | "pmo"
-  | "presentation_layer"
-  | "service_layer"
-  | "qa"
-  | "architecture";
-
-export interface RoleSummaryView {
-  role: PresentationRole;
-  summary: string;
-  mismatch_ids: string[];
-  next_actions: string[];
-  finding_count: number;
-}
-
-export interface PMOSummary {
-  facts: string[];
-  risks: string[];
-  impacts: string[];
-  confidence: Record<string, number>;
-  evidence: Record<string, string[]>;
-  recommended_decisions: string[];
-}
-
-export interface Mismatch {
-  id: string;
-  type: string;
-  summary: string;
-  entity_ids: string[];
-  severity: string;
-  confidence: number;
-  impact: string;
-  evidence: string[];
-  affected_roles: string[];
-  recommended: string;
-}
-
-export interface ExecutionEvidence {
-  enabled: boolean;
-  assistive: boolean;
-  summary: string;
-  metadata: Record<string, string>;
-  error?: string;
-}
-
-export interface FindingsViews {
-  pmo: RoleSummaryView;
-  presentation_layer: RoleSummaryView;
-  service_layer: RoleSummaryView;
-  qa: RoleSummaryView;
-  architecture: RoleSummaryView;
-}
-
-export interface FindingsRequest {
-  connector: ConnectorKind;
-  uri?: string;
-  content?: string;
-  provider?: IngestProvider;
-  token?: string;
-  role?: PresentationRole;
-  include_execution?: boolean;
-  metadata?: Record<string, string>;
-}
-
-export interface FindingsResult {
-  connector: string;
-  uri: string;
-  role: PresentationRole;
-  trace_id: string;
-  summary: string;
-  mismatch_count: number;
-  severity_count: Record<string, number>;
-  mismatch_ids: string[];
-  mismatches: Mismatch[];
-  views: FindingsViews;
-  pmo: PMOSummary;
-  execution: ExecutionEvidence;
-}
-
 export interface SourceMetadataField {
   key: string;
   label: string;
@@ -165,4 +86,85 @@ export interface SourceConnectorConfig {
   contentPlaceholder?: string;
   metadataFields?: SourceMetadataField[];
   supportedFormats?: SupportedFormat[];
+}
+
+// ---- Findings / presentation types ----
+
+export interface FindingsRequest {
+  connector: ConnectorKind;
+  uri?: string;
+  token?: string;
+  provider?: IngestProvider;
+  role?: string;
+  cursor?: string;
+  content?: string;
+  metadata?: Record<string, string>;
+  include_execution?: boolean;
+}
+
+export interface FindingsMismatch {
+  id?: string;
+  entity_name?: string;
+  mismatch_type?: string;
+  severity?: string;
+  description?: string;
+  evidence?: string[];
+  confidence?: number;
+  impact?: string;
+  recommended_action?: string;
+}
+
+export interface FindingsResult {
+  connector?: string;
+  uri?: string;
+  role?: string;
+  summary?: string;
+  mismatches?: FindingsMismatch[];
+  entity_count?: number;
+  mismatch_count?: number;
+  trace_id?: string;
+  error?: string;
+}
+
+// ---- Project / knowledge state types ----
+
+export type KnowledgeStatus = "idle" | "configuring" | "ingesting" | "ready" | "error";
+
+export interface ConnectorKnowledge {
+  connector: ConnectorKind;
+  uri: string;
+  status: KnowledgeStatus;
+  lastIngestedAt?: string;
+  eventCount?: number;
+  error?: string;
+}
+
+export interface ProjectState {
+  workspacePath: string;
+  name: string;
+  createdAt: string;
+  connectors: ConnectorKnowledge[];
+  knowledgeInstalledAt?: string;
+}
+
+// ---- Chat types ----
+
+export type ChatRole = "user" | "assistant" | "system";
+export type ChatCardKind = "ingest" | "findings" | "status" | "onboarding";
+
+export interface ChatCard {
+  kind: ChatCardKind;
+  ingestResult?: IngestResult;
+  findingsResult?: FindingsResult;
+  statusMap?: Record<string, boolean>;
+  onboardingConnectors?: ConnectorKnowledge[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  text: string;
+  createdAt: string;
+  card?: ChatCard;
+  loading?: boolean;
 }

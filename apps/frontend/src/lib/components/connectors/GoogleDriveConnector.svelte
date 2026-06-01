@@ -109,7 +109,7 @@
       {codexLoggedIn}
       {codexAccount}
       {codexPlugins}
-      pluginName="googledrive@openai-curated"
+      pluginName="google-drive@openai-curated"
     />
   {/if}
 

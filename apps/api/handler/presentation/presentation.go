@@ -31,7 +31,8 @@ import (
 	slacksource "context-os/internal/source/slack"
 )
 
-const findingsTimeout = 30 * time.Second
+// findingsTimeout allows for slow Codex plugin ingestion which can take 60–90 s.
+const findingsTimeout = 120 * time.Second
 
 // Status handles GET /presentation/status.
 //
@@ -49,7 +50,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.WriteJSON(w, http.StatusOK, map[string]any{
-		"supported_connectors": []string{"github", "jira", "slack", "filesystem", "googledrive", "notion", "sharepoint"},
+		"supported_connectors": []string{"github", "jira", "slack", "filesystem", "google-drive", "notion", "sharepoint"},
 		"supported_roles":      []string{"pmo", "presentation_layer", "service_layer", "qa", "architecture"},
 		"execution": map[string]any{
 			"hidden":    true,
@@ -108,7 +109,7 @@ func Findings(w http.ResponseWriter, r *http.Request) {
 		Content:  req.Content,
 		Cursor:   strings.TrimSpace(req.Cursor),
 		Metadata: metadata,
-	})
+	}, nil)
 	if err != nil {
 		response.WriteConnectorError(w, err)
 		return

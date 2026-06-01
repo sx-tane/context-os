@@ -21,7 +21,7 @@ func TestDebugClean(t *testing.T) {
 			"team":      "payments",
 			"trace_id":  "trace-refund-clean",
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
