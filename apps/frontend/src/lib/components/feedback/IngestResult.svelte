@@ -25,8 +25,22 @@
     <strong>Connector</strong><span>{result.connector}</span>
   </div>
   <div class="kv">
+    <strong>Persistence</strong><span>{result.persistence_mode ?? "preview_debug"}</span>
+  </div>
+  {#if result.workspace_id}
+    <div class="kv">
+      <strong>Workspace DB</strong><span>{result.workspace_id}</span>
+    </div>
+  {/if}
+  <div class="kv">
     <strong>Capabilities</strong><span>{result.capabilities?.join(", ") ?? ""}</span>
   </div>
+  {#if result.persisted_event_count !== undefined}
+    <div class="kv"><strong>Persisted events</strong><span>{result.persisted_event_count}</span></div>
+  {/if}
+  {#if result.relationship_count !== undefined}
+    <div class="kv"><strong>Relationships</strong><span>{result.relationship_count}</span></div>
+  {/if}
   {#if eventCount > 1}
     <div class="kv"><strong>Event count</strong><span>{eventCount}</span></div>
   {/if}

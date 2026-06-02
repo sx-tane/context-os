@@ -4,6 +4,7 @@ import type {
   ChatQueryRequest,
   ChatQueryResult,
   CodexConnectorKind,
+  CodexSourceList,
   ConnectorKind,
   FindingsRequest,
   FindingsResult,
@@ -141,7 +142,7 @@ export async function postFilesystemUpload(
 
 export async function streamCodexIngest(
   connector: CodexConnectorKind,
-  body: { uri: string; token?: string; provider: "codex" },
+  body: { workspace_id?: string; uri: string; token?: string; provider: "codex" },
   handlers: StreamHandlers,
   options: RequestOptions = {},
 ): Promise<void> {
@@ -196,6 +197,20 @@ export async function streamCodexLogin(
   await readLogStream(res, onLog);
 }
 
+export async function getCodexSources(
+  connector: Extract<ConnectorKind, "github" | "slack">,
+): Promise<CodexSourceList | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/codex/sources?connector=${encodeURIComponent(connector)}`,
+    );
+    if (!res.ok) return null;
+    return (await readJSON(res)) as unknown as CodexSourceList;
+  } catch {
+    return null;
+  }
+}
+
 async function readLogStream(
   res: Response,
   onLog: (line: string) => void,
@@ -232,6 +247,23 @@ export async function upsertWorkspace(
     if (!res.ok) return null;
     const body = await readJSON(res);
     return normalizeWorkspaceRecord(body);
+  } catch {
+    return null;
+  }
+}
+
+export async function resetWorkspace(
+  path: string,
+  name: string,
+): Promise<WorkspaceStatus | null> {
+  try {
+    const res = await fetch(`${API_URL}/workspace/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, name }),
+    });
+    if (!res.ok) return null;
+    return normalizeWorkspaceStatus(await readJSON(res));
   } catch {
     return null;
   }
@@ -287,12 +319,20 @@ function normalizeWorkspaceStatus(body: unknown): WorkspaceStatus {
   const status: WorkspaceStatus = {};
   const workspace = normalizeWorkspaceRecord(record.workspace ?? record.Workspace);
   if (workspace) status.workspace = workspace;
+  const workspaceCount = numberField(record, "workspace_count", "WorkspaceCount");
+  if (workspaceCount !== undefined) status.workspace_count = workspaceCount;
   const eventCount = numberField(record, "event_count", "EventCount");
   if (eventCount !== undefined) status.event_count = eventCount;
   const entityCount = numberField(record, "entity_count", "EntityCount");
   if (entityCount !== undefined) status.entity_count = entityCount;
+  const relationshipCount = numberField(record, "relationship_count", "RelationshipCount");
+  if (relationshipCount !== undefined) status.relationship_count = relationshipCount;
   const mismatchCount = numberField(record, "mismatch_count", "MismatchCount");
   if (mismatchCount !== undefined) status.mismatch_count = mismatchCount;
+  const connectorSyncCount = numberField(record, "connector_sync_count", "ConnectorSyncCount");
+  if (connectorSyncCount !== undefined) status.connector_sync_count = connectorSyncCount;
+  const auditCount = numberField(record, "audit_count", "AuditCount");
+  if (auditCount !== undefined) status.audit_count = auditCount;
   const syncs = asArray(record.syncs ?? record.Syncs)
     .map(normalizeWorkspaceSync)
     .filter((sync): sync is WorkspaceSyncState => sync !== null);

@@ -4,6 +4,7 @@ import {
   postIngest,
   postFindings,
   postFilesystemUpload,
+  getCodexSources,
   getWorkspaces,
   getArtifacts,
   postChatQuery,
@@ -178,6 +179,39 @@ describe("postFilesystemUpload", () => {
       "/api/filesystem/upload",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+// ---- getCodexSources ----
+
+describe("getCodexSources", () => {
+  it("returns Codex source list when response is 2xx", async () => {
+    const body = {
+      connector: "github",
+      provider: "codex",
+      sources: [
+        {
+          id: "owner/repo",
+          label: "owner/repo",
+          uri: "owner/repo",
+          kind: "repository",
+          connector: "github",
+        },
+      ],
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    await expect(getCodexSources("github")).resolves.toEqual(body);
+  });
+
+  it("fetches connector source list through /api/codex/sources", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ sources: [] }, true, 200));
+    await getCodexSources("slack");
+    expect(fetchMock).toHaveBeenCalledWith("/api/codex/sources?connector=slack");
+  });
+
+  it("returns null when source discovery fails", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "failed" }, false, 502));
+    await expect(getCodexSources("github")).resolves.toBeNull();
   });
 });
 

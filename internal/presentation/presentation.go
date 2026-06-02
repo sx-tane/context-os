@@ -24,7 +24,7 @@ const (
 // explainable as the structured Mismatch it describes.
 func RenderSummary(role Role, mismatches []types.Mismatch) string {
 	if len(mismatches) == 0 {
-		return fmt.Sprintf("%s view: no delivery mismatches detected", role) // fast path: clean state message
+		return fmt.Sprintf("%s view: no delivery mismatches detected. This means the local findings check did not find a conflict; use chat to summarize source messages or documents.", role)
 	}
 	lines := []string{fmt.Sprintf("%s view: %d delivery mismatch(es) detected", role, len(mismatches))} // header line with count
 	for _, mismatch := range mismatches {

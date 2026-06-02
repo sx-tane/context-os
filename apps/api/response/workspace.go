@@ -35,11 +35,15 @@ type WorkspaceSync struct {
 
 // WorkspaceStatus is the JSON payload returned by GET /workspace/status.
 type WorkspaceStatus struct {
-	Workspace     Workspace       `json:"workspace"`
-	EventCount    int             `json:"event_count"`
-	EntityCount   int             `json:"entity_count"`
-	MismatchCount int             `json:"mismatch_count"`
-	Syncs         []WorkspaceSync `json:"syncs"`
+	Workspace          Workspace       `json:"workspace"`
+	WorkspaceCount     int             `json:"workspace_count"`
+	EventCount         int             `json:"event_count"`
+	EntityCount        int             `json:"entity_count"`
+	RelationshipCount  int             `json:"relationship_count"`
+	MismatchCount      int             `json:"mismatch_count"`
+	ConnectorSyncCount int             `json:"connector_sync_count"`
+	AuditCount         int             `json:"audit_count"`
+	Syncs              []WorkspaceSync `json:"syncs"`
 }
 
 // NewWorkspace maps a repository workspace into an API response.
@@ -67,15 +71,22 @@ func NewWorkspaceStatus(
 	workspace repository.Workspace,
 	eventCount int,
 	entityCount int,
+	relationshipCount int,
 	mismatchCount int,
+	workspaceCount int,
+	auditCount int,
 	syncs []repository.ConnectorSync,
 ) WorkspaceStatus {
 	return WorkspaceStatus{
-		Workspace:     NewWorkspace(workspace),
-		EventCount:    eventCount,
-		EntityCount:   entityCount,
-		MismatchCount: mismatchCount,
-		Syncs:         NewWorkspaceSyncs(syncs),
+		Workspace:          NewWorkspace(workspace),
+		WorkspaceCount:     workspaceCount,
+		EventCount:         eventCount,
+		EntityCount:        entityCount,
+		RelationshipCount:  relationshipCount,
+		MismatchCount:      mismatchCount,
+		ConnectorSyncCount: len(syncs),
+		AuditCount:         auditCount,
+		Syncs:              NewWorkspaceSyncs(syncs),
 	}
 }
 

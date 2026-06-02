@@ -82,10 +82,12 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shared.WriteSourceIngest(w, r, connector, shared.SourceIngestInput{
-		URI:      req.URI,
-		Content:  req.Content,
-		Cursor:   req.Cursor,
-		Metadata: metadata,
+		WorkspaceID: req.WorkspaceID,
+		Connector:   "jira",
+		URI:         req.URI,
+		Content:     req.Content,
+		Cursor:      req.Cursor,
+		Metadata:    metadata,
 	})
 }
 
@@ -117,6 +119,8 @@ func IngestStream(w http.ResponseWriter, r *http.Request) {
 		func(req request.JiraIngest) string { return req.URI },
 		func(req request.JiraIngest) string { return req.Provider },
 		func(req request.JiraIngest) string { return req.Token },
+		func(req request.JiraIngest) string { return req.WorkspaceID },
+		func(request.JiraIngest) string { return "jira" },
 	)
 }
 

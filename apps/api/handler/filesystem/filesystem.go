@@ -38,5 +38,12 @@ func decodeIngest(dec *json.Decoder) (shared.SourceIngestInput, error) {
 	metadata := shared.CloneStringMap(req.Metadata)
 	shared.SetMetadata(metadata, "filesystem_include", req.Include)
 	shared.SetMetadata(metadata, "filesystem_exclude", req.Exclude)
-	return shared.SourceIngestInput{URI: req.URI, Content: req.Content, Cursor: req.Cursor, Metadata: metadata}, nil
+	return shared.SourceIngestInput{
+		WorkspaceID: req.WorkspaceID,
+		Connector:   "filesystem",
+		URI:         req.URI,
+		Content:     req.Content,
+		Cursor:      req.Cursor,
+		Metadata:    metadata,
+	}, nil
 }

@@ -42,9 +42,24 @@ export interface CodexPlugin {
   enabled: boolean;
 }
 
+export interface CodexSourceOption {
+  id: string;
+  label: string;
+  uri: string;
+  kind: string;
+  connector: ConnectorKind;
+}
+
+export interface CodexSourceList {
+  connector: ConnectorKind;
+  provider: "codex";
+  sources: CodexSourceOption[];
+}
+
 // IngestRequest stays as a unified frontend type covering all connectors.
 // The swagger has separate per-connector request types; the frontend collapses them.
 export interface IngestRequest {
+  workspace_id?: string;
   uri: string;
   token?: string;
   provider: IngestProvider;
@@ -212,9 +227,13 @@ export interface WorkspaceSyncState {
 
 export interface WorkspaceStatus {
   workspace?: WorkspaceRecord;
+  workspace_count?: number;
   event_count?: number;
   entity_count?: number;
+  relationship_count?: number;
   mismatch_count?: number;
+  connector_sync_count?: number;
+  audit_count?: number;
   syncs?: WorkspaceSyncState[];
 }
 

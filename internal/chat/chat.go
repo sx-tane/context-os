@@ -302,13 +302,17 @@ func buildArtifactAnswer(result Result, limit int) (string, string) {
 		return answer, answer
 	}
 
-	latest := result.Artifacts[0].Title
-	if latest == "" {
-		latest = previewText(result.Artifacts[0].Body, 90)
-	}
+	latest := compactArtifactTitle(result.Artifacts[0])
 	answer := fmt.Sprintf("Found %d local %s artifacts. Latest: %s", len(result.Artifacts), description, latest)
 	if len(result.Artifacts) == limit {
 		answer += fmt.Sprintf(" Showing the latest %d results.", limit)
+	}
+	if highlights := compactHighlights(result.Artifacts); len(highlights) > 0 {
+		answer += "\n\nKey points:"
+		for _, highlight := range highlights {
+			answer += "\n- " + highlight
+		}
+		answer += "\n\nOpen evidence for the full source text."
 	}
 	return answer, summarizeArtifacts(result.Artifacts)
 }
@@ -346,6 +350,75 @@ func summarizeArtifacts(artifacts []repository.IngestEvent) string {
 		items = append(items, previewText(title, 90))
 	}
 	return "Latest local artifacts: " + strings.Join(items, " | ")
+}
+
+func compactArtifactTitle(artifact repository.IngestEvent) string {
+	title := strings.TrimSpace(artifact.Title)
+	if title == "" || len(strings.Fields(title)) > 18 {
+		title = strings.TrimSpace(artifact.SourceURI)
+	}
+	if title == "" {
+		title = artifact.Body
+	}
+	return previewText(title, 90)
+}
+
+func compactHighlights(artifacts []repository.IngestEvent) []string {
+	out := []string{}
+	seen := map[string]struct{}{}
+	for _, artifact := range artifacts {
+		for _, line := range candidateHighlightLines(artifact.Body) {
+			line = cleanHighlightLine(line)
+			if line == "" {
+				continue
+			}
+			key := strings.ToLower(line)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, previewText(line, 150))
+			if len(out) >= 6 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+func candidateHighlightLines(body string) []string {
+	lines := strings.Split(body, "\n")
+	out := []string{}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		lower := strings.ToLower(trimmed)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+			out = append(out, trimmed)
+			continue
+		}
+		if hasAny(lower, "todo", "asked", "review", "release", "hotfix", "blocked", "confirmed", "requested", "pr:", "issue:") {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func cleanHighlightLine(line string) string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimPrefix(line, "-")
+	line = strings.TrimPrefix(line, "*")
+	line = strings.TrimSpace(line)
+	line = strings.ReplaceAll(line, "**", "")
+	line = strings.ReplaceAll(line, "`", "")
+	if strings.HasPrefix(strings.ToLower(line), "source:") ||
+		strings.HasPrefix(strings.ToLower(line), "message link:") ||
+		strings.HasPrefix(strings.ToLower(line), "channel link:") {
+		return ""
+	}
+	return line
 }
 
 func previewText(text string, limit int) string {

@@ -5,6 +5,7 @@ package pipeline
 import (
 	"context"
 	"log"
+	"strings"
 
 	"context-os/domain/contracts"
 	"context-os/domain/entities"
@@ -20,6 +21,8 @@ import (
 	"context-os/internal/reasoning"
 	"context-os/internal/relationship"
 )
+
+const metadataProductConnector = "product_connector"
 
 // Stores groups the repository interfaces that pipeline.Run uses to persist
 // its output.  All fields are optional — a nil field disables that persistence
@@ -52,6 +55,13 @@ func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.S
 	if err != nil {
 		return pipelines.Result{}, err
 	}
+	return RunEvents(ctx, rawEvents, req, stores), nil
+}
+
+// RunEvents executes the non-ingest pipeline stages for events that were already
+// read by a connector. This keeps streaming ingest persistence on the same path
+// as synchronous ingest without rerunning the source connector.
+func RunEvents(ctx context.Context, rawEvents []events.Event, req contracts.SourceRequest, stores *Stores) pipelines.Result {
 	var semanticMatcher identity.Matcher
 	if stores != nil {
 		semanticMatcher = stores.SemanticMatcher // nil is safe: ResolveWithMatcher falls back to LocalMatcher
@@ -79,6 +89,7 @@ func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.S
 	}
 	result := pipelines.Result{
 		EventCount:    len(rawEvents),
+		Events:        rawEvents,
 		Entities:      contextGraph.AllEntities(),
 		Relationships: contextGraph.AllRelationships(),
 		Mismatches:    reasoning.DetectMismatches(contextGraph),
@@ -87,7 +98,7 @@ func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.S
 	if stores != nil && stores.WorkspaceID != "" {
 		persistResult(ctx, stores, req, rawEvents, contextGraph, result)
 	}
-	return result, nil
+	return result
 }
 
 // persistResult writes pipeline outputs to the backing store and saves a filesystem snapshot.
@@ -99,10 +110,10 @@ func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequ
 			ie := repository.IngestEvent{
 				ID:            e.Metadata[events.MetadataEventID],
 				WorkspaceID:   stores.WorkspaceID,
-				Connector:     e.Metadata[contracts.MetadataConnector],
+				Connector:     persistedConnector(e.Metadata),
 				SourceURI:     req.URI,
 				EventType:     string(e.Type),
-				Title:         e.Content,
+				Title:         eventTitle(e),
 				Body:          e.Content,
 				ContentHash:   e.Metadata["content_hash"],
 				Metadata:      e.Metadata,
@@ -144,4 +155,29 @@ func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequ
 	if _, err := contextGraph.SaveSnapshot("storage/snapshots", snapshotName); err != nil {
 		log.Printf("pipeline: save snapshot: %v", err)
 	}
+}
+
+func persistedConnector(metadata map[string]string) string {
+	if connector := strings.TrimSpace(metadata[metadataProductConnector]); connector != "" {
+		return strings.ToLower(connector)
+	}
+	return strings.ToLower(strings.TrimSpace(metadata[contracts.MetadataConnector]))
+}
+
+func eventTitle(e events.Event) string {
+	if subject := strings.TrimSpace(e.Subject); subject != "" {
+		return subject
+	}
+	return previewTitle(e.Content, 120)
+}
+
+func previewTitle(text string, limit int) string {
+	preview := strings.Join(strings.Fields(text), " ")
+	if len(preview) <= limit {
+		return preview
+	}
+	if limit <= 3 {
+		return preview[:limit]
+	}
+	return preview[:limit-3] + "..."
 }

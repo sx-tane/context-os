@@ -825,6 +825,35 @@ export interface paths {
       };
     };
   };
+  "/workspace/reset": {
+    /** Deletes DB-backed local memory for a workspace and recreates an empty workspace row. */
+    post: {
+      parameters: {
+        body: {
+          /** Workspace reset request */
+          body: definitions["workspace.upsertRequest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.WorkspaceStatus"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/workspace/status": {
     /** Returns event counts and connector sync states for a workspace. */
     get: {
@@ -975,6 +1004,8 @@ export interface definitions {
     metadata?: { [key: string]: string };
     /** @example storage/raw/README.md */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.GithubIngest": {
     /** @example token */
@@ -983,6 +1014,8 @@ export interface definitions {
     token?: string;
     /** @example https://github.com/sx-tane/context-os/issues/1 */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.GoogleDriveIngest": {
     /** @example ya29.a0AfH6SMD... */
@@ -1000,6 +1033,8 @@ export interface definitions {
     service_account_path?: string;
     /** @example https://drive.google.com/drive/folders/1234567890 */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.JiraIngest": {
     /** @example https://mysite.atlassian.net */
@@ -1019,6 +1054,8 @@ export interface definitions {
     token?: string;
     /** @example https://mysite.atlassian.net/browse/PROJ-123 */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.NotionIngest": {
     /** @example Optional raw content instead of fetching from Notion */
@@ -1030,6 +1067,8 @@ export interface definitions {
     token?: string;
     /** @example notion://page/abc12345-1234-1234-1234-abcdefabcdef */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.PresentationFindings": {
     /** @example filesystem */
@@ -1073,6 +1112,8 @@ export interface definitions {
     token?: string;
     /** @example sharepoint://sites/mysite/items/abcdef01 */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.SlackIngest": {
     /** @example token */
@@ -1081,6 +1122,8 @@ export interface definitions {
     token?: string;
     /** @example slack://C1234567890 */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "response.Artifact": {
     body?: string;
@@ -1130,15 +1173,21 @@ export interface definitions {
     capabilities?: string[];
     /** @example github */
     connector?: string;
+    entity_count?: number;
     event?: definitions["events.Event"];
     /** @example 1 */
     event_count?: number;
     events?: definitions["events.Event"][];
     metadata?: { [key: string]: string };
     metadata_items?: { [key: string]: string }[];
+    mismatch_count?: number;
+    persisted_event_count?: number;
+    persistence_mode?: string;
     /** @example Issue #1: Fix connector README — requesting updated setup steps. */
     preview?: string;
     previews?: string[];
+    relationship_count?: number;
+    workspace_id?: string;
   };
   "response.PMOSummary": {
     confidence?: { [key: string]: number };
@@ -1150,6 +1199,7 @@ export interface definitions {
   };
   "response.PresentationFindings": {
     connector?: string;
+    event_count?: number;
     execution?: definitions["response.ExecutionEvidence"];
     mismatch_count?: number;
     mismatch_ids?: string[];
@@ -1175,6 +1225,34 @@ export interface definitions {
     presentation_layer?: definitions["response.RoleSummaryView"];
     qa?: definitions["response.RoleSummaryView"];
     service_layer?: definitions["response.RoleSummaryView"];
+  };
+  "response.Workspace": {
+    created_at?: string;
+    id?: string;
+    name?: string;
+    path?: string;
+    updated_at?: string;
+  };
+  "response.WorkspaceStatus": {
+    audit_count?: number;
+    connector_sync_count?: number;
+    entity_count?: number;
+    event_count?: number;
+    mismatch_count?: number;
+    relationship_count?: number;
+    syncs?: definitions["response.WorkspaceSync"][];
+    workspace?: definitions["response.Workspace"];
+    workspace_count?: number;
+  };
+  "response.WorkspaceSync": {
+    connector?: string;
+    cursor?: string;
+    event_count?: number;
+    last_error?: string;
+    last_synced_at?: string;
+    source_uri?: string;
+    status?: string;
+    workspace_id?: string;
   };
   "types.Mismatch": {
     /** @description delivery roles that need to act on this finding */

@@ -28,10 +28,15 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v bun >/dev/null 2>&1; then
-  echo "bun is required to start the frontend" >&2
+if ! command -v bun >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1; then
+  echo "bun or npm is required to start the frontend" >&2
   exit 1
 fi
+
+prefix_logs() {
+  local label="$1"
+  awk -v label="$label" '{ print "[" label "] " $0; fflush(); }'
+}
 
 if ! command -v codex >/dev/null 2>&1; then
   if command -v npm >/dev/null 2>&1; then
@@ -62,6 +67,12 @@ install_codex_plugin() {
     echo "  [ok] ${name} plugin already installed"
     return 0
   fi
+
+  if [[ "${INSTALL_CODEX_PLUGINS:-0}" != "1" ]]; then
+    echo "  [missing] ${name} plugin. To install: codex plugin add ${registry_name}"
+    return 0
+  fi
+
   codex plugin add "${registry_name}" >/dev/null 2>&1 && \
     echo "  [ok] ${name} plugin installed" || \
     echo "  [warn] Could not install ${name} Codex plugin. Run: codex plugin add ${registry_name}"
@@ -69,7 +80,11 @@ install_codex_plugin() {
 
 if command -v codex >/dev/null 2>&1; then
   echo "Codex CLI: $(codex --version)"
-  echo "Ensuring all required Codex plugins are installed..."
+  if [[ "${INSTALL_CODEX_PLUGINS:-0}" == "1" ]]; then
+    echo "Ensuring all required Codex plugins are installed..."
+  else
+    echo "Checking required Codex plugins without installing. Set INSTALL_CODEX_PLUGINS=1 to install missing plugins."
+  fi
   install_codex_plugin "GitHub"          "github@openai-curated"
   install_codex_plugin "Atlassian Rovo"  "atlassian-rovo@openai-curated"
   install_codex_plugin "Slack"           "slack@openai-curated"
@@ -113,7 +128,7 @@ if command -v uv >/dev/null 2>&1; then
   echo "Starting AI worker health server..."
   (
     cd "$ROOT_DIR/apps/ai-worker"
-    python3.12 health.py
+    python3.12 health.py 2>&1 | prefix_logs "worker"
   ) &
   WORKER_PID=$!
 else
@@ -154,23 +169,33 @@ fi
 echo "Regenerating frontend TypeScript types from swagger..."
 (
   cd "$ROOT_DIR/apps/frontend"
-  bun run codegen 2>/dev/null || \
-    echo "[warn] Frontend codegen failed; types may be stale. Run: cd apps/frontend && bun run codegen"
+  if command -v bun >/dev/null 2>&1; then
+    bun run codegen 2>/dev/null || \
+      echo "[warn] Frontend codegen failed; types may be stale. Run: cd apps/frontend && bun run codegen"
+  else
+    npm run codegen 2>/dev/null || \
+      echo "[warn] Frontend codegen failed; types may be stale. Run: cd apps/frontend && npm run codegen"
+  fi
 )
 
-echo "Starting API on current terminal session..."
+echo "Starting API. Backend logs will be prefixed with [api]."
 (
   cd "$ROOT_DIR"
-  go run ./apps/api
+  go run ./apps/api 2>&1 | prefix_logs "api"
 ) &
 API_PID=$!
 
-echo "Starting frontend dev server..."
+echo "Starting frontend dev server. Frontend logs will be prefixed with [frontend]."
 (
   cd "$ROOT_DIR/apps/frontend"
-  bun install
-  bun run dev
-) &
+  if command -v bun >/dev/null 2>&1; then
+    bun install
+    bun run dev
+  else
+    npm install
+    npm run dev
+  fi
+) 2>&1 | prefix_logs "frontend" &
 FRONTEND_PID=$!
 
 echo "API PID:      $API_PID"

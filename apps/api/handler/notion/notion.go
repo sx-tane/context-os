@@ -73,8 +73,10 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		shared.WriteSourceIngest(w, r, codexsource.NewConnector(), shared.SourceIngestInput{
-			URI:      req.URI,
-			Metadata: map[string]string{codexsource.MetadataPlugin: codexsource.PluginNotion},
+			WorkspaceID: req.WorkspaceID,
+			Connector:   "notion",
+			URI:         req.URI,
+			Metadata:    map[string]string{codexsource.MetadataPlugin: codexsource.PluginNotion},
 		})
 		return
 	}
@@ -83,9 +85,11 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 	shared.SetMetadata(metadata, notionsource.MetadataToken, req.Token)
 
 	shared.WriteSourceIngest(w, r, notionsource.NewConnector(), shared.SourceIngestInput{
-		URI:      req.URI,
-		Content:  req.Content,
-		Metadata: metadata,
+		WorkspaceID: req.WorkspaceID,
+		Connector:   "notion",
+		URI:         req.URI,
+		Content:     req.Content,
+		Metadata:    metadata,
 	})
 }
 
@@ -117,5 +121,7 @@ func IngestStream(w http.ResponseWriter, r *http.Request) {
 		func(req request.NotionIngest) string { return req.URI },
 		func(req request.NotionIngest) string { return req.Provider },
 		func(req request.NotionIngest) string { return req.Token },
+		func(req request.NotionIngest) string { return req.WorkspaceID },
+		func(request.NotionIngest) string { return "notion" },
 	)
 }

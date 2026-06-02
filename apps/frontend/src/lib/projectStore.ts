@@ -234,7 +234,9 @@ export function setConnectorKnowledge(
   extra: Partial<Omit<ConnectorKnowledge, "connector" | "uri" | "status">> = {},
 ): void {
   _project.update((p) => {
-    const rest = p.connectors.filter((c) => c.connector !== connector);
+    const rest = p.connectors.filter(
+      (c) => !(c.connector === connector && c.uri === uri),
+    );
     const next = {
       ...p,
       connectors: [
@@ -262,6 +264,49 @@ export function markKnowledgeInstalled(): void {
   }));
 }
 
+/** Clear locally remembered knowledge readiness for a fresh DB-backed start. */
+export function clearKnowledgeState(): void {
+  _project.update((p) => {
+    const next = {
+      ...p,
+      connectors: [],
+      knowledgeInstalledAt: undefined,
+    };
+    rememberWorkspace(next);
+    return next;
+  });
+}
+
+/** Clear locally remembered source and chat state for all known workspaces. */
+export function clearAllLocalWorkspaceState(paths: string[] = []): void {
+  const allPaths = new Set([...loadWorkspacePaths(), ...paths.map(cleanWorkspacePath)]);
+  try {
+    const storage = getLocalStorage();
+    if (storage) {
+      for (const path of allPaths) {
+        const projectState = loadProject(path);
+        saveProject({
+          ...projectState,
+          connectors: [],
+          knowledgeInstalledAt: undefined,
+        });
+        storage.removeItem(CHAT_KEY_PREFIX + path);
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  const activePath = get(_project).workspacePath;
+  const active = loadProject(activePath);
+  _project.set({
+    ...active,
+    connectors: [],
+    knowledgeInstalledAt: undefined,
+  });
+  _messages.set([]);
+  _workspaces.set([...allPaths].map((path) => loadProject(path)));
+}
+
 /** Return a snapshot of the current project state. */
 export function getProject(): ProjectState {
   return get(_project);
@@ -277,9 +322,29 @@ export async function loadWorkspaceStatus(workspacePath: string): Promise<void> 
     if (!status?.syncs) return;
     _project.update((p) => {
       const updated = p.connectors.map((ck) => {
-        const sync = status.syncs?.find((s) => s.connector === ck.connector);
-        if (!sync) return ck;
-        return { ...ck, eventCount: sync.event_count ?? ck.eventCount };
+        const sync = status.syncs?.find(
+          (s) =>
+            s.connector === ck.connector &&
+            (s.source_uri === ck.uri || s.source_uri === "" || !s.source_uri) &&
+            (s.event_count ?? 0) > 0,
+        );
+        if (sync) {
+          return {
+            ...ck,
+            status: "ready" as KnowledgeStatus,
+            eventCount: sync.event_count ?? ck.eventCount,
+            error: undefined,
+          };
+        }
+        if (ck.status === "ready") {
+          return {
+            ...ck,
+            status: "configuring" as KnowledgeStatus,
+            eventCount: 0,
+            error: "Not confirmed in the workspace database.",
+          };
+        }
+        return ck;
       });
       return { ...p, connectors: updated };
     });

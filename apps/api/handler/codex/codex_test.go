@@ -39,6 +39,28 @@ func TestStatusReturnsJSON(t *testing.T) {
 	}
 }
 
+func TestSourcesMethodNotAllowed(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/codex/sources?connector=github", nil)
+
+	codex.Sources(recorder, req)
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("Sources() status = %d, want 405", recorder.Code)
+	}
+}
+
+func TestSourcesRejectsUnknownConnector(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/codex/sources?connector=unknown", nil)
+
+	codex.Sources(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("Sources() status = %d, want 400", recorder.Code)
+	}
+}
+
 // TestLoginMethodNotAllowed verifies that a non-POST request to Login returns 405.
 func TestLoginMethodNotAllowed(t *testing.T) {
 	recorder := httptest.NewRecorder()

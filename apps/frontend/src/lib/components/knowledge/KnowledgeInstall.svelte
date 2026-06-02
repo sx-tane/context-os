@@ -4,9 +4,16 @@
      * Shows readiness per connector, streams ingest progress, marks knowledge ready.
      */
     import { createEventDispatcher } from "svelte";
-    import type { CodexPlugin, ConnectorKind } from "$lib/types";
-    import { postFindings } from "$lib/api";
+    import type { CodexPlugin, CodexSourceOption, ConnectorKind } from "$lib/types";
     import {
+        getCodexSources,
+        getWorkspaceStatus,
+        getWorkspaces,
+        postFindings,
+        resetWorkspace,
+    } from "$lib/api";
+    import {
+        clearAllLocalWorkspaceState,
         setConnectorKnowledge,
         markKnowledgeInstalled,
         project,
@@ -119,12 +126,23 @@
         ConnectorKind,
         boolean
     >;
+    let sourceOptions: Partial<Record<ConnectorKind, CodexSourceOption[]>> = {};
+    let sourceLoading: Partial<Record<ConnectorKind, boolean>> = {};
+    let sourceErrors: Partial<Record<ConnectorKind, string>> = {};
+    let selectedSources: Partial<Record<ConnectorKind, Record<string, boolean>>> =
+        {};
 
     for (const r of REQUIRED) {
         uris[r.connector] = "";
         logs[r.connector] = "";
         statuses[r.connector] = "idle";
         enabled[r.connector] = false;
+    }
+
+    function supportsDiscovery(
+        connector: ConnectorKind,
+    ): connector is "github" | "slack" {
+        return connector === "github" || connector === "slack";
     }
 
     // Pre-fill URIs from already-ingested connectors in project store.
@@ -146,27 +164,91 @@
 
     let installing = false;
     let allDone = false;
+    let resettingAll = false;
+
+    async function toggleConnector(connector: ConnectorKind, checked: boolean) {
+        enabled[connector] = checked;
+        enabled = { ...enabled };
+    }
+
+    async function loadSourceOptions(connector: "github" | "slack") {
+        if (sourceLoading[connector]) return;
+        sourceLoading = { ...sourceLoading, [connector]: true };
+        sourceErrors = { ...sourceErrors, [connector]: "" };
+        try {
+            const result = await getCodexSources(connector);
+            if (!result) {
+                sourceErrors = {
+                    ...sourceErrors,
+                    [connector]: "Could not load sources from Codex.",
+                };
+                return;
+            }
+            sourceOptions = { ...sourceOptions, [connector]: result.sources };
+            selectedSources = {
+                ...selectedSources,
+                [connector]: selectedSources[connector] ?? {},
+            };
+        } finally {
+            sourceLoading = { ...sourceLoading, [connector]: false };
+        }
+    }
+
+    function toggleSource(connector: ConnectorKind, uri: string, checked: boolean) {
+        selectedSources = {
+            ...selectedSources,
+            [connector]: {
+                ...(selectedSources[connector] ?? {}),
+                [uri]: checked,
+            },
+        };
+    }
+
+    function selectedTargets() {
+        const targets: { connector: ConnectorKind; uri: string }[] = [];
+        for (const r of REQUIRED) {
+            const manualURI = uris[r.connector].trim();
+            if (!enabled[r.connector] && !manualURI) continue;
+            const selected = selectedSources[r.connector] ?? {};
+            for (const option of sourceOptions[r.connector] ?? []) {
+                if (selected[option.uri]) {
+                    targets.push({ connector: r.connector, uri: option.uri });
+                }
+            }
+            if (manualURI) {
+                targets.push({ connector: r.connector, uri: manualURI });
+            }
+        }
+        const seen = new Set<string>();
+        return targets.filter((target) => {
+            const key = `${target.connector}:${target.uri}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
 
     async function installAll() {
         installing = true;
         allDone = false;
         let completed = 0;
-        const toRun = REQUIRED.filter(
-            (r) => enabled[r.connector] && uris[r.connector].trim() !== "",
-        );
+        const toRun = selectedTargets();
 
-        for (const r of toRun) {
-            const uri = uris[r.connector].trim();
-            statuses[r.connector] = "running";
-            logs[r.connector] = "Persisting source into the local workspace database...\n";
-            setConnectorKnowledge(r.connector, uri, "ingesting");
+        for (const target of toRun) {
+            const config = REQUIRED.find((r) => r.connector === target.connector);
+            if (!config) continue;
+            statuses[target.connector] = "running";
+            logs[target.connector] =
+                (logs[target.connector] || "") +
+                `Persisting ${target.uri} into the local workspace database...\n`;
+            setConnectorKnowledge(target.connector, target.uri, "ingesting");
 
             try {
                 const res = await postFindings({
                     workspace_id: $project.workspacePath,
-                    connector: r.connector,
-                    uri,
-                    provider: r.codexPlugin ? "codex" : "token",
+                    connector: target.connector,
+                    uri: target.uri,
+                    provider: config.codexPlugin ? "codex" : "token",
                     role: "pmo",
                     include_execution: false,
                     force_refresh: true,
@@ -176,24 +258,35 @@
                         res.body?.message ??
                         res.body?.error ??
                         `Request failed with status ${res.status}`;
-                    logs[r.connector] += "[error] " + msg + "\n";
-                    statuses[r.connector] = "error";
-                    setConnectorKnowledge(r.connector, uri, "error", {
+                    logs[target.connector] += "[error] " + msg + "\n";
+                    statuses[target.connector] = "error";
+                    setConnectorKnowledge(target.connector, target.uri, "error", {
                         error: msg,
                     });
                     continue;
                 }
 
+                const dbStatus = await getWorkspaceStatus($project.workspacePath);
+                const sync = dbStatus?.syncs?.find(
+                    (item) =>
+                        item.connector === target.connector &&
+                        (!item.source_uri || item.source_uri === target.uri) &&
+                        (item.event_count ?? 0) > 0,
+                );
+
+                const eventCount = sync?.event_count ?? res.body.event_count ?? 0;
                 completed += 1;
-                statuses[r.connector] = "done";
-                logs[r.connector] += `Persisted ${res.body.event_count ?? 0} event(s), ${res.body.mismatch_count ?? 0} finding(s).\n`;
-                setConnectorKnowledge(r.connector, uri, "ready", {
-                    eventCount: res.body.event_count ?? 0,
+                statuses[target.connector] = "done";
+                logs[target.connector] += sync
+                    ? `DB confirmed ${eventCount} persisted event(s), ${res.body.mismatch_count ?? 0} finding(s).\n`
+                    : `Saved source. ${eventCount} event(s), ${res.body.mismatch_count ?? 0} finding(s).\n`;
+                setConnectorKnowledge(target.connector, target.uri, "ready", {
+                    eventCount,
                 });
             } catch (e) {
-                statuses[r.connector] = "error";
-                logs[r.connector] += String(e);
-                setConnectorKnowledge(r.connector, uri, "error", {
+                statuses[target.connector] = "error";
+                logs[target.connector] += String(e);
+                setConnectorKnowledge(target.connector, target.uri, "error", {
                     error: String(e),
                 });
             }
@@ -207,9 +300,48 @@
         installing = false;
     }
 
-    $: anyEnabled = REQUIRED.some(
-        (r) => enabled[r.connector] && uris[r.connector].trim() !== "",
-    );
+    async function resetAllData() {
+        const confirmed = confirm(
+            "Reset all workspace data? This clears saved sources, chat history, graph data, findings, and local workspace memory for every workspace. This cannot be undone.",
+        );
+        if (!confirmed) return;
+
+        resettingAll = true;
+        try {
+            const workspaces = await getWorkspaces();
+            const paths = new Set<string>([
+                $project.workspacePath,
+                ...workspaces.map((workspace) => workspace.path),
+            ]);
+            for (const path of paths) {
+                const name =
+                    workspaces.find((workspace) => workspace.path === path)?.name ??
+                    path.split("/").filter(Boolean).pop() ??
+                    "workspace";
+                await resetWorkspace(path, name);
+            }
+            clearAllLocalWorkspaceState([...paths]);
+            for (const r of REQUIRED) {
+                uris[r.connector] = "";
+                logs[r.connector] = "";
+                statuses[r.connector] = "idle";
+                enabled[r.connector] = false;
+            }
+            uris = { ...uris };
+            logs = { ...logs };
+            statuses = { ...statuses };
+            enabled = { ...enabled };
+            selectedSources = {};
+            sourceOptions = {};
+            allDone = false;
+            dispatch("done");
+        } finally {
+            resettingAll = false;
+        }
+    }
+
+    $: selectedCount = selectedTargets().length;
+    $: anyEnabled = selectedCount > 0;
 
     function statusIcon(s: "idle" | "running" | "done" | "error") {
         if (s === "done") return "ready";
@@ -222,16 +354,14 @@
 <div class={embedded ? "ki-inline" : "ki-overlay"}>
     <div class="ki-panel" class:inline={embedded}>
         <div class="ki-header">
-            <h2>Install Project Knowledge</h2>
+            <h2>Source Setup</h2>
             <p class="subtitle">
                 Connect your data sources. ContextOS will ingest each one and
                 build a knowledge graph you can query in chat.
             </p>
-            {#if !embedded}
-                <button class="close-btn" on:click={onClose} aria-label="Close"
-                    >Close</button
-                >
-            {/if}
+            <button class="close-btn" on:click={onClose} aria-label="Close"
+                >Close</button
+            >
         </div>
 
         {#if !codexLoggedIn}
@@ -284,15 +414,78 @@
                         </div>
 
                         {#if enabled[r.connector]}
-                            <div class="uri-row">
-                                <input
-                                    class="uri-input"
-                                    type="text"
-                                    placeholder={r.uriPlaceholder}
-                                    bind:value={uris[r.connector]}
-                                />
-                                <span class="hint">{r.uriHint}</span>
-                            </div>
+                            {#if supportsDiscovery(r.connector)}
+                                <div class="source-picker">
+                                    {#if sourceLoading[r.connector]}
+                                        <span class="hint">Loading sources from Codex...</span>
+                                    {:else if sourceErrors[r.connector]}
+                                        <span class="hint error-text">{sourceErrors[r.connector]}</span>
+                                        <button
+                                            class="mini-btn"
+                                            type="button"
+                                            on:click|stopPropagation={() => {
+                                                if (supportsDiscovery(r.connector)) {
+                                                    loadSourceOptions(r.connector);
+                                                }
+                                            }}
+                                        >
+                                            Retry
+                                        </button>
+                                    {:else if sourceOptions[r.connector]?.length}
+                                        {#each sourceOptions[r.connector] ?? [] as option}
+                                            <label class="source-option">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(selectedSources[r.connector]?.[option.uri])}
+                                                    on:change={(event) =>
+                                                        toggleSource(
+                                                            r.connector,
+                                                            option.uri,
+                                                            (event.currentTarget as HTMLInputElement).checked,
+                                                        )}
+                                                />
+                                                <span>
+                                                    <strong>{option.label}</strong>
+                                                    <small>{option.kind}</small>
+                                                </span>
+                                            </label>
+                                        {/each}
+                                    {:else}
+                                        <button
+                                            class="mini-btn"
+                                            type="button"
+                                            on:click|stopPropagation={() => {
+                                                if (supportsDiscovery(r.connector)) {
+                                                    loadSourceOptions(r.connector);
+                                                }
+                                            }}
+                                        >
+                                            Load sources from Codex
+                                        </button>
+                                        <span class="hint">Optional. You can paste a source manually below.</span>
+                                    {/if}
+                                </div>
+
+                                <div class="uri-row">
+                                    <input
+                                        class="uri-input"
+                                        type="text"
+                                        placeholder={r.uriPlaceholder}
+                                        bind:value={uris[r.connector]}
+                                    />
+                                    <span class="hint">Or enter a source manually: {r.uriHint}</span>
+                                </div>
+                            {:else}
+                                <div class="uri-row">
+                                    <input
+                                        class="uri-input"
+                                        type="text"
+                                        placeholder={r.uriPlaceholder}
+                                        bind:value={uris[r.connector]}
+                                    />
+                                    <span class="hint">{r.uriHint}</span>
+                                </div>
+                            {/if}
 
                             {#if logs[r.connector]}
                                 <pre class="log">{logs[r.connector]}</pre>
@@ -304,7 +497,12 @@
                     <input
                         class="card-checkbox"
                         type="checkbox"
-                        bind:checked={enabled[r.connector]}
+                        checked={enabled[r.connector]}
+                        on:change={(event) =>
+                            toggleConnector(
+                                r.connector,
+                                (event.currentTarget as HTMLInputElement).checked,
+                            )}
                         disabled={isDisabled}
                     />
                 </label>
@@ -314,7 +512,7 @@
         <div class="ki-footer">
             {#if allDone}
                 <p class="success-msg">
-                    Knowledge installed. You can now chat about this workspace.
+                    Sources saved. You can now chat about this workspace.
                 </p>
                 <button class="btn primary" on:click={onClose}
                     >Start chatting</button
@@ -325,11 +523,18 @@
                     on:click={installAll}
                     disabled={installing || !anyEnabled}
                 >
-                    {installing ? "Installing…" : "Install Knowledge"}
+                    {installing ? "Saving..." : `Save ${selectedCount} selected source${selectedCount === 1 ? "" : "s"}`}
                 </button>
                 <button class="btn secondary" on:click={onClose}
                     >Skip for now</button
                 >
+                <button
+                    class="btn danger"
+                    on:click={resetAllData}
+                    disabled={installing || resettingAll}
+                >
+                    {resettingAll ? "Resetting..." : "Reset all data"}
+                </button>
             {/if}
         </div>
     </div>
@@ -344,10 +549,12 @@
         align-items: center;
         justify-content: center;
         z-index: 100;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
     }
 
     .ki-inline {
         width: 100%;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
     }
 
     .ki-panel {
@@ -359,6 +566,7 @@
         display: flex;
         flex-direction: column;
         box-shadow: 0 20px 40px rgba(0 0 0 / 0.2);
+        font-family: inherit;
     }
     .ki-panel.inline {
         width: 100%;
@@ -374,6 +582,7 @@
         top: 0;
         background: inherit;
         padding: 1.25rem 1.5rem 0.75rem;
+        padding-right: 6rem;
         border-bottom: 1px solid #f3f4f6;
     }
     .ki-header h2 {
@@ -390,10 +599,13 @@
         top: 1rem;
         right: 1rem;
         background: none;
-        border: none;
-        font-size: 1.1rem;
+        border: 1px solid #d7d2c8;
+        border-radius: 0.375rem;
+        font-size: 0.78rem;
+        font-family: inherit;
         cursor: pointer;
-        color: #9ca3af;
+        color: #1c1b18;
+        padding: 0.35rem 0.65rem;
     }
     .close-btn:hover {
         color: #111827;
@@ -432,6 +644,7 @@
             box-shadow 0.15s;
         position: relative;
         background: #fff;
+        font-family: inherit;
     }
     .connector-card:hover:not(.disabled) {
         border-color: #93c5fd;
@@ -522,6 +735,68 @@
     .uri-row {
         margin-top: 0.5rem;
     }
+
+    .source-picker {
+        margin-top: 0.6rem;
+        display: grid;
+        gap: 0.35rem;
+        max-height: 12rem;
+        overflow: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        background: #fffdf7;
+        padding: 0.5rem;
+    }
+
+    .source-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 0.375rem;
+        padding: 0.35rem 0.4rem;
+        cursor: pointer;
+    }
+
+    .source-option:hover {
+        background: #f4f1e9;
+    }
+
+    .source-option span,
+    .source-option strong,
+    .source-option small {
+        display: block;
+        min-width: 0;
+    }
+
+    .source-option strong {
+        color: #111827;
+        font-size: 0.82rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .source-option small {
+        color: #9ca3af;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+    }
+
+    .mini-btn {
+        width: max-content;
+        border: 1px solid #d1d5db;
+        border-radius: 0.35rem;
+        background: #fff;
+        color: #111827;
+        padding: 0.25rem 0.55rem;
+        font-size: 0.75rem;
+        font-family: inherit;
+    }
+
+    .error-text {
+        color: #991b1b;
+    }
+
     .uri-input {
         width: 100%;
         border: 1px solid #d1d5db;
@@ -530,6 +805,7 @@
         font-size: 0.85rem;
         box-sizing: border-box;
         outline: none;
+        font-family: inherit;
     }
     .uri-input:focus {
         border-color: #2563eb;
@@ -551,6 +827,7 @@
         max-height: 6rem;
         overflow-y: auto;
         white-space: pre-wrap;
+        font-family: inherit;
     }
 
     .ki-footer {
@@ -562,6 +839,7 @@
         display: flex;
         gap: 0.75rem;
         align-items: center;
+        flex-wrap: wrap;
     }
 
     .success-msg {
@@ -576,26 +854,37 @@
         border-radius: 0.5rem;
         font-size: 0.875rem;
         font-weight: 500;
-        border: none;
+        border: 1px solid #d7d2c8;
         cursor: pointer;
         transition: background 0.15s;
+        font-family: inherit;
     }
     .btn.primary {
-        background: #2563eb;
-        color: #fff;
+        background: #f8f6ef;
+        color: #1c1b18;
     }
     .btn.primary:hover:not(:disabled) {
-        background: #1d4ed8;
+        background: #ebe8e0;
     }
     .btn.primary:disabled {
-        background: #93c5fd;
+        background: #ebe8e0;
+        color: #8a8678;
         cursor: not-allowed;
     }
     .btn.secondary {
-        background: #f3f4f6;
-        color: #374151;
+        background: #f8f6ef;
+        color: #1c1b18;
     }
     .btn.secondary:hover {
-        background: #e5e7eb;
+        background: #ebe8e0;
+    }
+    .btn.danger {
+        margin-left: auto;
+        background: #fff5f3;
+        border: 1px solid #d85d3f;
+        color: #9b3328;
+    }
+    .btn.danger:hover:not(:disabled) {
+        background: #ffe3dc;
     }
 </style>

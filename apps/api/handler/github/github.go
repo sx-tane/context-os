@@ -90,7 +90,12 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 		metadata[codexsource.MetadataPlugin] = codexsource.PluginGitHub
 	}
 
-	shared.WriteSourceIngest(w, r, connector, shared.SourceIngestInput{URI: req.URI, Metadata: metadata})
+	shared.WriteSourceIngest(w, r, connector, shared.SourceIngestInput{
+		WorkspaceID: req.WorkspaceID,
+		Connector:   "github",
+		URI:         req.URI,
+		Metadata:    metadata,
+	})
 }
 
 // IngestStream handles POST /github/ingest/stream.
@@ -122,6 +127,8 @@ func IngestStream(w http.ResponseWriter, r *http.Request) {
 		func(req request.GithubIngest) string { return req.URI },
 		func(req request.GithubIngest) string { return req.Provider },
 		func(req request.GithubIngest) string { return req.Token },
+		func(req request.GithubIngest) string { return req.WorkspaceID },
+		func(request.GithubIngest) string { return "github" },
 	)
 }
 

@@ -28,6 +28,7 @@ import (
 	"context-os/apps/api/handler/jira"
 	notion "context-os/apps/api/handler/notion"
 	presentation "context-os/apps/api/handler/presentation"
+	"context-os/apps/api/handler/shared"
 	sharepoint "context-os/apps/api/handler/sharepoint"
 	"context-os/apps/api/handler/slack"
 	handlerworkspace "context-os/apps/api/handler/workspace"
@@ -77,8 +78,10 @@ func main() {
 		syncStore := store.NewSyncStore(sqlDB)
 		mismatchStore := store.NewMismatchStore(sqlDB)
 		entityStore := store.NewEntityStore(sqlDB)
+		auditStore := store.NewAuditStore(sqlDB)
 
-		wsHandler = handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore)
+		wsHandler = handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore).
+			WithAuditRepository(auditStore)
 
 		// Build optional persistence helpers that write to the local storage/ directories.
 		embCache := aiworker.NewEmbeddingCache("storage/embeddings")
@@ -91,7 +94,13 @@ func main() {
 			presentation.WithParsedWriter(parsedWriter),
 			presentation.WithSemanticMatcher(identity.WorkerMatcher{Embedder: aiClient}),
 			presentation.WithExecutor(tplExec),
+			presentation.WithAuditRepository(auditStore),
 		)
+		shared.SetPersistentIngestService(shared.NewPersistentIngestService(
+			wsStore, evStore, entityStore, mismatchStore, syncStore, auditStore,
+			shared.WithPersistentParsedWriter(parsedWriter),
+			shared.WithPersistentSemanticMatcher(identity.WorkerMatcher{Embedder: aiClient}),
+		))
 		graphHandler = handlergraph.NewHandler(wsStore, entityStore)
 		artifactsHandler = handlerartifacts.NewHandler(wsStore, evStore)
 		chatHandler = handlerchat.NewHandler(internalchat.NewService(wsStore, evStore, syncStore))
@@ -122,6 +131,7 @@ func main() {
 		{pattern: "/filesystem/ingest", handler: http.HandlerFunc(filesystem.Ingest), cors: true},
 		{pattern: "/filesystem/upload", handler: http.HandlerFunc(filesystem.Upload), cors: true},
 		{pattern: "/codex/status", handler: http.HandlerFunc(handlercodex.Status), cors: true},
+		{pattern: "/codex/sources", handler: http.HandlerFunc(handlercodex.Sources), cors: true},
 		{pattern: "/codex/login", handler: http.HandlerFunc(handlercodex.Login), cors: true},
 		{pattern: "/codex/plugin-reauth", handler: http.HandlerFunc(handlercodex.PluginReauth), cors: true},
 		{pattern: "/slack/ingest", handler: http.HandlerFunc(slack.Ingest), cors: true},
@@ -136,6 +146,7 @@ func main() {
 		routes = append(routes,
 			route{pattern: "/workspace", handler: http.HandlerFunc(wsHandler.List), cors: true},
 			route{pattern: "/workspace/upsert", handler: http.HandlerFunc(wsHandler.Upsert), cors: true},
+			route{pattern: "/workspace/reset", handler: http.HandlerFunc(wsHandler.Reset), cors: true},
 			route{pattern: "/workspace/status", handler: http.HandlerFunc(wsHandler.Status), cors: true},
 		)
 	}

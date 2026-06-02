@@ -4,6 +4,7 @@
         ChatMessage,
         ChatQueryResult,
         CodexPlugin,
+        ConnectorKnowledge,
         ConnectorKind,
         FindingsResult,
         GraphData,
@@ -21,7 +22,6 @@
     } from "$lib/api";
     import {
         addMessage,
-        addWorkspace,
         chatMessages,
         clearChat,
         getProject,
@@ -30,12 +30,10 @@
         openProject,
         project,
         replaceMessage,
-        workspaces,
     } from "$lib/projectStore";
     import KnowledgeInstall from "$lib/components/knowledge/KnowledgeInstall.svelte";
 
     type GithubStatus = "checking" | "connected" | "disconnected";
-    type ViewMode = "graph" | "dual" | "workspace";
 
     let apiStatus: ServiceStatus = "checking";
     let githubStatus: GithubStatus = "checking";
@@ -48,21 +46,26 @@
     let command = "";
     let busy = false;
     let sourcePanelOpen = false;
-    let viewMode: ViewMode = "dual";
+    let activeInsightTab: "findings" | "graph" | "activity" = "findings";
     let workspaceStatus: WorkspaceStatus | null = null;
     let graphData: GraphData | null = null;
+    let selectedEntity: GraphEntity | null = null;
     let lastChatResult: ChatQueryResult | null = null;
     let lastFindings: FindingsResult | null = null;
 
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
     );
-    $: activeSources = $project.connectors.filter(
-        (source) => source.status !== "idle",
-    );
     $: graphEntities = graphData?.entities ?? [];
-    $: selectedEntity = graphEntities[0] ?? null;
-    $: eventCount = workspaceStatus?.event_count ?? 0;
+    $: if (
+        graphEntities.length > 0 &&
+        (!selectedEntity || !graphEntities.some((entity) => entity.id === selectedEntity?.id))
+    ) {
+        selectedEntity = graphEntities[0];
+    }
+    $: if (graphEntities.length === 0) {
+        selectedEntity = null;
+    }
     $: mismatchCount =
         workspaceStatus?.mismatch_count ?? lastFindings?.mismatch_count ?? 0;
     $: statusLine = buildStatusLine(
@@ -73,6 +76,12 @@
         githubStatus,
         githubLogin,
     );
+    $: profileLabel = githubLogin || codexAccount || "profile";
+    $: sourceSummary = `${readySources.length} source${readySources.length === 1 ? "" : "s"}`;
+    $: topContext = `${profileLabel} · ${$project.name} · ${sourceSummary}`;
+    $: hasSources = readySources.length > 0;
+    $: sourceGroups = groupSources(readySources);
+    $: recentArtifacts = lastChatResult?.artifacts ?? [];
 
     onMount(async () => {
         const savedPath = localStorage.getItem("contextos_workspace_path");
@@ -209,7 +218,7 @@
                 workspace_id: workspacePath,
                 message: text,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                local_date: new Date().toISOString().slice(0, 10),
+                local_date: localDateString(new Date()),
                 limit: 20,
             });
             if (res.ok) {
@@ -254,44 +263,58 @@
             return;
         }
 
-        const latest = ready[ready.length - 1];
-        const load = loadingMsg(`Running local analysis for ${latest.connector}...`);
+        const load = loadingMsg(`Running local analysis for ${ready.length} selected source${ready.length === 1 ? "" : "s"}...`);
         addMessage(load);
         busy = true;
         try {
-            const codexOnlyConnectors = new Set<ConnectorKind>([
+            const codexConnectors = new Set<ConnectorKind>([
+                "github",
+                "jira",
                 "slack",
                 "notion",
                 "sharepoint",
                 "googledrive",
             ]);
-            const provider = codexOnlyConnectors.has(latest.connector)
-                ? "codex"
-                : "token";
-            const res = await postFindings({
-                workspace_id: workspacePath,
-                connector: latest.connector,
-                uri: latest.uri,
-                provider,
-                role: "pmo",
-                include_execution: false,
-            });
-            if (res.ok) {
-                lastFindings = res.body;
-                replaceMessage(
-                    load.id,
-                    assistantMsg(res.body.summary || "Analysis complete.", {
-                        kind: "findings",
-                        findingsResult: res.body,
-                    }),
-                );
-                return;
+            const completed: FindingsResult[] = [];
+            const failures: string[] = [];
+
+            for (const source of ready) {
+                const provider = codexConnectors.has(source.connector)
+                    ? "codex"
+                    : "token";
+                const res = await postFindings({
+                    workspace_id: workspacePath,
+                    connector: source.connector,
+                    uri: source.uri,
+                    provider,
+                    role: "pmo",
+                    include_execution: false,
+                });
+                if (res.ok) {
+                    completed.push(res.body);
+                    lastFindings = res.body;
+                } else {
+                    failures.push(
+                        `${source.connector}:${source.uri} - ${res.body.message ?? res.body.error ?? "unknown error"}`,
+                    );
+                }
             }
+
+            const mismatchTotal = completed.reduce(
+                (sum, result) => sum + (result.mismatch_count ?? result.mismatches?.length ?? 0),
+                0,
+            );
+            const summary =
+                `Analysis complete for ${completed.length}/${ready.length} selected source${ready.length === 1 ? "" : "s"}.` +
+                ` Found ${mismatchTotal} finding${mismatchTotal === 1 ? "" : "s"}.` +
+                (failures.length ? `\n\nFailed:\n- ${failures.join("\n- ")}` : "");
+
             replaceMessage(
                 load.id,
-                assistantMsg(
-                    `Analysis failed: ${res.body.message ?? res.body.error ?? "unknown error"}`,
-                ),
+                assistantMsg(summary, {
+                    kind: "findings",
+                    findingsResult: completed[completed.length - 1],
+                }),
             );
         } catch (error) {
             replaceMessage(
@@ -304,27 +327,18 @@
         }
     }
 
-    async function switchWorkspace(path: string) {
-        if (path === workspacePath) return;
-        workspacePath = path;
-        openProject(path);
-        lastChatResult = null;
-        lastFindings = null;
-        await refreshWorkspace();
-    }
-
-    async function createWorkspace() {
-        const path = prompt("Workspace folder path:", workspacePath);
-        if (!path?.trim()) return;
-        addWorkspace(path.trim());
-        workspacePath = path.trim();
-        await refreshWorkspace();
-    }
-
     async function handleKnowledgeDone() {
         sourcePanelOpen = false;
         await Promise.all([refreshWorkspace(), refreshSystemStatus()]);
         addMessage(assistantMsg("Source setup updated."));
+    }
+
+    function switchInsightTab(tab: "findings" | "graph" | "activity") {
+        activeInsightTab = tab;
+        sourcePanelOpen = false;
+        if (tab === "graph") {
+            void refreshWorkspace();
+        }
     }
 
     function buildStatusLine(
@@ -379,208 +393,328 @@
             minute: "2-digit",
         }).format(new Date(value));
     }
+
+    function localDateString(date: Date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    }
+
+    function groupSources(sources: ConnectorKnowledge[]) {
+        const groups = new Map<string, ConnectorKnowledge[]>();
+        for (const source of sources) {
+            const existing = groups.get(source.connector) ?? [];
+            existing.push(source);
+            groups.set(source.connector, existing);
+        }
+        return [...groups.entries()];
+    }
+
+    type MessageLine = {
+        kind: "heading" | "number" | "bullet" | "body" | "blank";
+        text: string;
+    };
+
+    function messageLines(text: string): MessageLine[] {
+        return text.split("\n").map((line) => {
+            const trimmed = line.trim();
+            if (trimmed === "") return { kind: "blank", text: "" };
+            if (/^\*\*[^*]+\*\*$/.test(trimmed)) {
+                return { kind: "heading", text: cleanMarkdown(trimmed) };
+            }
+            if (/^\d+\.\s+/.test(trimmed)) {
+                return { kind: "number", text: cleanMarkdown(trimmed) };
+            }
+            if (/^[-*]\s+/.test(trimmed)) {
+                return { kind: "bullet", text: cleanMarkdown(trimmed.replace(/^[-*]\s+/, "")) };
+            }
+            return { kind: "body", text: cleanMarkdown(trimmed) };
+        });
+    }
+
+    function cleanMarkdown(value: string) {
+        return value.replace(/\*\*/g, "").replace(/`/g, "");
+    }
+
+    function previewText(value?: string, max = 360) {
+        const text = cleanMarkdown((value ?? "").replace(/\s+/g, " ").trim());
+        if (text.length <= max) return text;
+        return `${text.slice(0, max).trim()}...`;
+    }
 </script>
 
 <svelte:head>
     <title>ContextOS</title>
 </svelte:head>
 
-<main class="app-shell" class:graph-only={viewMode === "graph"} class:workspace-only={viewMode === "workspace"}>
+<main class="app-shell">
     <header class="topbar">
         <strong>CONTEXTOS</strong>
-        <nav aria-label="Workspace view mode">
-            <button class:active={viewMode === "graph"} on:click={() => (viewMode = "graph")}>Graph</button>
-            <button class:active={viewMode === "dual"} on:click={() => (viewMode = "dual")}>Dual</button>
-            <button class:active={viewMode === "workspace"} on:click={() => (viewMode = "workspace")}>Workspace</button>
-        </nav>
+        <div class="context-switcher" title={workspacePath}>{topContext}</div>
         <div class="top-status">
-            <span>Step 2/5</span>
+            <button on:click={() => (sourcePanelOpen = true)}>Sources</button>
             <strong>{apiStatus === "ok" ? "Ready" : "Offline"}</strong>
         </div>
     </header>
 
     <section class="main-grid">
-        {#if viewMode !== "workspace"}
-            <section class="graph-pane" aria-label="Graph relationship visualization">
-                <div class="pane-title">
-                    <span>Graph Relationship Visualization</span>
+        <section class="chat-pane" aria-label="Report agent chat">
+            <section class="chat-card">
+                <div class="chat-head">
                     <div>
-                        <button on:click={refreshWorkspace}>Refresh</button>
-                        <button on:click={() => (viewMode = "dual")}>Focus</button>
+                        <strong>Report Agent</strong>
+                        <span>{hasSources ? "Ask against selected sources" : "Connect sources before asking"}</span>
                     </div>
+                    <button on:click={() => clearChat()}>Clear</button>
                 </div>
 
-                <div class="graph-canvas">
-                    {#each graphEntities.slice(0, 140) as entity, index (entity.id)}
-                        <span class="edge" style={edgeStyle(index)}></span>
-                        <button class={`node ${entityClass(entity)}`} style={nodeStyle(index)} title={entity.name}>
-                            <span></span>
-                            <em>{entity.name}</em>
-                        </button>
-                    {/each}
-
-                    {#if graphEntities.length === 0}
-                        <div class="empty-graph">
-                            <strong>No graph data yet</strong>
-                            <p>Ingest a source or run analysis to populate local entities.</p>
-                        </div>
+                <div class="messages" aria-live="polite">
+                    {#if $chatMessages.length === 0}
+                        <article class="message assistant">
+                            <span>CTX</span>
+                            <p>{hasSources ? "Ask about Slack messages, GitHub PRs, Jira tickets, docs, findings, or recent activity." : "Connect GitHub repos, Slack channels, or docs first. After setup, chat will answer from those selected sources."}</p>
+                        </article>
+                    {:else}
+                        {#each $chatMessages as message (message.id)}
+                            <article class="message" class:user={message.role === "user"}>
+                                <span>{message.role === "user" ? "YOU" : "CTX"}</span>
+                                {#if message.loading}
+                                    <p>Working...</p>
+                                {:else}
+                                    <div class="message-body">
+                                        {#each messageLines(message.text) as line}
+                                            {#if line.kind === "blank"}
+                                                <div class="message-gap"></div>
+                                            {:else if line.kind === "heading"}
+                                                <h4>{line.text}</h4>
+                                            {:else if line.kind === "number"}
+                                                <p class="number-line">{line.text}</p>
+                                            {:else if line.kind === "bullet"}
+                                                <p class="bullet-line">{line.text}</p>
+                                            {:else}
+                                                <p>{line.text}</p>
+                                            {/if}
+                                        {/each}
+                                    </div>
+                                {/if}
+                                {#if message.card?.chatResult?.artifacts?.length}
+                                    <details>
+                                        <summary>{message.card.chatResult.artifact_count} evidence items</summary>
+                                        {#each message.card.chatResult.artifacts.slice(0, 5) as artifact (artifact.id)}
+                                            <div class="evidence-item">
+                                                <strong>{artifact.title || artifact.source_uri}</strong>
+                                                <small>{artifact.connector} | {formatTime(artifact.ingested_at)}</small>
+                                                <p>{previewText(artifact.preview)}</p>
+                                                {#if (artifact.preview ?? "").length > 360}
+                                                    <details class="full-evidence">
+                                                        <summary>Full source text</summary>
+                                                        <pre>{artifact.preview}</pre>
+                                                    </details>
+                                                {/if}
+                                            </div>
+                                        {/each}
+                                    </details>
+                                {/if}
+                                {#if message.card?.findingsResult?.mismatches?.length}
+                                    <details>
+                                        <summary>{message.card.findingsResult.mismatch_count ?? message.card.findingsResult.mismatches.length} findings</summary>
+                                        {#each message.card.findingsResult.mismatches.slice(0, 5) as mismatch}
+                                            <div class="evidence-item">
+                                                <strong>{mismatch.severity ?? "review"}</strong>
+                                                <p>{mismatch.description ?? mismatch.mismatch_type ?? mismatch.id}</p>
+                                            </div>
+                                        {/each}
+                                    </details>
+                                {/if}
+                            </article>
+                        {/each}
                     {/if}
+                </div>
 
-                    {#if selectedEntity}
-                        <aside class="node-card">
-                            <div>
-                                <span>Node Details</span>
-                                <strong>{selectedEntity.type}</strong>
-                            </div>
-                            <p><b>Name:</b> {selectedEntity.name}</p>
-                            <p><b>UUID:</b> {selectedEntity.id}</p>
-                            <p><b>Confidence:</b> {Math.round((selectedEntity.confidence ?? 0) * 100)}%</p>
-                            <hr />
-                            <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis."}</p>
-                        </aside>
-                    {/if}
+                <form class="composer" on:submit|preventDefault={submitCommand}>
+                    <input
+                        bind:value={command}
+                        disabled={busy || !hasSources}
+                        placeholder={hasSources ? "Ask about PRs, Slack threads, findings, or recent activity..." : "Connect sources first..."}
+                    />
+                    <button disabled={busy || !hasSources || command.trim() === ""}>Send</button>
+                </form>
+            </section>
+        </section>
 
-                    <div class="legend">
-                        <strong>ENTITY TYPES</strong>
-                        <span><i class="entity"></i>Entity</span>
-                        <span><i class="org"></i>Organization</span>
-                        <span><i class="person"></i>Person</span>
-                        <span><i class="feature"></i>Feature</span>
-                    </div>
+        <section class="insight-pane" aria-label="Project insights">
+            <section class="source-strip">
+                <div>
+                    <span>PROFILE</span>
+                    <strong>{profileLabel}</strong>
+                </div>
+                <div>
+                    <span>PROJECT</span>
+                    <strong>{$project.name}</strong>
+                </div>
+                <div>
+                    <span>SOURCES</span>
+                    <strong>{readySources.length}</strong>
                 </div>
             </section>
-        {/if}
 
-        {#if viewMode !== "graph"}
-            <section class="work-pane" aria-label="Workspace operations">
-                <section class="stage-card">
-                    <div class="stage-head">
-                        <div>
-                            <p>Workspace</p>
-                            <h1>{$project.name}</h1>
+            {#if sourcePanelOpen}
+                <section class="setup-panel">
+                    <KnowledgeInstall
+                        embedded
+                        {codexLoggedIn}
+                        {codexPlugins}
+                        onClose={() => (sourcePanelOpen = false)}
+                        on:done={handleKnowledgeDone}
+                    />
+                    {#if !hasSources}
+                        <div class="sample-sources">
+                            <div class="sample-head">
+                                <strong>Checklist preview</strong>
+                                <span>Real repos and channels will load from connected accounts.</span>
+                            </div>
+                            <label><input type="checkbox" disabled /> GitHub / context-os</label>
+                            <label><input type="checkbox" disabled /> GitHub / docs-site</label>
+                            <label><input type="checkbox" disabled /> Slack / #engineering</label>
+                            <label><input type="checkbox" disabled /> Slack / #product</label>
                         </div>
-                        <button on:click={refreshSystemStatus}>Refresh status</button>
-                    </div>
-                    <p class="muted">{statusLine}</p>
-
-                    <div class="metrics">
-                        <div><strong>{eventCount}</strong><span>local events</span></div>
-                        <div><strong>{readySources.length}</strong><span>ready sources</span></div>
-                        <div><strong>{graphData?.count ?? 0}</strong><span>graph nodes</span></div>
-                        <div><strong>{mismatchCount}</strong><span>findings</span></div>
-                    </div>
+                    {/if}
                 </section>
-
-                <section class="stage-list">
-                    <div><span>PL</span><strong>Planning / outline</strong><em>Ready</em></div>
-                    <div><span>01</span><strong>Workspace selected</strong><em>{workspacePath}</em></div>
-                    <div><span>02</span><strong>Sources connected</strong><em>{activeSources.length}</em></div>
-                    <div><span>03</span><strong>Local chat query</strong><em>{lastChatResult?.intent ?? "waiting"}</em></div>
-                    <div><span>OK</span><strong>Truth panel</strong><em>{mismatchCount} findings</em></div>
-                </section>
-
-                <section class="tool-grid">
-                    <button on:click={() => (sourcePanelOpen = true)}><strong>Source Setup</strong><span>Add or repair connectors</span></button>
-                    <button on:click={runFindings}><strong>Run Analysis</strong><span>Generate local findings</span></button>
-                    <button on:click={createWorkspace}><strong>Workspace</strong><span>Add or switch context</span></button>
-                    <button on:click={() => routeCommand("status")}><strong>Status</strong><span>Ask local status</span></button>
-                </section>
-
-                <section class="workspace-row">
-                    {#each $workspaces as workspaceItem (workspaceItem.workspacePath)}
-                        <button class:active={workspaceItem.workspacePath === workspacePath} on:click={() => switchWorkspace(workspaceItem.workspacePath)}>
-                            <strong>{workspaceItem.name}</strong>
-                            <small>{workspaceItem.workspacePath}</small>
-                        </button>
+            {:else if hasSources}
+                <section class="source-summary">
+                    {#each sourceGroups as [connector, sources]}
+                        <div>
+                            <strong>{connector}</strong>
+                            <span>{sources.length} selected</span>
+                        </div>
                     {/each}
                 </section>
-
-                <section class="chat-card">
-                    <div class="chat-head">
-                        <div>
-                            <strong>Report Agent - Chat</strong>
-                            <span>Local source answer and evidence</span>
-                        </div>
-                        <button on:click={() => clearChat()}>Clear</button>
+            {:else}
+                <section class="source-summary empty-source-summary">
+                    <div>
+                        <strong>No sources</strong>
+                        <span>Use Sources to connect Codex plugins</span>
                     </div>
+                </section>
+            {/if}
 
-                    <div class="messages" aria-live="polite">
-                        {#if $chatMessages.length === 0}
-                            <article class="message assistant">
-                                <span>CTX</span>
-                                <p>Ask for Slack messages, GitHub PRs, Jira tickets, docs, findings, or workspace status. Answers stay local to this workspace.</p>
-                            </article>
-                        {:else}
-                            {#each $chatMessages as message (message.id)}
-                                <article class="message" class:user={message.role === "user"}>
-                                    <span>{message.role === "user" ? "YOU" : "CTX"}</span>
-                                    <p>{message.loading ? "Working..." : message.text}</p>
-                                    {#if message.card?.chatResult?.artifacts?.length}
-                                        <details>
-                                            <summary>{message.card.chatResult.artifact_count} evidence items</summary>
-                                            {#each message.card.chatResult.artifacts.slice(0, 5) as artifact (artifact.id)}
-                                                <div class="evidence-item">
-                                                    <strong>{artifact.title || artifact.source_uri}</strong>
-                                                    <small>{artifact.connector} | {formatTime(artifact.ingested_at)}</small>
-                                                    <p>{artifact.preview}</p>
-                                                </div>
-                                            {/each}
-                                        </details>
-                                    {/if}
-                                    {#if message.card?.findingsResult?.mismatches?.length}
-                                        <details>
-                                            <summary>{message.card.findingsResult.mismatch_count ?? message.card.findingsResult.mismatches.length} findings</summary>
-                                            {#each message.card.findingsResult.mismatches.slice(0, 5) as mismatch}
-                                                <div class="evidence-item">
-                                                    <strong>{mismatch.severity ?? "review"}</strong>
-                                                    <p>{mismatch.description ?? mismatch.mismatch_type ?? mismatch.id}</p>
-                                                </div>
-                                            {/each}
-                                        </details>
-                                    {/if}
+            <section class="insight-card">
+                <div class="insight-head">
+                    <nav aria-label="Insight tabs">
+                        <button type="button" class:active={activeInsightTab === "findings"} on:click={() => switchInsightTab("findings")}>Findings</button>
+                        <button type="button" class:active={activeInsightTab === "graph"} on:click={() => switchInsightTab("graph")}>Graph</button>
+                        <button type="button" class:active={activeInsightTab === "activity"} on:click={() => switchInsightTab("activity")}>Activity</button>
+                    </nav>
+                    <button type="button" on:click={runFindings} disabled={!hasSources || busy}>{busy ? "Running" : "Run Analysis"}</button>
+                </div>
+
+                {#if activeInsightTab === "findings"}
+                    <div class="findings-view">
+                        {#if lastFindings?.mismatches?.length}
+                            {#each lastFindings.mismatches.slice(0, 6) as mismatch}
+                                <article>
+                                    <span>{mismatch.severity ?? "review"}</span>
+                                    <strong>{mismatch.summary ?? mismatch.mismatch_type ?? mismatch.id ?? "Finding"}</strong>
+                                    <p>{mismatch.description ?? mismatch.recommended_action ?? "Review this item against source evidence."}</p>
                                 </article>
                             {/each}
+                        {:else}
+                            <div class="empty-state">
+                                <strong>{hasSources ? "No findings yet" : "Connect sources to unlock findings"}</strong>
+                                <p>{hasSources ? "Run analysis across selected sources to surface mismatches and delivery risks." : "Select GitHub repos, Slack channels, or docs first."}</p>
+                            </div>
                         {/if}
                     </div>
+                {:else if activeInsightTab === "graph"}
+                    <div class="graph-canvas">
+                        {#each graphEntities.slice(0, 140) as entity, index (entity.id)}
+                            <span class="edge" style={edgeStyle(index)}></span>
+                            <button
+                                type="button"
+                                class={`node ${entityClass(entity)}`}
+                                class:selected={selectedEntity?.id === entity.id}
+                                style={nodeStyle(index)}
+                                title={entity.name}
+                                on:click={() => (selectedEntity = entity)}
+                            >
+                                <span></span>
+                                <em>{entity.name}</em>
+                            </button>
+                        {/each}
 
-                    <form class="composer" on:submit|preventDefault={submitCommand}>
-                        <input
-                            bind:value={command}
-                            disabled={busy}
-                            placeholder="Ask: give me today Slack messages, recent GitHub PRs, show findings..."
-                        />
-                        <button disabled={busy || command.trim() === ""}>Send</button>
-                    </form>
-                </section>
+                        {#if graphEntities.length === 0}
+                            <div class="empty-graph">
+                                <strong>No graph data yet</strong>
+                                <p>{hasSources ? "Run analysis to populate local entities and relationships." : "Connect sources first, then run analysis to build the graph."}</p>
+                            </div>
+                        {/if}
 
-                {#if sourcePanelOpen}
-                    <section class="setup-panel">
-                        <KnowledgeInstall
-                            embedded
-                            {codexLoggedIn}
-                            {codexPlugins}
-                            onClose={() => (sourcePanelOpen = false)}
-                            on:done={handleKnowledgeDone}
-                        />
-                    </section>
+                        {#if selectedEntity}
+                            <aside class="node-card">
+                                <div>
+                                    <span>Node Details</span>
+                                    <strong>{selectedEntity.type}</strong>
+                                </div>
+                                <p><b>Name:</b> {selectedEntity.name}</p>
+                                <p><b>Confidence:</b> {Math.round((selectedEntity.confidence ?? 0) * 100)}%</p>
+                                <hr />
+                                <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis."}</p>
+                            </aside>
+                        {/if}
+
+                        <div class="legend">
+                            <strong>ENTITY TYPES</strong>
+                            <span><i class="entity"></i>Entity</span>
+                            <span><i class="org"></i>Organization</span>
+                            <span><i class="person"></i>Person</span>
+                            <span><i class="feature"></i>Feature</span>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="activity-view">
+                        {#if recentArtifacts.length}
+                            {#each recentArtifacts.slice(0, 8) as artifact (artifact.id)}
+                                <article>
+                                    <span>{artifact.connector}</span>
+                                    <strong>{artifact.title || artifact.source_uri}</strong>
+                                    <p>{previewText(artifact.preview)}</p>
+                                    <small>{formatTime(artifact.ingested_at)}</small>
+                                </article>
+                            {/each}
+                        {:else}
+                            <div class="empty-state">
+                                <strong>No activity loaded</strong>
+                                <p>Ask chat about recent activity or run analysis after connecting sources.</p>
+                            </div>
+                        {/if}
+                    </div>
                 {/if}
             </section>
-        {/if}
+
+        </section>
     </section>
 
     <footer class="console-strip">
-        <strong>SYSTEM DASHBOARD</strong>
+        <strong>{topContext}</strong>
         <span>{new Date().toLocaleTimeString()} | {statusLine}</span>
-        <span>{eventCount} events | {graphData?.count ?? 0} graph nodes | {mismatchCount} findings</span>
+        <span>{graphData?.count ?? 0} graph nodes | {mismatchCount} findings</span>
     </footer>
 </main>
 
 <style>
+    :global(html),
+    :global(body) {
+        height: 100%;
+        overflow: hidden;
+    }
+
     :global(body) {
         margin: 0;
         background: #ebe8e0;
         color: #1c1b18;
-        font-family: "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+        letter-spacing: 0;
     }
 
     :global(*) {
@@ -597,9 +731,10 @@
     }
 
     .app-shell {
-        min-height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
         display: grid;
-        grid-template-rows: 40px minmax(0, 1fr) 74px;
+        grid-template-rows: 40px minmax(0, 1fr) 58px;
         background: #ebe8e0;
     }
 
@@ -614,30 +749,20 @@
 
     .topbar strong,
     .topbar button,
+    .context-switcher,
     .top-status,
-    .pane-title,
-    .stage-list,
-    .tool-grid,
+    .source-strip,
+    .source-summary,
+    .insight-head,
+    .sample-sources,
     .chat-head span,
     .message span,
     .console-strip {
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         letter-spacing: 0.05em;
     }
 
-    .topbar nav {
-        display: flex;
-        gap: 4px;
-        border-radius: 8px;
-        background: #ebe8e0;
-        padding: 4px;
-    }
-
     .topbar button,
-    .pane-title button,
-    .stage-head button,
-    .tool-grid button,
-    .workspace-row button,
+    .insight-head button,
     .chat-head button,
     .composer button {
         border: 1px solid #d7d2c8;
@@ -646,21 +771,28 @@
         color: #1c1b18;
     }
 
+    .context-switcher {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #28261f;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+    }
+
     .topbar button {
         min-width: 76px;
         padding: 5px 12px;
         font-size: 12px;
     }
 
-    .topbar button.active {
-        background: #1c1b18;
-        color: #f8f6ef;
-    }
-
     .top-status {
         display: flex;
+        align-items: center;
         justify-content: flex-end;
-        gap: 16px;
+        gap: 8px;
         color: #8a8678;
         font-size: 12px;
     }
@@ -670,49 +802,33 @@
     }
 
     .main-grid {
+        height: 100%;
         min-height: 0;
         display: grid;
         grid-template-columns: minmax(480px, 1fr) minmax(460px, 0.92fr);
         border-bottom: 1px solid #d7d2c8;
     }
 
-    .graph-only .main-grid,
-    .workspace-only .main-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .graph-pane,
-    .work-pane {
+    .chat-pane,
+    .insight-pane {
         min-width: 0;
         min-height: 0;
         overflow: hidden;
     }
 
-    .graph-pane {
-        display: grid;
-        grid-template-rows: 36px minmax(0, 1fr);
+    .chat-pane {
+        display: flex;
+        min-height: 0;
         border-right: 1px solid #d7d2c8;
-        background: #f8f6ef;
+        padding: 16px;
     }
 
-    .pane-title {
+    .insight-pane {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 10px;
-        color: #1c1b18;
-        font-size: 12px;
-        font-weight: 700;
-    }
-
-    .pane-title div {
-        display: flex;
-        gap: 6px;
-    }
-
-    .pane-title button {
-        padding: 5px 9px;
-        font-size: 12px;
+        flex-direction: column;
+        gap: 12px;
+        overflow: auto;
+        padding: 16px;
     }
 
     .graph-canvas {
@@ -740,6 +856,18 @@
         color: #535047;
         padding: 0;
         transform: translate(-50%, -50%);
+    }
+
+    .node:hover,
+    .node.selected {
+        color: #1c1b18;
+        z-index: 3;
+    }
+
+    .node.selected em {
+        font-weight: 700;
+        text-decoration: underline;
+        text-underline-offset: 3px;
     }
 
     .node span,
@@ -853,18 +981,10 @@
         text-align: center;
     }
 
-    .work-pane {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-        overflow: auto;
-        padding: 16px;
-    }
-
-    .stage-card,
-    .stage-list div,
-    .tool-grid button,
-    .workspace-row button,
+    .source-strip,
+    .source-summary,
+    .insight-card,
+    .sample-sources,
     .chat-card,
     .setup-panel {
         border: 1px solid #d7d2c8;
@@ -872,35 +992,163 @@
         background: #f8f6ef;
     }
 
-    .stage-card {
-        padding: 18px;
+    .source-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        align-items: center;
+        padding: 12px;
     }
 
-    .stage-head {
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-        align-items: start;
-    }
-
-    .stage-head p,
-    .kicker {
-        margin: 0;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    .source-strip span,
+    .sample-head span,
+    .findings-view span,
+    .activity-view span,
+    .activity-view small {
+        display: block;
         color: #8a8678;
+        font-size: 11px;
+        text-transform: uppercase;
+    }
+
+    .source-strip strong {
+        display: block;
+        margin-top: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+    }
+
+    .insight-head > button {
+        padding: 8px 12px;
+        white-space: nowrap;
+    }
+
+    .source-summary {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 10px;
+    }
+
+    .source-summary div {
+        min-width: 130px;
+        border: 1px solid #ece7dd;
+        border-radius: 8px;
+        background: #fffdf7;
+        padding: 8px 10px;
+    }
+
+    .source-summary strong,
+    .source-summary span {
+        display: block;
+    }
+
+    .source-summary strong {
         text-transform: uppercase;
         font-size: 12px;
     }
 
-    .stage-head h1 {
-        margin: 4px 0 0;
-        font-size: clamp(30px, 4vw, 52px);
-        line-height: 0.95;
-        overflow-wrap: anywhere;
+    .source-summary span {
+        margin-top: 4px;
+        color: #8a8678;
+        font-size: 12px;
     }
 
-    .stage-head button {
-        padding: 8px 12px;
+    .empty-source-summary div {
+        min-width: 100%;
+    }
+
+    .sample-sources {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 12px;
+    }
+
+    .sample-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .sample-sources label {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        color: #535047;
+        font-size: 13px;
+    }
+
+    .insight-card {
+        min-height: 420px;
+        flex: 1 0 420px;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
+    }
+
+    .insight-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-bottom: 1px solid #d7d2c8;
+        padding: 10px;
+    }
+
+    .insight-head nav {
+        display: flex;
+        gap: 4px;
+        border-radius: 8px;
+        background: #ebe8e0;
+        padding: 4px;
+    }
+
+    .insight-head nav button {
+        min-width: 86px;
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    .insight-head nav button.active {
+        background: #1c1b18;
+        color: #f8f6ef;
+    }
+
+    .findings-view,
+    .activity-view {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: auto;
+        padding: 14px;
+    }
+
+    .findings-view article,
+    .activity-view article,
+    .empty-state {
+        border: 1px solid #ece7dd;
+        border-radius: 8px;
+        background: #fffdf7;
+        padding: 12px;
+    }
+
+    .findings-view strong,
+    .activity-view strong,
+    .empty-state strong {
+        display: block;
+        margin-top: 4px;
+    }
+
+    .findings-view p,
+    .activity-view p,
+    .empty-state p {
+        margin: 6px 0 0;
+        color: #5f5b50;
+        line-height: 1.45;
     }
 
     .muted,
@@ -908,114 +1156,11 @@
         color: #8a8678;
     }
 
-    .metrics {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 10px;
-        margin-top: 18px;
-    }
-
-    .metrics div {
-        border: 1px solid #ece7dd;
-        border-radius: 8px;
-        padding: 12px;
-        text-align: center;
-    }
-
-    .metrics strong,
-    .metrics span {
-        display: block;
-    }
-
-    .metrics strong {
-        font-size: 24px;
-    }
-
-    .metrics span {
-        color: #8a8678;
-        font-size: 12px;
-    }
-
-    .stage-list {
-        display: grid;
-        gap: 8px;
-        font-size: 12px;
-    }
-
-    .stage-list div {
-        min-height: 44px;
-        display: grid;
-        grid-template-columns: 34px 1fr auto;
-        gap: 10px;
-        align-items: center;
-        padding: 0 12px;
-    }
-
-    .stage-list span {
-        color: #2d6a4f;
-    }
-
-    .stage-list em {
-        max-width: 170px;
-        color: #8a8678;
-        font-style: normal;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .tool-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 10px;
-    }
-
-    .tool-grid button {
-        min-height: 78px;
-        padding: 12px;
-        text-align: left;
-    }
-
-    .tool-grid strong,
-    .tool-grid span {
-        display: block;
-    }
-
-    .tool-grid span {
-        margin-top: 6px;
-        color: #8a8678;
-        font-size: 12px;
-    }
-
-    .workspace-row {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding-bottom: 2px;
-    }
-
-    .workspace-row button {
-        min-width: 172px;
-        padding: 10px;
-        text-align: left;
-    }
-
-    .workspace-row button.active {
-        border-color: #1c1b18;
-    }
-
-    .workspace-row strong,
-    .workspace-row small {
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
     .chat-card {
-        min-height: 420px;
+        flex: 1 1 auto;
+        min-height: 280px;
         display: grid;
-        grid-template-rows: auto minmax(240px, 1fr) auto;
+        grid-template-rows: auto minmax(0, 1fr) auto;
         overflow: hidden;
     }
 
@@ -1044,10 +1189,12 @@
     }
 
     .messages {
+        min-height: 0;
         display: flex;
         flex-direction: column;
         gap: 12px;
         overflow: auto;
+        overscroll-behavior: contain;
         padding: 16px;
     }
 
@@ -1074,7 +1221,46 @@
 
     .message p {
         margin: 0;
-        white-space: pre-wrap;
+    }
+
+    .message-body {
+        display: grid;
+        gap: 6px;
+    }
+
+    .message-body h4 {
+        margin: 10px 0 2px;
+        font-size: 13px;
+        color: #28261f;
+    }
+
+    .message-body h4:first-child {
+        margin-top: 0;
+    }
+
+    .message-body .number-line {
+        margin-top: 8px;
+        font-weight: 700;
+    }
+
+    .message-body .bullet-line {
+        position: relative;
+        padding-left: 14px;
+    }
+
+    .message-body .bullet-line::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.72em;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #8a8678;
+    }
+
+    .message-gap {
+        height: 4px;
     }
 
     details {
@@ -1097,6 +1283,28 @@
     .evidence-item strong,
     .evidence-item small {
         display: block;
+    }
+
+    .evidence-item p {
+        margin-top: 6px;
+        color: #5f5b50;
+    }
+
+    .full-evidence {
+        margin-top: 8px;
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    .full-evidence pre {
+        max-height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+        background: #fffdf7;
+        border: 1px solid #ece7dd;
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 12px;
     }
 
     .composer {
@@ -1123,13 +1331,13 @@
     }
 
     .setup-panel {
-        max-height: 520px;
+        max-height: min(520px, 42dvh);
         overflow: auto;
     }
 
     .console-strip {
         display: grid;
-        align-content: start;
+        align-content: center;
         gap: 6px;
         background: #070707;
         color: #d7d2c8;
@@ -1146,8 +1354,7 @@
             grid-template-columns: 1fr;
         }
 
-        .graph-pane {
-            min-height: 520px;
+        .chat-pane {
             border-right: none;
             border-bottom: 1px solid #d7d2c8;
         }
@@ -1163,11 +1370,6 @@
 
         .top-status {
             justify-content: flex-start;
-        }
-
-        .metrics,
-        .tool-grid {
-            grid-template-columns: repeat(2, 1fr);
         }
 
         .node-card {

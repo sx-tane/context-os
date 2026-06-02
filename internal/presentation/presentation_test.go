@@ -11,7 +11,8 @@ import (
 // TestRenderSummaryReturnsCleanState verifies a role summary reports no delivery mismatches when no findings exist.
 func TestRenderSummaryReturnsCleanState(t *testing.T) {
 	got := presentation.RenderSummary(presentation.PMO, nil)
-	if got != "pmo view: no delivery mismatches detected" {
+	want := "pmo view: no delivery mismatches detected. This means the local findings check did not find a conflict; use chat to summarize source messages or documents."
+	if got != want {
 		t.Fatalf("RenderSummary() = %q, want clean state", got)
 	}
 }

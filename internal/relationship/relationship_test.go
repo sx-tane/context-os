@@ -125,6 +125,32 @@ func TestBuildFallsBackToCoOccurrence(t *testing.T) {
 	}
 }
 
+// TestBuildCapsGenericCoOccurrenceEdges verifies large same-document inputs do
+// not explode into dense generic all-pairs graphs.
+func TestBuildCapsGenericCoOccurrenceEdges(t *testing.T) {
+	input := make([]entities.CanonicalEntity, 0, 100)
+	for i := 0; i < 100; i++ {
+		input = append(input, canonical(
+			"d:dep"+string(rune('a'+(i%26)))+string(rune('a'+(i/26))),
+			"d",
+			types.Dependency,
+			"dependency",
+		))
+	}
+
+	got := relationship.Build(input)
+
+	var generic int
+	for _, rel := range got {
+		if rel.Kind == types.CoOccursInDocument {
+			generic++
+		}
+	}
+	if generic > 25 {
+		t.Fatalf("co-occurrence edge count = %d, want <= 25", generic)
+	}
+}
+
 // TestBuildDeterministicIDIncludesKind verifies distinct edge kinds never collide on ID.
 func TestBuildDeterministicIDIncludesKind(t *testing.T) {
 	input := []entities.CanonicalEntity{

@@ -88,6 +88,17 @@ func (s *WorkspaceStore) List(ctx context.Context) ([]repository.Workspace, erro
 	return out, rows.Err()
 }
 
+// DeleteByPath deletes a workspace by path. Dependent workspace memory rows are
+// removed by ON DELETE CASCADE constraints.
+func (s *WorkspaceStore) DeleteByPath(ctx context.Context, path string) error {
+	if _, err := s.db.ExecContext(ctx, `
+		DELETE FROM workspaces WHERE path = $1
+	`, path); err != nil {
+		return fmt.Errorf("store: delete workspace by path: %w", err)
+	}
+	return nil
+}
+
 // ─── Events ──────────────────────────────────────────────────────────────────
 
 // EventStore is the PostgreSQL-backed EventRepository.
@@ -340,6 +351,17 @@ func (s *EntityStore) ListEntities(ctx context.Context, workspaceID, entityType 
 	return out, rows.Err()
 }
 
+// CountRelationships returns the total relationship count for a workspace.
+func (s *EntityStore) CountRelationships(ctx context.Context, workspaceID string) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM relationships WHERE workspace_id = $1
+	`, workspaceID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store: count relationships: %w", err)
+	}
+	return n, nil
+}
+
 // ─── Mismatches ───────────────────────────────────────────────────────────────
 
 // MismatchStore is the PostgreSQL-backed MismatchRepository.
@@ -536,7 +558,7 @@ func (s *AuditStore) Log(ctx context.Context, e repository.AuditEvent) error {
 	}
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO audit_log
-			(workspace_id, event_type, actor, connector, source_uri, entity_id, trace_id, payload, created_at)
+			(workspace_id, event_type, actor, connector, source_uri, entity_id, trace_id, payload, occurred_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
 	`,
 		e.WorkspaceID, e.EventType, e.Actor, e.Connector,
@@ -546,6 +568,17 @@ func (s *AuditStore) Log(ctx context.Context, e repository.AuditEvent) error {
 		return fmt.Errorf("store: log audit event: %w", err)
 	}
 	return nil
+}
+
+// CountByWorkspace returns the total audit rows for a workspace.
+func (s *AuditStore) CountByWorkspace(ctx context.Context, workspaceID string) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM audit_log WHERE workspace_id = $1
+	`, workspaceID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store: count audit rows: %w", err)
+	}
+	return n, nil
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

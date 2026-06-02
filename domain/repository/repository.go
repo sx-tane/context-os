@@ -96,6 +96,13 @@ type WorkspaceRepository interface {
 	List(ctx context.Context) ([]Workspace, error)
 }
 
+// WorkspaceResetter clears a workspace and all cascade-linked memory rows.
+type WorkspaceResetter interface {
+	// DeleteByPath deletes a workspace by path. Linked rows are removed through
+	// database cascade rules. It is a no-op when the workspace does not exist.
+	DeleteByPath(ctx context.Context, path string) error
+}
+
 // EventRepository manages ingested source events.
 type EventRepository interface {
 	// UpsertBatch writes events, ignoring duplicates with the same (id, workspace_id).
@@ -120,6 +127,12 @@ type EntityRepository interface {
 	UpsertRelationships(ctx context.Context, workspaceID string, rels []types.Relationship) error
 	// ListEntities returns all entities for a workspace, optionally filtered by entityType.
 	ListEntities(ctx context.Context, workspaceID, entityType string) ([]entities.CanonicalEntity, error)
+}
+
+// RelationshipCounter reports relationship density for a workspace.
+type RelationshipCounter interface {
+	// CountRelationships returns the total relationship count for a workspace.
+	CountRelationships(ctx context.Context, workspaceID string) (int, error)
 }
 
 // MismatchRepository manages reasoning findings.
@@ -165,4 +178,10 @@ type AuditEvent struct {
 type AuditRepository interface {
 	// Log appends an audit event to the audit log table.
 	Log(ctx context.Context, e AuditEvent) error
+}
+
+// AuditCounter reports audit row counts for a workspace.
+type AuditCounter interface {
+	// CountByWorkspace returns the total audit rows for a workspace.
+	CountByWorkspace(ctx context.Context, workspaceID string) (int, error)
 }

@@ -225,7 +225,12 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 		metadata[codexsource.MetadataPlugin] = codexsource.PluginSlack
 	}
 
-	shared.WriteSourceIngest(w, r, connector, shared.SourceIngestInput{URI: req.URI, Metadata: metadata})
+	shared.WriteSourceIngest(w, r, connector, shared.SourceIngestInput{
+		WorkspaceID: req.WorkspaceID,
+		Connector:   "slack",
+		URI:         req.URI,
+		Metadata:    metadata,
+	})
 }
 
 // IngestStream handles POST /slack/ingest/stream.
@@ -256,6 +261,8 @@ func IngestStream(w http.ResponseWriter, r *http.Request) {
 		func(req request.SlackIngest) string { return req.URI },
 		func(req request.SlackIngest) string { return req.Provider },
 		func(req request.SlackIngest) string { return req.Token },
+		func(req request.SlackIngest) string { return req.WorkspaceID },
+		func(request.SlackIngest) string { return "slack" },
 	)
 }
 

@@ -37,16 +37,16 @@ What it does:
 
 - Runs `uv sync` in `apps/ai-worker` if `uv` is available
 - Regenerates OpenAPI docs (`swag init` → `apps/api/_docs/`) and Redoc HTML if `swag` is installed
-- Regenerates frontend TypeScript types from the OpenAPI spec (`bun run codegen` in `apps/frontend`)
-- **Installs all required Codex plugins** — runs `codex plugin add` for each plugin with explicit status reporting; warns if a plugin fails but does not abort startup:
+- Regenerates frontend TypeScript types from the OpenAPI spec (`bun run codegen` or `npm run codegen` in `apps/frontend`)
+- Checks all required Codex plugins. Missing plugins are reported without prompting; to install them during startup, run `INSTALL_CODEX_PLUGINS=1 ./scripts/start-all.sh`:
   - `github@openai-curated`
   - `atlassian-rovo@openai-curated`
   - `slack@openai-curated`
   - `google-drive@openai-curated`
   - `notion@openai-curated`
   - `sharepoint@openai-curated`
-- Starts the Go API (`go run ./apps/api`) in the background
-- Starts the SvelteKit context UI dev server (`bun run dev`) in the background
+- Starts the Go API (`go run ./apps/api`) in the background with `[api]` log prefixes
+- Starts the SvelteKit context UI dev server (`bun run dev` or `npm run dev`) in the background with `[frontend]` log prefixes
 - Shuts down both processes cleanly when you press `Ctrl+C`
 
 ```bash
@@ -58,14 +58,17 @@ Expected output when running:
 
 ```
 uv not found; skipping AI worker environment sync
+[missing] Slack plugin. To install: codex plugin add slack@openai-curated
 [warn] GITHUB_TOKEN is not set — the GitHub connector will only reach public repos.
        To authenticate: export GITHUB_TOKEN=ghp_... then re-run this script.
-Starting API on current terminal session...
-Starting frontend dev server...
+Starting API. Backend logs will be prefixed with [api].
+Starting frontend dev server. Frontend logs will be prefixed with [frontend].
 API PID:      <pid>
 Worker PID:   skipped
 Frontend PID: <pid>
 Press Ctrl+C to stop all processes.
+[api] <backend log line>
+[frontend] <frontend log line>
 ```
 
 Set `GITHUB_TOKEN` before running to authenticate against private repositories:

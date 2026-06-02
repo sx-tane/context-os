@@ -82,8 +82,10 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		shared.WriteSourceIngest(w, r, codexsource.NewConnector(), shared.SourceIngestInput{
-			URI:      uri,
-			Metadata: map[string]string{codexsource.MetadataPlugin: codexsource.PluginGoogleDrive},
+			WorkspaceID: req.WorkspaceID,
+			Connector:   "googledrive",
+			URI:         uri,
+			Metadata:    map[string]string{codexsource.MetadataPlugin: codexsource.PluginGoogleDrive},
 		})
 		return
 	}
@@ -94,9 +96,11 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 	shared.SetMetadata(metadata, googledrivesource.MetadataAccessToken, req.AccessToken)
 
 	shared.WriteSourceIngest(w, r, googledrivesource.NewConnector(), shared.SourceIngestInput{
-		URI:      uri,
-		Cursor:   req.Cursor,
-		Metadata: metadata,
+		WorkspaceID: req.WorkspaceID,
+		Connector:   "googledrive",
+		URI:         uri,
+		Cursor:      req.Cursor,
+		Metadata:    metadata,
 	})
 }
 
@@ -128,6 +132,8 @@ func IngestStream(w http.ResponseWriter, r *http.Request) {
 		func(req request.GoogleDriveIngest) string { return resolveURI(req) },
 		func(req request.GoogleDriveIngest) string { return req.Provider },
 		func(req request.GoogleDriveIngest) string { return "" },
+		func(req request.GoogleDriveIngest) string { return req.WorkspaceID },
+		func(request.GoogleDriveIngest) string { return "googledrive" },
 	)
 }
 

@@ -16,11 +16,12 @@ const workspaceRequestTimeout = 10 * time.Second
 
 // Handler holds the repository dependencies for workspace HTTP handlers.
 type Handler struct {
-	workspaces  repository.WorkspaceRepository
-	events      repository.EventRepository
-	entities    repository.EntityRepository
-	mismatches  repository.MismatchRepository
-	connSync    repository.SyncRepository
+	workspaces repository.WorkspaceRepository
+	events     repository.EventRepository
+	entities   repository.EntityRepository
+	mismatches repository.MismatchRepository
+	connSync   repository.SyncRepository
+	audit      repository.AuditRepository
 }
 
 // NewHandler returns a Handler wired to the provided repositories.
@@ -38,6 +39,12 @@ func NewHandler(
 		mismatches: mismatches,
 		connSync:   connSync,
 	}
+}
+
+// WithAuditRepository attaches audit row counts to workspace status.
+func (h *Handler) WithAuditRepository(audit repository.AuditRepository) *Handler {
+	h.audit = audit
+	return h
 }
 
 // List handles GET /workspace.
@@ -117,6 +124,63 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 	response.WriteJSON(w, http.StatusOK, response.NewWorkspace(ws))
 }
 
+// Reset handles POST /workspace/reset.
+//
+// @Summary      Reset workspace memory
+// @Description  Deletes DB-backed local memory for a workspace and recreates an empty workspace row.
+// @Tags         workspace
+// @Accept       json
+// @Produce      json
+// @Param        body  body      upsertRequest  true  "Workspace reset request"
+// @Success      200   {object}  response.WorkspaceStatus
+// @Failure      400   {object}  map[string]string
+// @Failure      405   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Router       /workspace/reset [post]
+func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+		return
+	}
+
+	var req upsertRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+
+	path := strings.TrimSpace(req.Path)
+	if path == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "path is required")
+		return
+	}
+	resetter, ok := h.workspaces.(repository.WorkspaceResetter)
+	if !ok {
+		response.WriteError(w, http.StatusServiceUnavailable, "reset_unavailable", "workspace reset is unavailable for this store")
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
+		name = parts[len(parts)-1]
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), workspaceRequestTimeout)
+	defer cancel()
+
+	if err := resetter.DeleteByPath(ctx, path); err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	ws, err := h.workspaces.Upsert(ctx, repository.Workspace{Name: name, Path: path})
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceStatus(ws, 0, 0, 0, 0, 0, 0, nil))
+}
+
 // Status handles GET /workspace/status?path=<path>.
 //
 // @Summary      Workspace status
@@ -167,12 +231,20 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Entity and mismatch counts are best-effort — missing repositories return 0.
-	var entityCount, mismatchCount int
+	// Detailed counts are best-effort — missing repositories return 0.
+	var workspaceCount, entityCount, relationshipCount, mismatchCount, auditCount int
+	if workspaces, wErr := h.workspaces.List(ctx); wErr == nil {
+		workspaceCount = len(workspaces)
+	}
 	if h.entities != nil {
 		entityList, eErr := h.entities.ListEntities(ctx, ws.ID, "")
 		if eErr == nil {
 			entityCount = len(entityList)
+		}
+		if counter, ok := h.entities.(repository.RelationshipCounter); ok {
+			if count, cErr := counter.CountRelationships(ctx, ws.ID); cErr == nil {
+				relationshipCount = count
+			}
 		}
 	}
 	if h.mismatches != nil {
@@ -181,8 +253,22 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 			mismatchCount = len(mismatchList)
 		}
 	}
+	if counter, ok := h.audit.(repository.AuditCounter); ok {
+		if count, cErr := counter.CountByWorkspace(ctx, ws.ID); cErr == nil {
+			auditCount = count
+		}
+	}
 
-	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceStatus(*ws, eventCount, entityCount, mismatchCount, syncs))
+	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceStatus(
+		*ws,
+		eventCount,
+		entityCount,
+		relationshipCount,
+		mismatchCount,
+		workspaceCount,
+		auditCount,
+		syncs,
+	))
 }
 
 // upsertRequest is the decoded body for POST /workspace.

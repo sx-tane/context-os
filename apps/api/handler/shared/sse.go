@@ -143,6 +143,8 @@ func StreamCodexIngest[T CodexStreamRequest](
 	uri func(T) string,
 	provider func(T) string,
 	token func(T) string,
+	workspaceID func(T) string,
+	connectorName func(T) string,
 ) {
 	if r.Method != http.MethodPost {
 		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
@@ -192,5 +194,28 @@ func StreamCodexIngest[T CodexStreamRequest](
 		return
 	}
 
-	sw.Result(NewIngestResponse("codex-cli", capabilities, resultEvents))
+	input := SourceIngestInput{
+		WorkspaceID: strings.TrimSpace(workspaceID(req)),
+		Connector:   strings.TrimSpace(connectorName(req)),
+		URI:         requestURI,
+		Metadata:    metadata,
+	}
+	if input.WorkspaceID != "" {
+		service := GetPersistentIngestService()
+		if service == nil {
+			sw.Error("persistence_unavailable", "database-backed ingest is unavailable")
+			return
+		}
+		persisted, err := service.PersistEvents(ctx, input, capabilities, resultEvents)
+		if err != nil {
+			sw.Error("persist_error", err.Error())
+			return
+		}
+		sw.Result(persisted)
+		return
+	}
+
+	result := NewIngestResponse("codex-cli", capabilities, resultEvents)
+	result.PersistenceMode = "preview_debug"
+	sw.Result(result)
 }

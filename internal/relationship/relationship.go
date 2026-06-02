@@ -7,6 +7,8 @@ import (
 	"context-os/domain/types"    // Relationship output type
 )
 
+const maxCoOccurrenceEdgesPerSource = 25
+
 // Build derives typed relationships between canonical entities that share a source document.
 //
 // It pairs every distinct entity ordering within the same source and classifies the edge using
@@ -16,6 +18,7 @@ import (
 func Build(canonical []entities.CanonicalEntity) []types.Relationship {
 	relationships := []types.Relationship{} // start empty; not every pair qualifies as a valid edge
 	seen := map[string]struct{}{}           // dedupe by relationship ID so repeated pairs collapse cleanly
+	coOccurrencesBySource := map[string]int{}
 	for i := 0; i < len(canonical); i++ {
 		from := canonical[i].Entity
 		for j := i + 1; j < len(canonical); j++ {
@@ -26,6 +29,13 @@ func Build(canonical []entities.CanonicalEntity) []types.Relationship {
 			rel := classify(from, to) // orient and type the edge from the two entities
 			if err := Validate(rel); err != nil {
 				continue // never emit structurally invalid edges
+			}
+			if rel.Kind == types.CoOccursInDocument {
+				sourceID := rel.Metadata["source_id"]
+				if coOccurrencesBySource[sourceID] >= maxCoOccurrenceEdgesPerSource {
+					continue
+				}
+				coOccurrencesBySource[sourceID]++
 			}
 			if _, dup := seen[rel.ID]; dup {
 				continue

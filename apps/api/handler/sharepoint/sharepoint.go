@@ -79,8 +79,10 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		shared.WriteSourceIngest(w, r, codexsource.NewConnector(), shared.SourceIngestInput{
-			URI:      req.URI,
-			Metadata: map[string]string{codexsource.MetadataPlugin: codexsource.PluginSharePoint},
+			WorkspaceID: req.WorkspaceID,
+			Connector:   "sharepoint",
+			URI:         req.URI,
+			Metadata:    map[string]string{codexsource.MetadataPlugin: codexsource.PluginSharePoint},
 		})
 		return
 	}
@@ -92,9 +94,11 @@ func Ingest(w http.ResponseWriter, r *http.Request) {
 	shared.SetMetadata(metadata, sharepointsource.MetadataClientSecret, req.ClientSecret)
 
 	shared.WriteSourceIngest(w, r, sharepointsource.NewConnector(), shared.SourceIngestInput{
-		URI:      req.URI,
-		Content:  req.Content,
-		Metadata: metadata,
+		WorkspaceID: req.WorkspaceID,
+		Connector:   "sharepoint",
+		URI:         req.URI,
+		Content:     req.Content,
+		Metadata:    metadata,
 	})
 }
 
@@ -126,5 +130,7 @@ func IngestStream(w http.ResponseWriter, r *http.Request) {
 		func(req request.SharePointIngest) string { return req.URI },
 		func(req request.SharePointIngest) string { return req.Provider },
 		func(req request.SharePointIngest) string { return req.Token },
+		func(req request.SharePointIngest) string { return req.WorkspaceID },
+		func(request.SharePointIngest) string { return "sharepoint" },
 	)
 }

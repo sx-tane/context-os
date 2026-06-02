@@ -106,8 +106,10 @@ func Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shared.WriteSourceIngest(w, r, filesystemsource.NewConnector(), shared.SourceIngestInput{
-		URI:      staged.IngestURI,
-		Metadata: metadata,
+		WorkspaceID: strings.TrimSpace(r.FormValue("workspace_id")),
+		Connector:   "filesystem",
+		URI:         staged.IngestURI,
+		Metadata:    metadata,
 	})
 }
 

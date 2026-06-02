@@ -113,6 +113,45 @@ func TestQueryNoArtifactsDoesNotFallbackToFindings(t *testing.T) {
 	}
 }
 
+// TestQueryCompactsVerboseSlackArtifacts verifies chat answers do not dump the
+// entire ingested Slack artifact into the answer body.
+func TestQueryCompactsVerboseSlackArtifacts(t *testing.T) {
+	body := strings.Repeat("Channel metadata should not flood the chat answer. ", 20) + `
+- JunQi Han: TODO includes BKGDEV-8457 and payment -l option support.
+- YuXuan Yang asked whether to release PR 1551 together.
+- JunQi Han said hotfix PR 1552 is under verification.
+Message link: https://example.invalid/slack`
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-verbose",
+		WorkspaceID: "ws1",
+		Connector:   "slack",
+		SourceURI:   "#team",
+		Title:       body,
+		Body:        body,
+		IngestedAt:  time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC),
+	}}}
+	service := internalchat.NewService(fakeWorkspaces(), events, nil)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "today slack message",
+		Timezone:    "UTC",
+		LocalDate:   "2026-06-01",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(result.Answer) > 700 {
+		t.Fatalf("Answer length = %d, want compact answer: %s", len(result.Answer), result.Answer)
+	}
+	if strings.Contains(result.Answer, "Message link:") {
+		t.Fatalf("Answer included raw evidence link line: %s", result.Answer)
+	}
+	if !strings.Contains(result.Answer, "Key points:") {
+		t.Fatalf("Answer = %q, want key points", result.Answer)
+	}
+}
+
 // fakeWorkspaces returns a workspace repository with one path-backed workspace.
 func fakeWorkspaces() *fakeWorkspaceRepository {
 	return &fakeWorkspaceRepository{workspace: repository.Workspace{

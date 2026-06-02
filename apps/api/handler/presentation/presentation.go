@@ -37,6 +37,8 @@ import (
 // findingsTimeout allows for slow Codex plugin ingestion which can take 60–90 s.
 const findingsTimeout = 120 * time.Second
 
+const metadataProductConnector = "product_connector"
+
 // findingsCacheTTL is how fresh persisted mismatches must be to be returned
 // directly from DB without re-ingesting.
 const findingsCacheTTL = 30 * time.Minute
@@ -49,6 +51,7 @@ type Handler struct {
 	mismatches      repository.MismatchRepository
 	entities        repository.EntityRepository
 	syncRepo        repository.SyncRepository
+	audit           repository.AuditRepository
 	parsedWriter    *normalization.DocumentWriter // persists NormalizedDocuments to storage/parsed/
 	semanticMatcher identity.Matcher              // optional Layer-2 semantic identity pass
 	executor        execution.CodexExecutor       // optional assistive execution backend
@@ -70,6 +73,11 @@ func WithSemanticMatcher(m identity.Matcher) HandlerOption {
 // WithExecutor overrides the default LocalStubExecutor with a real or template-backed executor.
 func WithExecutor(e execution.CodexExecutor) HandlerOption {
 	return func(h *Handler) { h.executor = e }
+}
+
+// WithAuditRepository attaches audit logging for findings pipeline actions.
+func WithAuditRepository(a repository.AuditRepository) HandlerOption {
+	return func(h *Handler) { h.audit = a }
 }
 
 // NewHandler returns a Handler wired to the provided repositories.
@@ -213,9 +221,19 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 			ParsedWriter:    h.parsedWriter,
 			SemanticMatcher: h.semanticMatcher,
 		}
+		h.logAudit(r.Context(), repository.AuditEvent{
+			WorkspaceID: workspaceID,
+			EventType:   "ingest.started",
+			Actor:       "api",
+			Connector:   strings.ToLower(strings.TrimSpace(req.Connector)),
+			SourceURI:   strings.TrimSpace(req.URI),
+			TraceID:     stores.TraceID,
+			Payload:     map[string]string{"route": "presentation.findings"},
+		})
 	}
 
 	metadata := cloneMetadata(req.Metadata)
+	metadata[metadataProductConnector] = strings.ToLower(strings.TrimSpace(req.Connector))
 	connector, err := resolveConnector(req, metadata)
 	if err != nil {
 		response.WriteError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -232,6 +250,17 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 		Metadata: metadata,
 	}, stores)
 	if err != nil {
+		if workspaceID != "" && stores != nil {
+			h.logAudit(ctx, repository.AuditEvent{
+				WorkspaceID: workspaceID,
+				EventType:   "ingest.failed",
+				Actor:       "api",
+				Connector:   strings.ToLower(strings.TrimSpace(req.Connector)),
+				SourceURI:   strings.TrimSpace(req.URI),
+				TraceID:     stores.TraceID,
+				Payload:     map[string]string{"route": "presentation.findings", "error": err.Error()},
+			})
+		}
 		response.WriteConnectorError(w, err)
 		return
 	}
@@ -240,15 +269,61 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 	if workspaceID != "" && h.syncRepo != nil {
 		syncCtx, scancel := context.WithTimeout(r.Context(), 5*time.Second)
 		now := time.Now().UTC()
+		eventCount := result.EventCount
+		if h.events != nil {
+			if count, cErr := h.events.Count(syncCtx, workspaceID, strings.ToLower(strings.TrimSpace(req.Connector))); cErr == nil {
+				eventCount = count
+			}
+		}
 		_ = h.syncRepo.Upsert(syncCtx, repository.ConnectorSync{
 			WorkspaceID:  workspaceID,
 			Connector:    strings.ToLower(strings.TrimSpace(req.Connector)),
 			SourceURI:    strings.TrimSpace(req.URI),
 			LastSyncedAt: &now,
-			EventCount:   result.EventCount,
+			EventCount:   eventCount,
 			Status:       "idle",
 		})
 		scancel()
+	}
+	if workspaceID != "" && stores != nil {
+		h.logAudit(ctx, repository.AuditEvent{
+			WorkspaceID: workspaceID,
+			EventType:   "ingest.completed",
+			Actor:       "api",
+			Connector:   strings.ToLower(strings.TrimSpace(req.Connector)),
+			SourceURI:   strings.TrimSpace(req.URI),
+			TraceID:     stores.TraceID,
+			Payload: map[string]string{
+				"route":              "presentation.findings",
+				"event_count":        strconv.Itoa(result.EventCount),
+				"entity_count":       strconv.Itoa(len(result.Entities)),
+				"relationship_count": strconv.Itoa(len(result.Relationships)),
+				"mismatch_count":     strconv.Itoa(len(result.Mismatches)),
+			},
+		})
+		h.logAudit(ctx, repository.AuditEvent{
+			WorkspaceID: workspaceID,
+			EventType:   "graph.updated",
+			Actor:       "api",
+			Connector:   strings.ToLower(strings.TrimSpace(req.Connector)),
+			SourceURI:   strings.TrimSpace(req.URI),
+			TraceID:     stores.TraceID,
+			Payload: map[string]string{
+				"entity_count":       strconv.Itoa(len(result.Entities)),
+				"relationship_count": strconv.Itoa(len(result.Relationships)),
+			},
+		})
+		if len(result.Mismatches) > 0 {
+			h.logAudit(ctx, repository.AuditEvent{
+				WorkspaceID: workspaceID,
+				EventType:   "findings.detected",
+				Actor:       "api",
+				Connector:   strings.ToLower(strings.TrimSpace(req.Connector)),
+				SourceURI:   strings.TrimSpace(req.URI),
+				TraceID:     stores.TraceID,
+				Payload:     map[string]string{"mismatch_count": strconv.Itoa(len(result.Mismatches))},
+			})
+		}
 	}
 
 	role := parseRole(req.Role)
@@ -319,6 +394,20 @@ func (h *Handler) writeFindingsFromCache(w http.ResponseWriter, req request.Pres
 			},
 		},
 	})
+}
+
+func (h *Handler) logAudit(ctx context.Context, event repository.AuditEvent) {
+	if h == nil || h.audit == nil {
+		return
+	}
+	if event.Actor == "" {
+		event.Actor = "api"
+	}
+	if err := h.audit.Log(ctx, event); err != nil {
+		// Audit rows are operational history; a failed write should not change
+		// findings semantics or hide the user-facing result.
+		fmt.Printf("presentation: audit %s: %v\n", event.EventType, err)
+	}
 }
 
 // lastSyncTime returns the most recent LastSyncedAt across all syncs for the given connector,

@@ -4,7 +4,9 @@ package codex
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +23,20 @@ type codexPluginStatus struct {
 	Name      string `json:"name"`
 	Installed bool   `json:"installed"`
 	Enabled   bool   `json:"enabled"`
+}
+
+type sourceCandidate struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	URI       string `json:"uri"`
+	Kind      string `json:"kind"`
+	Connector string `json:"connector"`
+}
+
+type sourceDiscoveryResponse struct {
+	Connector string            `json:"connector"`
+	Provider  string            `json:"provider"`
+	Sources   []sourceCandidate `json:"sources"`
 }
 
 // Status handles GET /codex/status.
@@ -51,6 +67,38 @@ func Status(w http.ResponseWriter, r *http.Request) {
 		"logged_in": loggedIn,
 		"account":   account,
 		"plugins":   plugins,
+	})
+}
+
+// Sources handles GET /codex/sources?connector=github|slack.
+// It uses the installed Codex plugin for the requested connector so discovery
+// follows the same authenticated Codex account/plugin path as ingest.
+func Sources(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
+		return
+	}
+
+	connector := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("connector")))
+	if connector != "github" && connector != "slack" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_connector", "connector must be github or slack")
+		return
+	}
+
+	started := time.Now()
+	log.Printf("codex sources: connector=%s start", connector)
+	sources, err := discoverSourcesWithCodex(r.Context(), connector)
+	if err != nil {
+		log.Printf("codex sources: connector=%s error after %s: %v", connector, time.Since(started).Round(time.Millisecond), err)
+		response.WriteError(w, http.StatusBadGateway, "codex_discovery_failed", err.Error())
+		return
+	}
+	log.Printf("codex sources: connector=%s done count=%d duration=%s", connector, len(sources), time.Since(started).Round(time.Millisecond))
+
+	response.WriteJSON(w, http.StatusOK, sourceDiscoveryResponse{
+		Connector: connector,
+		Provider:  "codex",
+		Sources:   sources,
 	})
 }
 
@@ -234,6 +282,133 @@ func codexPlugins() []codexPluginStatus {
 		plugins[i].Enabled = strings.Contains(segment, "enabled")
 	}
 	return plugins
+}
+
+func discoverSourcesWithCodex(ctx context.Context, connector string) ([]sourceCandidate, error) {
+	prompt := sourceDiscoveryPrompt(connector)
+	if prompt == "" {
+		return nil, fmt.Errorf("unsupported connector %q", connector)
+	}
+
+	out, err := runCodexJSON(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	var body struct {
+		Sources []sourceCandidate `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(extractJSONObject(out)), &body); err != nil {
+		return nil, fmt.Errorf("could not parse Codex source list JSON: %w", err)
+	}
+
+	sources := make([]sourceCandidate, 0, len(body.Sources))
+	seen := map[string]bool{}
+	for _, source := range body.Sources {
+		source.Connector = connector
+		source.URI = strings.TrimSpace(source.URI)
+		source.Label = strings.TrimSpace(source.Label)
+		source.ID = strings.TrimSpace(source.ID)
+		source.Kind = strings.TrimSpace(source.Kind)
+		if source.URI == "" {
+			continue
+		}
+		if source.Label == "" {
+			source.Label = source.URI
+		}
+		if source.ID == "" {
+			source.ID = source.URI
+		}
+		if source.Kind == "" {
+			source.Kind = connector
+		}
+		if seen[source.URI] {
+			continue
+		}
+		seen[source.URI] = true
+		sources = append(sources, source)
+	}
+	return sources, nil
+}
+
+func sourceDiscoveryPrompt(connector string) string {
+	switch connector {
+	case "github":
+		return `Use the GitHub Codex plugin to list repositories available to the connected GitHub account. Do not modify GitHub. Return only compact JSON in this exact shape: {"sources":[{"id":"owner/repo","label":"owner/repo","uri":"owner/repo","kind":"repository"}]}. Include at most 100 repositories.`
+	case "slack":
+		return `Use the Slack Codex plugin to list channels available to the connected Slack account. Do not modify Slack. Return only compact JSON in this exact shape: {"sources":[{"id":"C123","label":"#channel-name","uri":"#channel-name","kind":"channel"}]}. Include at most 100 public or accessible channels.`
+	default:
+		return ""
+	}
+}
+
+func runCodexJSON(ctx context.Context, prompt string) (string, error) {
+	binary := resolveCodexBin()
+	cmdCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	out, err := os.CreateTemp("", "contextos-codex-sources-*.json")
+	if err != nil {
+		return "", err
+	}
+	outPath := out.Name()
+	if err := out.Close(); err != nil {
+		return "", err
+	}
+	defer func() { _ = os.Remove(outPath) }()
+
+	log.Printf("codex sources: running %s exec for source discovery", binary)
+	started := time.Now()
+	cmd := exec.Command(binary, "exec", "--sandbox", "read-only", "--ephemeral", "--color", "never", "-o", outPath, prompt) //nolint:gosec
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			log.Printf("codex sources: codex exec failed after %s", time.Since(started).Round(time.Millisecond))
+			return "", fmt.Errorf("codex discovery failed: %s", strings.TrimSpace(buf.String()))
+		}
+		log.Printf("codex sources: codex exec completed in %s", time.Since(started).Round(time.Millisecond))
+	case <-cmdCtx.Done():
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		<-done
+		log.Printf("codex sources: codex exec timed out after %s", time.Since(started).Round(time.Millisecond))
+		return "", fmt.Errorf("codex discovery timed out")
+	}
+
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		return "", err
+	}
+	text := strings.TrimSpace(string(content))
+	if text == "" {
+		text = strings.TrimSpace(buf.String())
+	}
+	if text == "" {
+		return "", fmt.Errorf("codex returned no source list")
+	}
+	return text, nil
+}
+
+func extractJSONObject(text string) string {
+	trimmed := strings.TrimSpace(text)
+	start := strings.Index(trimmed, "{")
+	end := strings.LastIndex(trimmed, "}")
+	if start >= 0 && end > start {
+		return trimmed[start : end+1]
+	}
+	return trimmed
 }
 
 // resolveCodexBin returns the absolute path to the codex executable,
