@@ -1,0 +1,32 @@
+id: example-scenario
+area: reasoning
+level: pipeline
+description: "One sentence describing the behavior this harness scenario proves."
+owner: internal/reasoning
+
+inputs:
+  source_request:
+    uri: "fixture://example"
+    content_path: "tests/harness/fixtures/reasoning/example/input.txt"
+  metadata_path: "tests/harness/fixtures/reasoning/example/source-metadata.json"
+
+expected:
+  entities:
+    - canonical: "refundStatus"
+      kind: "field"
+  relationships: []
+  mismatches:
+    - summary: "Frontend expectation does not match backend state naming."
+      evidence:
+        - "fixture://example#refundStatus"
+      confidence_min: 0.70
+
+thresholds:
+  precision_min: 1.00
+  recall_min: 1.00
+  false_positive_rate_max: 0.00
+
+evidence:
+  - "tests/harness/fixtures/reasoning/example/input.txt"
+
+notes: "Replace this example with the smallest stable fixture that proves the behavior."
