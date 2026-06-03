@@ -30,6 +30,12 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export interface DeleteWorkspaceResult {
+  ok: boolean;
+  status: number;
+  message?: string;
+}
+
 interface SSEMessage {
   event: string;
   data: string;
@@ -289,15 +295,25 @@ export async function resetWorkspace(
   }
 }
 
-export async function deleteWorkspace(path: string): Promise<boolean> {
+export async function deleteWorkspace(path: string): Promise<DeleteWorkspaceResult> {
   try {
     const res = await fetch(
       `${API_URL}/workspace?path=${encodeURIComponent(path)}`,
       { method: "DELETE" },
     );
-    return res.ok;
+    if (res.ok) return { ok: true, status: res.status };
+    const body = await readJSON(res);
+    return {
+      ok: false,
+      status: res.status,
+      message: body.message ?? body.error ?? `Request failed with status ${res.status}`,
+    };
   } catch {
-    return false;
+    return {
+      ok: false,
+      status: 0,
+      message: "API is unreachable. Removed locally only.",
+    };
   }
 }
 

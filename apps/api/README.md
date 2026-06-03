@@ -71,6 +71,7 @@ apps/api/
 | GET    | `/health`               | Liveness check — returns `{"status":"ok"}`                                               |
 | GET    | `/workspace`            | Lists registered local workspaces                                                        |
 | POST   | `/workspace/upsert`     | Registers or updates a local workspace path                                              |
+| DELETE | `/workspace?path=...`   | Deletes a workspace row and DB-backed local memory without recreating it                  |
 | GET    | `/workspace/status`     | Returns local event/entity/mismatch counts and connector sync state                      |
 | GET    | `/artifacts`            | Queries local ingested artifacts by workspace, connector, source URI, date range, and text |
 | POST   | `/chat/query`           | Deterministic local natural-language query over workspace artifacts, sync state, and status |

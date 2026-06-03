@@ -26,7 +26,7 @@ device-auth login, and plugin re-authentication flows.
 - `runCodexInfo(args…)` — runs Codex with a 5-second timeout, captures combined output.
 - `runCodexSSE(ctx, sw, binary, args…)` — streams a Codex sub-command to an `SSEWriter` with a 3-minute timeout.
 - `runCodexSSEEnv(ctx, sw, binary, extraEnv, args…)` — like `runCodexSSE` but merges extra environment variables into the subprocess (used by `PluginReauth` to inject `BROWSER=echo`).
-- `codexVersion`, `codexLoginStatus`, `codexPlugins` — parse `runCodexInfo` output into structured values.
+- `codexVersion`, `codexLoginStatus`, `codexPlugins` — parse `runCodexInfo` output into structured values. `codexLoginStatus` filters CLI warning lines so `/codex/status.account` only contains the actual Codex login status.
 
 ## Notes
 

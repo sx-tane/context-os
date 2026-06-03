@@ -581,7 +581,7 @@
         padding: 0 var(--ki-pad-x) 1rem;
     }
     .ki-panel.inline {
-        --ki-pad-x: 0;
+        --ki-pad-x: 16px;
         width: 100%;
         max-height: none;
         border-radius: 0;
@@ -595,7 +595,7 @@
         top: 0;
         background: inherit;
         padding: 1rem 0 0.75rem;
-        padding-right: 6rem;
+        padding-right: calc(6rem + var(--ki-pad-x));
         border-bottom: 1px solid #d7d2c8;
     }
     .ki-header h2 {
@@ -613,7 +613,7 @@
     .close-btn {
         position: absolute;
         top: 0.9rem;
-        right: 0;
+        right: var(--ki-pad-x);
         height: 30px;
         border: 0;
         border-bottom: 1px solid #d7d2c8;
@@ -654,6 +654,7 @@
     }
 
     .connectors-list {
+        margin: 0 calc(-1 * var(--ki-pad-x));
         padding: 0;
         display: flex;
         flex-direction: column;
@@ -667,7 +668,7 @@
         border: 0;
         border-bottom: 1px solid #d7d2c8;
         border-radius: 0;
-        padding: 0.85rem 14px;
+        padding: 0.85rem var(--ki-pad-x);
         cursor: pointer;
         transition: background 0.15s;
         position: relative;
@@ -741,21 +742,25 @@
 
     .pill {
         font-size: 0.68rem;
-        padding: 1px 6px;
-        border-radius: 99px;
-        font-weight: 500;
+        padding: 2px 6px;
+        border-radius: 0;
+        border-left: 2px solid currentColor;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: lowercase;
         white-space: nowrap;
+        line-height: 1.25;
     }
     .pill.ok {
-        background: #d1fae5;
+        background: rgba(209, 250, 229, 0.42);
         color: #065f46;
     }
     .pill.error {
-        background: #fee2e2;
+        background: rgba(254, 226, 226, 0.52);
         color: #991b1b;
     }
     .pill.neutral {
-        background: #e5e1d8;
+        background: rgba(229, 225, 216, 0.68);
         color: #625f55;
     }
 
@@ -779,7 +784,7 @@
         align-items: center;
         gap: 0.5rem;
         border-radius: 0;
-        padding: 0.35rem 0;
+        padding: 0.35rem 0.5rem 0.35rem 0;
         cursor: pointer;
     }
 

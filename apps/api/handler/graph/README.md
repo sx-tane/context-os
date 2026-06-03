@@ -18,6 +18,29 @@ HTTP handler for querying persisted workspace entity graph data.
 ## Files
 
 - `graph.go` contains `Handler.Query`, workspace path resolution, and entity repository lookup.
+- `graph_test.go` verifies `/graph` returns the flat entity shape consumed by the frontend graph tab.
+
+## Response Shape
+
+`/graph` returns flat `GraphEntity` rows, not raw `CanonicalEntity` domain objects. The response includes both `count` and `entity_count` for frontend compatibility:
+
+```json
+{
+  "workspace_id": "workspace-id",
+  "count": 1,
+  "entity_count": 1,
+  "entities": [
+    {
+      "id": "entity-id",
+      "name": "Refund status",
+      "type": "requirement",
+      "source": "github://repo/pull/1",
+      "confidence": 0.91,
+      "evidence": ["github://repo/pull/1"]
+    }
+  ]
+}
+```
 
 ## Maintenance Notes
 

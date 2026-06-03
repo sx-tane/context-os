@@ -30,7 +30,7 @@ Single source of truth for all communication with the Go API (`/api`).
 | `postFilesystemUpload(formData, opts)`               | `POST /filesystem/upload` with `multipart/form-data`; same discriminated-union return.                                                           |
 | `getWorkspaces()`                                    | Fetches registered API workspaces and returns an empty list when unavailable.                                                                     |
 | `upsertWorkspace(path, name)`                        | Registers or updates a local workspace path.                                                                                                     |
-| `deleteWorkspace(path)`                              | Calls `DELETE /workspace?path=...` and returns whether backend workspace data was deleted.                                                       |
+| `deleteWorkspace(path)`                              | Calls `DELETE /workspace?path=...` and returns structured `{ ok, status, message? }` details so the route can remove local state while reporting backend/API failures. |
 | `getWorkspaceStatus(path)`                           | Fetches workspace event/entity/mismatch counts and connector sync state.                                                                          |
 | `getArtifacts(params)`                               | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit.                            |
 | `postChatQuery(body, opts)`                          | Sends deterministic local chat questions to `POST /chat/query`; source questions return artifact-backed answers instead of presentation findings.  |

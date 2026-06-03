@@ -243,11 +243,24 @@ func codexVersion() string {
 // codexLoginStatus runs `codex login status` and returns (loggedIn, accountDescription).
 func codexLoginStatus() (bool, string) {
 	out, err := runCodexInfo("login", "status")
-	text := strings.TrimSpace(out)
+	text := cleanCodexInfoOutput(out)
 	if err != nil || strings.HasPrefix(strings.ToLower(text), "not logged") {
 		return false, ""
 	}
 	return true, text
+}
+
+func cleanCodexInfoOutput(out string) string {
+	lines := strings.Split(out, "\n")
+	clean := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(strings.ToLower(trimmed), "warning:") {
+			continue
+		}
+		clean = append(clean, trimmed)
+	}
+	return strings.Join(clean, "\n")
 }
 
 // codexPlugins parses `codex plugin list` and returns supported plugin status.

@@ -227,16 +227,19 @@
     async function removeActiveWorkspace() {
         const path = workspacePath;
         const deleted = await deleteWorkspace(path);
-        if (!deleted) {
-            addMessage(assistantMsg("Workspace remove failed: backend delete did not complete."));
-            return;
-        }
         removeWorkspace(path);
         workspacePath = getProject().workspacePath;
         newWorkspacePath = "";
         lastChatResult = null;
         lastFindings = null;
         await refreshWorkspace();
+        if (!deleted.ok) {
+            addMessage(
+                assistantMsg(
+                    `Workspace removed locally, but backend delete did not complete${deleted.message ? `: ${deleted.message}` : "."}`,
+                ),
+            );
+        }
     }
 
     function makeId() {
@@ -1404,7 +1407,7 @@
         align-items: center;
         border-bottom: 1px solid #d7d2c8;
         background: #ebe8e0;
-        padding: 0 12px;
+        padding: 0 16px;
         gap: 14px;
     }
 
@@ -2433,7 +2436,7 @@
             grid-template-columns: 1fr;
             height: auto;
             gap: 8px;
-            padding: 10px;
+            padding: 10px 16px;
         }
 
         .workspace-control {

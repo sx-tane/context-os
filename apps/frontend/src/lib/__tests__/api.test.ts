@@ -408,9 +408,9 @@ describe("upsertWorkspace", () => {
 // ---- deleteWorkspace ----
 
 describe("deleteWorkspace", () => {
-  it("returns true when backend delete succeeds", async () => {
+  it("returns ok true when backend delete succeeds", async () => {
     fetchMock.mockResolvedValue(makeResponse({ deleted: true }, true, 200));
-    await expect(deleteWorkspace("/proj")).resolves.toBe(true);
+    await expect(deleteWorkspace("/proj")).resolves.toEqual({ ok: true, status: 200 });
   });
 
   it("calls DELETE /api/workspace with encoded path", async () => {
@@ -422,14 +422,22 @@ describe("deleteWorkspace", () => {
     );
   });
 
-  it("returns false when backend delete fails", async () => {
+  it("returns backend error details when backend delete fails", async () => {
     fetchMock.mockResolvedValue(makeResponse({ message: "failed" }, false, 500));
-    await expect(deleteWorkspace("/proj")).resolves.toBe(false);
+    await expect(deleteWorkspace("/proj")).resolves.toEqual({
+      ok: false,
+      status: 500,
+      message: "failed",
+    });
   });
 
-  it("returns false when fetch throws", async () => {
+  it("returns API unreachable details when fetch throws", async () => {
     fetchMock.mockRejectedValue(new Error("network"));
-    await expect(deleteWorkspace("/proj")).resolves.toBe(false);
+    await expect(deleteWorkspace("/proj")).resolves.toEqual({
+      ok: false,
+      status: 0,
+      message: "API is unreachable. Removed locally only.",
+    });
   });
 });
 

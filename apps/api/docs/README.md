@@ -17,11 +17,12 @@ This folder stores generated Swagger artifacts served or inspected with the API 
 
 ## Recent Regeneration
 
-Last regenerated to include the Google Drive connector endpoints:
+Last regenerated to include workspace-scoped source, chat, graph, and presentation contracts:
 
-- `GET /googledrive/status` — reports OAuth/service-account/folder configuration
-- `POST /googledrive/ingest` — ingests Docs, Sheets, and Slides from a Drive folder
-- `request.GoogleDriveIngest` schema with `uri`, `folder_id`, `credential_path`, `service_account_path`, `access_token`, and `cursor`
+- Ingest request schemas include `workspace_id` so direct and Codex-backed sources persist into the active workspace.
+- `request.ChatQuery`, `repository.Workspace`, and `repository.ConnectorSync` are present for local chat, workspace status, and connector sync responses.
+- `/graph` documents flattened graph entities and persisted relationship edges for frontend graph rendering.
+- Google Drive connector docs include status and ingest endpoints for Docs, Sheets, and Slides sources.
 
 ## Verification
 

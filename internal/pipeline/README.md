@@ -13,6 +13,9 @@ This folder contains orchestration code that wires stage implementations into ex
 
 Pipeline persistence uses a detached 30 second timeout for each repository write. This keeps persistence bounded while allowing final writes to complete even if the request context has already been cancelled by the caller.
 
+Event persistence reports the number of written event rows, including both new
+rows and duplicate rows updated during idempotent replays.
+
 ## Maintenance Checklist
 
 - Update this README when orchestration sequence or wiring changes.

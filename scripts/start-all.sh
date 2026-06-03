@@ -61,9 +61,18 @@ is_headless() {
 install_codex_plugin() {
   local name="$1" registry_name="$2"
   local plugin_id="${registry_name%%@*}"
-  # codex plugin list displays friendly names (e.g. "Google Drive"), not slugs.
-  # Match against both the slug and the friendly display name.
-  if codex plugin list 2>/dev/null | grep -Eqi "${plugin_id}|${name}"; then
+  local plugin_list="${CODEX_PLUGIN_LIST:-}"
+
+  if [[ -z "$plugin_list" ]]; then
+    echo "  [warn] Could not read Codex plugin list; run: codex plugin list"
+    return 0
+  fi
+
+  # codex plugin list can display registry slugs and friendly names. Prefer an
+  # exact registry-name match, then fall back to the slug or friendly name.
+  if grep -Fqi "$registry_name" <<<"$plugin_list" || \
+     grep -Fqi "$plugin_id" <<<"$plugin_list" || \
+     grep -Fqi "$name" <<<"$plugin_list"; then
     echo "  [ok] ${name} plugin already installed"
     return 0
   fi
@@ -80,6 +89,8 @@ install_codex_plugin() {
 
 if command -v codex >/dev/null 2>&1; then
   echo "Codex CLI: $(codex --version)"
+  echo "Codex home: ${CODEX_HOME:-$HOME/.codex}"
+  CODEX_PLUGIN_LIST="$(codex plugin list 2>&1 || true)"
   if [[ "${INSTALL_CODEX_PLUGINS:-0}" == "1" ]]; then
     echo "Ensuring all required Codex plugins are installed..."
   else

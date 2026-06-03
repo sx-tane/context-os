@@ -45,6 +45,7 @@ What it does:
   - `google-drive@openai-curated`
   - `notion@openai-curated`
   - `sharepoint@openai-curated`
+- Prints the Codex home being checked and reads `codex plugin list` once so plugin status is consistent for the whole startup run.
 - Starts the Go API (`go run ./apps/api`) in the background with `[api]` log prefixes
 - Starts the SvelteKit context UI dev server (`bun run dev` or `npm run dev`) in the background with `[frontend]` log prefixes
 - Shuts down both processes cleanly when you press `Ctrl+C`
@@ -57,6 +58,8 @@ chmod +x scripts/start-all.sh
 Expected output when running:
 
 ```
+Codex CLI: codex-cli 0.136.0
+Codex home: /home/user/.codex
 uv not found; skipping AI worker environment sync
 [missing] Slack plugin. To install: codex plugin add slack@openai-curated
 [warn] GITHUB_TOKEN is not set — the GitHub connector will only reach public repos.

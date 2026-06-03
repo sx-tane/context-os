@@ -84,6 +84,64 @@ func TestStatusReturnsSnakeCaseWorkspaceFields(t *testing.T) {
 	}
 }
 
+// TestDeleteRejectsMissingPath verifies workspace delete requires a path query parameter.
+func TestDeleteRejectsMissingPath(t *testing.T) {
+	handler := workspacehandler.NewHandler(&resettableWorkspaceRepo{}, nil, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodDelete, "/workspace", nil)
+	rec := httptest.NewRecorder()
+	handler.Delete(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	body := decodeObject(t, rec.Body.Bytes())
+	if body["error"] != "invalid_request" {
+		t.Fatalf("error = %v, want invalid_request", body["error"])
+	}
+}
+
+// TestDeleteRemovesWorkspaceWithoutRecreatingRow verifies workspace delete calls DeleteByPath and does not upsert a replacement row.
+func TestDeleteRemovesWorkspaceWithoutRecreatingRow(t *testing.T) {
+	repo := &resettableWorkspaceRepo{}
+	handler := workspacehandler.NewHandler(repo, nil, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodDelete, "/workspace?path=/workspace", nil)
+	rec := httptest.NewRecorder()
+	handler.Delete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if len(repo.deletedPaths) != 1 || repo.deletedPaths[0] != "/workspace" {
+		t.Fatalf("deletedPaths = %v, want [/workspace]", repo.deletedPaths)
+	}
+	if repo.upsertCount != 0 {
+		t.Fatalf("upsertCount = %d, want 0", repo.upsertCount)
+	}
+	body := decodeObject(t, rec.Body.Bytes())
+	if body["deleted"] != true {
+		t.Fatalf("deleted = %v, want true", body["deleted"])
+	}
+}
+
+// TestDeleteMissingWorkspaceSucceeds verifies deleting an unknown workspace path is a successful no-op.
+func TestDeleteMissingWorkspaceSucceeds(t *testing.T) {
+	repo := &resettableWorkspaceRepo{}
+	handler := workspacehandler.NewHandler(repo, nil, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodDelete, "/workspace?path=/missing", nil)
+	rec := httptest.NewRecorder()
+	handler.Delete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if len(repo.deletedPaths) != 1 || repo.deletedPaths[0] != "/missing" {
+		t.Fatalf("deletedPaths = %v, want [/missing]", repo.deletedPaths)
+	}
+}
+
 type workspaceRepo struct {
 	workspaces []repository.Workspace
 }
@@ -140,6 +198,22 @@ func (r syncRepo) Get(_ context.Context, _, _, _ string) (*repository.ConnectorS
 
 func (r syncRepo) ListByWorkspace(_ context.Context, _ string) ([]repository.ConnectorSync, error) {
 	return r.syncs, nil
+}
+
+type resettableWorkspaceRepo struct {
+	workspaceRepo
+	deletedPaths []string
+	upsertCount  int
+}
+
+func (r *resettableWorkspaceRepo) Upsert(_ context.Context, workspace repository.Workspace) (repository.Workspace, error) {
+	r.upsertCount += 1
+	return workspace, nil
+}
+
+func (r *resettableWorkspaceRepo) DeleteByPath(_ context.Context, path string) error {
+	r.deletedPaths = append(r.deletedPaths, path)
+	return nil
 }
 
 // decodeObject decodes a JSON object from body.

@@ -1,19 +1,20 @@
 # workspace handler
 
-HTTP handlers for registering, resetting, listing, and inspecting local ContextOS workspaces.
+HTTP handlers for registering, resetting, deleting, listing, and inspecting local ContextOS workspaces.
 
 ## Endpoints
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/workspace` | Lists registered workspaces. |
-| POST | `/workspace` | Creates or updates a workspace by local path. |
+| POST | `/workspace/upsert` | Creates or updates a workspace by local path. |
+| DELETE | `/workspace?path=...` | Deletes DB-backed workspace memory and the workspace row without recreating it. |
 | POST | `/workspace/reset` | Deletes DB-backed workspace memory and recreates an empty workspace row. |
 | GET | `/workspace/status` | Returns event, entity, relationship, mismatch, audit, and connector sync counts for one workspace. |
 
 ## Files
 
-- `workspace.go` contains `Handler`, repository wiring, request decoding, workspace reset, and status aggregation.
+- `workspace.go` contains `Handler`, repository wiring, request decoding, workspace reset/delete, and status aggregation.
 - `workspace_test.go` verifies reset behavior and status response behavior.
 
 ## Maintenance Notes

@@ -47,6 +47,19 @@ func (h *Handler) WithAuditRepository(audit repository.AuditRepository) *Handler
 	return h
 }
 
+// Root dispatches method-specific handlers for /workspace.
+func (h *Handler) Root(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		h.List(w, r)
+		return
+	}
+	if r.Method == http.MethodDelete {
+		h.Delete(w, r)
+		return
+	}
+	response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET or DELETE required")
+}
+
 // List handles GET /workspace.
 //
 // @Summary      List workspaces
@@ -85,7 +98,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
 // @Failure      500   {object}  map[string]string
-// @Router       /workspace [post]
+// @Router       /workspace/upsert [post]
 func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
@@ -179,6 +192,46 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceStatus(ws, 0, 0, 0, 0, 0, 0, nil))
+}
+
+// Delete handles DELETE /workspace?path=<path>.
+//
+// @Summary      Delete workspace memory
+// @Description  Deletes a workspace row and all cascade-linked local memory without recreating the workspace.
+// @Tags         workspace
+// @Produce      json
+// @Param        path  query     string  true  "Absolute workspace path"
+// @Success      200   {object}  map[string]bool
+// @Failure      400   {object}  map[string]string
+// @Failure      405   {object}  map[string]string
+// @Failure      503   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Router       /workspace [delete]
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "DELETE required")
+		return
+	}
+
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if path == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "path query parameter is required")
+		return
+	}
+	resetter, ok := h.workspaces.(repository.WorkspaceResetter)
+	if !ok {
+		response.WriteError(w, http.StatusServiceUnavailable, "delete_unavailable", "workspace delete is unavailable for this store")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), workspaceRequestTimeout)
+	defer cancel()
+
+	if err := resetter.DeleteByPath(ctx, path); err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	response.WriteJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 
 // Status handles GET /workspace/status?path=<path>.

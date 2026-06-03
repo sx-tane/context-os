@@ -144,7 +144,7 @@ func main() {
 
 	if wsHandler != nil {
 		routes = append(routes,
-			route{pattern: "/workspace", handler: http.HandlerFunc(wsHandler.List), cors: true},
+			route{pattern: "/workspace", handler: http.HandlerFunc(wsHandler.Root), cors: true},
 			route{pattern: "/workspace/upsert", handler: http.HandlerFunc(wsHandler.Upsert), cors: true},
 			route{pattern: "/workspace/reset", handler: http.HandlerFunc(wsHandler.Reset), cors: true},
 			route{pattern: "/workspace/status", handler: http.HandlerFunc(wsHandler.Status), cors: true},

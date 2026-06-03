@@ -13,8 +13,9 @@ The main route keeps a two-pane workspace layout: chat on the left and project i
 Controls should use the same restrained mono theme:
 
 - Workspace select and new workspace input use underline-style fields, not boxed cards.
-- Workspace `Remove` calls `DELETE /workspace?path=...`, clears local project/chat/source state for that path, and moves to the next saved workspace. Removing the final workspace recreates a clean default workspace.
+- Workspace `Remove` calls `DELETE /workspace?path=...`, clears local project/chat/source state for that path, and moves to the next saved workspace. If the API delete fails, the route keeps the local removal and reports the backend failure in chat. Removing the final workspace recreates a clean default workspace.
 - Source, Clear, Send, Run Analysis, and workspace action buttons use the same underline button treatment and change color on hover.
+- The topbar uses the same 16px horizontal inset as the main content panes so workspace controls, source setup, and status read as part of one layout.
 - Findings / Graph / Activity uses the segmented tab style already defined in the route.
 - The Codex account is shown once under `CODEX`; do not repeat the connected status line or label it as a generic profile unless it is actually a user profile surface.
 - The insight summary shows the active workspace name once under `WORKSPACE`; do not repeat the workspace path below it.
