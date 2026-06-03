@@ -72,9 +72,20 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Sources handles GET /codex/sources?connector=github|slack.
+// Sources handles GET /codex/sources?connector=<codex-backed connector>.
 // It uses the installed Codex plugin for the requested connector so discovery
 // follows the same authenticated Codex account/plugin path as ingest.
+//
+// @Summary      List Codex-accessible sources
+// @Description  Uses Codex plugins to list readable sources for github, jira, slack, notion, googledrive, or sharepoint.
+// @Tags         codex
+// @Produce      json
+// @Param        connector  query     string  true  "Connector: github, jira, slack, notion, googledrive, or sharepoint"
+// @Success      200        {object}  sourceDiscoveryResponse
+// @Failure      400        {object}  map[string]string
+// @Failure      405        {object}  map[string]string
+// @Failure      502        {object}  map[string]string
+// @Router       /codex/sources [get]
 func Sources(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
@@ -82,8 +93,8 @@ func Sources(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connector := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("connector")))
-	if connector != "github" && connector != "slack" {
-		response.WriteError(w, http.StatusBadRequest, "invalid_connector", "connector must be github or slack")
+	if !supportsSourceDiscovery(connector) {
+		response.WriteError(w, http.StatusBadRequest, "invalid_connector", "connector must be github, jira, slack, notion, googledrive, or sharepoint")
 		return
 	}
 
@@ -102,6 +113,15 @@ func Sources(w http.ResponseWriter, r *http.Request) {
 		Provider:  "codex",
 		Sources:   sources,
 	})
+}
+
+func supportsSourceDiscovery(connector string) bool {
+	switch connector {
+	case "github", "jira", "slack", "notion", "googledrive", "sharepoint":
+		return true
+	default:
+		return false
+	}
 }
 
 // Login handles POST /codex/login.
@@ -349,9 +369,17 @@ func discoverSourcesWithCodex(ctx context.Context, connector string) ([]sourceCa
 func sourceDiscoveryPrompt(connector string) string {
 	switch connector {
 	case "github":
-		return `Use the GitHub Codex plugin to list repositories available to the connected GitHub account. Do not modify GitHub. Return only compact JSON in this exact shape: {"sources":[{"id":"owner/repo","label":"owner/repo","uri":"owner/repo","kind":"repository"}]}. Include at most 100 repositories.`
+		return `Use the GitHub Codex plugin to list repositories available to the connected GitHub account. If plugin repository listing is unavailable and the GitHub CLI is already authenticated, you may use read-only gh commands such as gh repo list as a fallback. Do not modify GitHub. Return only compact JSON in this exact shape: {"sources":[{"id":"owner/repo","label":"owner/repo","uri":"owner/repo","kind":"repository"}]}. Include at most 100 repositories.`
+	case "jira":
+		return `Use the Atlassian Rovo Codex plugin to list Jira projects available to the connected Atlassian account. Do not modify Atlassian or Jira. Return only compact JSON in this exact shape: {"sources":[{"id":"ABC","label":"ABC — Project name","uri":"https://example.atlassian.net/jira/software/c/projects/ABC","kind":"project"}]}. Prefer project URLs for uri when available; otherwise use the project key. Include at most 100 projects.`
 	case "slack":
 		return `Use the Slack Codex plugin to list channels available to the connected Slack account. Do not modify Slack. Return only compact JSON in this exact shape: {"sources":[{"id":"C123","label":"#channel-name","uri":"#channel-name","kind":"channel"}]}. Include at most 100 public or accessible channels.`
+	case "notion":
+		return `Use the Notion Codex plugin to list accessible top-level pages and databases from the connected Notion workspace. Do not modify Notion. Return only compact JSON in this exact shape: {"sources":[{"id":"page-or-database-id","label":"Page or database title","uri":"https://notion.so/page-or-database-id","kind":"page"}]}. Use kind "page" or "database". Include at most 100 sources.`
+	case "googledrive":
+		return `Use the Google Drive Codex plugin to list accessible Google Drive folders and recently relevant Docs, Sheets, or Slides from the connected account. Do not modify Google Drive. Return only compact JSON in this exact shape: {"sources":[{"id":"drive-id","label":"Folder or document name","uri":"https://drive.google.com/drive/folders/id","kind":"folder"}]}. Use kind "folder", "doc", "sheet", or "slide". Include at most 100 sources.`
+	case "sharepoint":
+		return `Use the SharePoint Codex plugin to list accessible SharePoint sites, document libraries, folders, or OneDrive locations from the connected Microsoft account. Do not modify SharePoint. Return only compact JSON in this exact shape: {"sources":[{"id":"site-or-item-id","label":"Site or folder name","uri":"https://tenant.sharepoint.com/sites/project","kind":"site"}]}. Use kind "site", "library", "folder", or "file". Include at most 100 sources.`
 	default:
 		return ""
 	}

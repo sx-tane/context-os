@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -205,6 +206,216 @@ func TestQueryUsesLiveAnswererForGitHubCommitQuestions(t *testing.T) {
 	}
 }
 
+// TestQueryUsesLiveAnswererForJiraLinksWithoutLocalArtifacts verifies pasted Jira links route to live Codex without requiring local artifacts.
+func TestQueryUsesLiveAnswererForJiraLinksWithoutLocalArtifacts(t *testing.T) {
+	events := &fakeEventRepository{}
+	live := &fakeLiveAnswerer{answer: "BKGDEV-8457 is assigned to PMO review."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, &fakeSyncRepository{}, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "what is happening in https://acme.atlassian.net/browse/BKGDEV-8457",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if result.Connector != "jira" {
+		t.Fatalf("Connector = %q, want jira", result.Connector)
+	}
+	if live.query.SourceURI != "https://acme.atlassian.net/browse/BKGDEV-8457" {
+		t.Fatalf("live SourceURI = %q, want Jira URL", live.query.SourceURI)
+	}
+	if events.lastQuery.SourceURI != "" {
+		t.Fatalf("local query SourceURI = %q, want no local query before live success", events.lastQuery.SourceURI)
+	}
+}
+
+// TestQueryUsesLiveAnswererForSavedSourceName verifies saved connector syncs resolve named sources before live lookup.
+func TestQueryUsesLiveAnswererForSavedSourceName(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/tourii-backend", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "tourii-backend has two open pull requests."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "for tourii-backend what is current",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if result.Connector != "github" {
+		t.Fatalf("Connector = %q, want github", result.Connector)
+	}
+	if live.query.SourceURI != "sx-tane/tourii-backend" {
+		t.Fatalf("live SourceURI = %q, want sx-tane/tourii-backend", live.query.SourceURI)
+	}
+}
+
+// TestQueryUsesConnectorLevelLiveAnswerer verifies an enabled plugin row can answer without a selected source URI.
+func TestQueryUsesConnectorLevelLiveAnswerer(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "ContextOS repository is available through live GitHub."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "check context os repository",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if result.Connector != "github" {
+		t.Fatalf("Connector = %q, want github", result.Connector)
+	}
+	if live.query.SourceURI != "github" {
+		t.Fatalf("live SourceURI = %q, want github", live.query.SourceURI)
+	}
+}
+
+// TestQueryUsesLiveAnswererForOwnerRepoPrompt verifies owner/repo text routes to live GitHub through a saved connector row.
+func TestQueryUsesLiveAnswererForOwnerRepoPrompt(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "sx-tane/context-os is available through live GitHub."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "get sx-tane/context-os for me",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if result.Connector != "github" {
+		t.Fatalf("Connector = %q, want github", result.Connector)
+	}
+	if live.query.SourceURI != "sx-tane/context-os" {
+		t.Fatalf("live SourceURI = %q, want sx-tane/context-os", live.query.SourceURI)
+	}
+}
+
+// TestQueryKeepsFilesystemLocalFirst verifies filesystem questions do not route to live Codex.
+func TestQueryKeepsFilesystemLocalFirst(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-file",
+		WorkspaceID: "ws1",
+		Connector:   "filesystem",
+		SourceURI:   "docs/plan.md",
+		Title:       "Local migration plan",
+		Body:        "Use local artifacts as the source of truth for findings.",
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	live := &fakeLiveAnswerer{answer: "should not be used"}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, nil, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "summarize local file docs/plan.md",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "local" {
+		t.Fatalf("Provider = %q, want local", result.Provider)
+	}
+	if live.calls != 0 {
+		t.Fatalf("live calls = %d, want 0", live.calls)
+	}
+	if len(result.Artifacts) != 1 {
+		t.Fatalf("artifact count = %d, want 1", len(result.Artifacts))
+	}
+}
+
+// TestQueryFallsBackToLocalArtifactsWhenLiveFails verifies live Codex failures are explicit before local artifact answers.
+func TestQueryFallsBackToLocalArtifactsWhenLiveFails(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-github",
+		WorkspaceID: "ws1",
+		Connector:   "github",
+		SourceURI:   "sx-tane/tourii-backend",
+		Title:       "Repository fallback summary",
+		Body:        "Local repository evidence is available.",
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/tourii-backend", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{err: errors.New("plugin unavailable")}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "summarize tourii-backend",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "local" {
+		t.Fatalf("Provider = %q, want local", result.Provider)
+	}
+	if !strings.Contains(result.Answer, "Live Codex lookup failed: plugin unavailable") {
+		t.Fatalf("Answer = %q, want live failure prefix", result.Answer)
+	}
+	if !strings.Contains(result.Answer, "Repository fallback summary") {
+		t.Fatalf("Answer = %q, want local fallback artifact", result.Answer)
+	}
+}
+
+// TestQueryConnectorLevelLiveFallbackUsesConnectorArtifacts verifies connector-level live sources do not over-filter local fallback artifacts.
+func TestQueryConnectorLevelLiveFallbackUsesConnectorArtifacts(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-github",
+		WorkspaceID: "ws1",
+		Connector:   "github",
+		SourceURI:   "sx-tane/tourii-backend",
+		Title:       "Repository fallback summary",
+		Body:        "Local repository evidence is available.",
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{err: errors.New("plugin unavailable")}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "summarize github",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if live.query.SourceURI != "github" {
+		t.Fatalf("live SourceURI = %q, want github", live.query.SourceURI)
+	}
+	if events.lastQuery.SourceURI != "" {
+		t.Fatalf("local query SourceURI = %q, want connector-wide fallback", events.lastQuery.SourceURI)
+	}
+	if !strings.Contains(result.Answer, "Repository fallback summary") {
+		t.Fatalf("Answer = %q, want local fallback artifact", result.Answer)
+	}
+}
+
 // TestQueryNoArtifactsDoesNotFallbackToFindings verifies source questions with no local data stay source-scoped.
 func TestQueryNoArtifactsDoesNotFallbackToFindings(t *testing.T) {
 	events := &fakeEventRepository{}
@@ -360,11 +571,17 @@ var _ repository.EntityRepository = (*unusedEntityRepository)(nil)
 
 type fakeLiveAnswerer struct {
 	answer string
+	err    error
+	calls  int
 	query  internalchat.LiveQuery
 }
 
 func (f *fakeLiveAnswerer) Answer(ctx context.Context, query internalchat.LiveQuery) (string, error) {
+	f.calls += 1
 	f.query = query
+	if f.err != nil {
+		return "", f.err
+	}
 	return f.answer, nil
 }
 

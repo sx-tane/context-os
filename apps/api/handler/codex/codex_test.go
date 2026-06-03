@@ -39,6 +39,7 @@ func TestStatusReturnsJSON(t *testing.T) {
 	}
 }
 
+// TestSourcesMethodNotAllowed verifies that a non-GET request to Sources returns 405.
 func TestSourcesMethodNotAllowed(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/codex/sources?connector=github", nil)
@@ -50,6 +51,7 @@ func TestSourcesMethodNotAllowed(t *testing.T) {
 	}
 }
 
+// TestSourcesRejectsUnknownConnector verifies that source discovery rejects unsupported connector names.
 func TestSourcesRejectsUnknownConnector(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/codex/sources?connector=unknown", nil)

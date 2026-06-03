@@ -8,12 +8,13 @@ import (
 	"net/http"
 	"time"
 
+	"context-os/apps/api/handler/shared"
 	"context-os/apps/api/request"
 	"context-os/apps/api/response"
 	internalchat "context-os/internal/chat"
 )
 
-const chatRequestTimeout = 150 * time.Second
+const chatRequestTimeout = 5 * time.Minute
 
 // Handler holds the service dependency for local chat handlers.
 type Handler struct {
@@ -75,6 +76,98 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.WriteJSON(w, http.StatusOK, mapChatResult(result))
+}
+
+// StreamQuery handles POST /chat/query/stream.
+//
+// @Summary      Stream workspace context query
+// @Description  Streams chat query progress, including live Codex logs, then emits the final chat result.
+// @Tags         chat
+// @Accept       json
+// @Produce      text/event-stream
+// @Param        body  body      request.ChatQuery  true  "Chat query"
+// @Success      200
+// @Failure      405   {object}  map[string]string
+// @Failure      503   {object}  map[string]string
+// @Router       /chat/query/stream [post]
+func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+		return
+	}
+
+	if h.service == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "chat store is unavailable")
+		return
+	}
+
+	f, ok := shared.SSEHeaders(w)
+	if !ok {
+		return
+	}
+	sw := shared.NewSSEWriter(w, f)
+
+	var req request.ChatQuery
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil {
+		sw.Error("invalid_json", err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), chatRequestTimeout)
+	defer cancel()
+
+	type streamResult struct {
+		result internalchat.Result
+		err    error
+	}
+	resultCh := make(chan streamResult, 1)
+	started := time.Now()
+	go func() {
+		result, err := h.service.Query(ctx, internalchat.Query{
+			WorkspaceID:   req.WorkspaceID,
+			WorkspacePath: req.WorkspacePath,
+			Message:       req.Message,
+			Connector:     req.Connector,
+			SourceURI:     req.SourceURI,
+			Timezone:      req.Timezone,
+			LocalDate:     req.LocalDate,
+			Limit:         req.Limit,
+			Progress:      sw.Log,
+		})
+		resultCh <- streamResult{result: result, err: err}
+	}()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case result := <-resultCh:
+			if result.err != nil {
+				writeStreamQueryError(sw, result.err)
+				return
+			}
+			sw.Result(mapChatResult(result.result))
+			return
+		case <-ctx.Done():
+			sw.Error("query_timeout", ctx.Err().Error())
+			return
+		case <-ticker.C:
+			elapsed := int(time.Since(started).Seconds())
+			body, _ := json.Marshal(map[string]any{"elapsed": elapsed, "status": "running"})
+			sw.Event("status", string(body))
+		}
+	}
+}
+
+func writeStreamQueryError(sw *shared.SSEWriter, err error) {
+	switch {
+	case errors.Is(err, internalchat.ErrWorkspaceRequired), errors.Is(err, internalchat.ErrMessageRequired):
+		sw.Error("invalid_request", err.Error())
+	case errors.Is(err, internalchat.ErrWorkspaceNotFound):
+		sw.Error("not_found", err.Error())
+	default:
+		sw.Error("query_error", err.Error())
+	}
 }
 
 func writeQueryError(w http.ResponseWriter, err error) {

@@ -186,6 +186,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/chat/query/stream": {
+            "post": {
+                "description": "Streams chat query progress, including live Codex logs, then emits the final chat result.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Stream workspace context query",
+                "parameters": [
+                    {
+                        "description": "Chat query",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ChatQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/codex/login": {
             "post": {
                 "description": "Runs ` + "`" + `codex login --device-auth` + "`" + ` and streams log lines as SSE events.",
@@ -246,6 +295,62 @@ const docTemplate = `{
                     },
                     "405": {
                         "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/codex/sources": {
+            "get": {
+                "description": "Uses Codex plugins to list readable sources for github, jira, slack, notion, googledrive, or sharepoint.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "codex"
+                ],
+                "summary": "List Codex-accessible sources",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connector: github, jira, slack, notion, googledrive, or sharepoint",
+                        "name": "connector",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/codex.sourceDiscoveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1795,6 +1900,76 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspace/source": {
+            "post": {
+                "description": "Saves a connector/source URI reference for live source lookup without ingesting source content.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Register a connected workspace source",
+                "parameters": [
+                    {
+                        "description": "Connected source registration request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/workspace.sourceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.WorkspaceSync"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/workspace/status": {
             "get": {
                 "description": "Returns event counts and connector sync states for a workspace.",
@@ -1924,6 +2099,43 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "codex.sourceCandidate": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "uri": {
+                    "type": "string"
+                }
+            }
+        },
+        "codex.sourceDiscoveryResponse": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/codex.sourceCandidate"
+                    }
+                }
+            }
+        },
         "events.Event": {
             "type": "object",
             "properties": {
@@ -2024,7 +2236,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "Status is the current sync state: idle | syncing | error.",
+                    "description": "Status is the current sync state: connected | idle | syncing | error.",
                     "type": "string"
                 },
                 "workspaceID": {
@@ -2890,6 +3102,27 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "stable category for the detection rule that produced this finding",
+                    "type": "string"
+                }
+            }
+        },
+        "workspace.sourceRequest": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "description": "Connector is the connector name, e.g. github or jira.",
+                    "type": "string"
+                },
+                "source_uri": {
+                    "description": "SourceURI is the external source URI to save.",
+                    "type": "string"
+                },
+                "uri": {
+                    "description": "URI is accepted for frontend compatibility with existing source forms.",
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is a workspace path or ID.",
                     "type": "string"
                 }
             }

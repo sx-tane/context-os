@@ -1,5 +1,29 @@
 basePath: /
 definitions:
+  codex.sourceCandidate:
+    properties:
+      connector:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      label:
+        type: string
+      uri:
+        type: string
+    type: object
+  codex.sourceDiscoveryResponse:
+    properties:
+      connector:
+        type: string
+      provider:
+        type: string
+      sources:
+        items:
+          $ref: '#/definitions/codex.sourceCandidate'
+        type: array
+    type: object
   events.Event:
     properties:
       content:
@@ -76,7 +100,8 @@ definitions:
         description: SourceURI is the URI this sync record covers.
         type: string
       status:
-        description: 'Status is the current sync state: idle | syncing | error.'
+        description: 'Status is the current sync state: connected | idle | syncing
+          | error.'
         type: string
       workspaceID:
         description: WorkspaceID links the record to its workspace.
@@ -687,6 +712,22 @@ definitions:
         description: stable category for the detection rule that produced this finding
         type: string
     type: object
+  workspace.sourceRequest:
+    properties:
+      connector:
+        description: Connector is the connector name, e.g. github or jira.
+        type: string
+      source_uri:
+        description: SourceURI is the external source URI to save.
+        type: string
+      uri:
+        description: URI is accepted for frontend compatibility with existing source
+          forms.
+        type: string
+      workspace_id:
+        description: WorkspaceID is a workspace path or ID.
+        type: string
+    type: object
   workspace.upsertRequest:
     properties:
       name:
@@ -820,6 +861,39 @@ paths:
       summary: Query workspace context
       tags:
       - chat
+  /chat/query/stream:
+    post:
+      consumes:
+      - application/json
+      description: Streams chat query progress, including live Codex logs, then emits
+        the final chat result.
+      parameters:
+      - description: Chat query
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ChatQuery'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stream workspace context query
+      tags:
+      - chat
   /codex/login:
     post:
       description: Runs `codex login --device-auth` and streams log lines as SSE events.
@@ -865,6 +939,44 @@ paths:
               type: string
             type: object
       summary: Re-authenticate a Codex plugin
+      tags:
+      - codex
+  /codex/sources:
+    get:
+      description: Uses Codex plugins to list readable sources for github, jira, slack,
+        notion, googledrive, or sharepoint.
+      parameters:
+      - description: 'Connector: github, jira, slack, notion, googledrive, or sharepoint'
+        in: query
+        name: connector
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/codex.sourceDiscoveryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List Codex-accessible sources
       tags:
       - codex
   /codex/status:
@@ -1910,6 +2022,53 @@ paths:
               type: string
             type: object
       summary: Reset workspace memory
+      tags:
+      - workspace
+  /workspace/source:
+    post:
+      consumes:
+      - application/json
+      description: Saves a connector/source URI reference for live source lookup without
+        ingesting source content.
+      parameters:
+      - description: Connected source registration request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/workspace.sourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.WorkspaceSync'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a connected workspace source
       tags:
       - workspace
   /workspace/status:

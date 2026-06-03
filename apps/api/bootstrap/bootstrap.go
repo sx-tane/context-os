@@ -114,6 +114,7 @@ func Routes(sqlDB *sql.DB) []Route {
 	if handlers.chat != nil {
 		routes = append(routes,
 			Route{Pattern: "/chat/query", Handler: http.HandlerFunc(handlers.chat.Query), CORS: true},
+			Route{Pattern: "/chat/query/stream", Handler: http.HandlerFunc(handlers.chat.StreamQuery), CORS: true},
 		)
 	}
 	return routes

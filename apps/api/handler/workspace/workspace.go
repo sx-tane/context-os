@@ -333,10 +333,138 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	))
 }
 
+// Source handles POST /workspace/source.
+//
+// @Summary      Register a connected workspace source
+// @Description  Saves a connector/source URI reference for live source lookup without ingesting source content.
+// @Tags         workspace
+// @Accept       json
+// @Produce      json
+// @Param        body  body      sourceRequest  true  "Connected source registration request"
+// @Success      200   {object}  response.WorkspaceSync
+// @Failure      400   {object}  map[string]string
+// @Failure      405   {object}  map[string]string
+// @Failure      503   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Router       /workspace/source [post]
+func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+		return
+	}
+	if h.connSync == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "sync_unavailable", "workspace source registration is unavailable for this store")
+		return
+	}
+
+	var req sourceRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+
+	workspaceID := strings.TrimSpace(req.WorkspaceID)
+	connector := strings.ToLower(strings.TrimSpace(req.Connector))
+	sourceURI := strings.TrimSpace(firstNonEmpty(req.SourceURI, req.URI))
+	if workspaceID == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "workspace_id is required")
+		return
+	}
+	if connector == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "connector is required")
+		return
+	}
+	if sourceURI == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "source_uri is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), workspaceRequestTimeout)
+	defer cancel()
+
+	workspace, err := h.resolveOrCreateWorkspace(ctx, workspaceID)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+
+	sync := repository.ConnectorSync{
+		WorkspaceID: workspace.ID,
+		Connector:   connector,
+		SourceURI:   sourceURI,
+		EventCount:  0,
+		Status:      "connected",
+	}
+	if err := h.connSync.Upsert(ctx, sync); err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceSync(sync))
+}
+
 // upsertRequest is the decoded body for POST /workspace.
 type upsertRequest struct {
 	// Path is the absolute local folder path for the workspace.
 	Path string `json:"path"`
 	// Name is the optional human-readable workspace name.
 	Name string `json:"name"`
+}
+
+// sourceRequest is the decoded body for POST /workspace/source.
+type sourceRequest struct {
+	// WorkspaceID is a workspace path or ID.
+	WorkspaceID string `json:"workspace_id"`
+	// Connector is the connector name, e.g. github or jira.
+	Connector string `json:"connector"`
+	// SourceURI is the external source URI to save.
+	SourceURI string `json:"source_uri"`
+	// URI is accepted for frontend compatibility with existing source forms.
+	URI string `json:"uri,omitempty"`
+}
+
+func (h *Handler) resolveOrCreateWorkspace(ctx context.Context, ref string) (repository.Workspace, error) {
+	workspace, err := h.workspaces.GetByPath(ctx, ref)
+	if err != nil {
+		return repository.Workspace{}, err
+	}
+	if workspace != nil {
+		return *workspace, nil
+	}
+
+	workspaces, err := h.workspaces.List(ctx)
+	if err != nil {
+		return repository.Workspace{}, err
+	}
+	for _, workspace := range workspaces {
+		if workspace.ID == ref {
+			return workspace, nil
+		}
+	}
+
+	name := workspaceNameFromPath(ref)
+	return h.workspaces.Upsert(ctx, repository.Workspace{
+		Name: name,
+		Path: ref,
+	})
+}
+
+func workspaceNameFromPath(path string) string {
+	parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
+	if len(parts) == 0 {
+		return "workspace"
+	}
+	name := strings.TrimSpace(parts[len(parts)-1])
+	if name == "" {
+		return "workspace"
+	}
+	return name
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

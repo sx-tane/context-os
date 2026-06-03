@@ -32,6 +32,7 @@ var (
 
 	sourcePattern      = regexp.MustCompile(`(?i)(#[A-Za-z0-9_.-]+|[a-z]+://[^\s,]+|https?://[^\s,]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)`)
 	sourceTokenPattern = regexp.MustCompile(`[^a-z0-9_.-]+`)
+	githubRepoPattern  = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 )
 
 // Query is one local chat request.
@@ -44,6 +45,7 @@ type Query struct {
 	Timezone      string
 	LocalDate     string
 	Limit         int
+	Progress      func(string)
 }
 
 // Result is one deterministic local chat answer.
@@ -67,6 +69,7 @@ type LiveQuery struct {
 	Connector string
 	SourceURI string
 	Message   string
+	Progress  func(string)
 }
 
 // LiveAnswerer answers a source question from a live connector account.
@@ -109,8 +112,17 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 		return Result{}, err
 	}
 
-	connector := normalizeConnector(firstNonEmpty(query.Connector, inferConnector(message)))
-	sourceURI := firstNonEmpty(strings.TrimSpace(query.SourceURI), inferSourceURI(message), inferSourceURIFromSyncs(message, connector, syncs))
+	explicitSourceURI := firstNonEmpty(strings.TrimSpace(query.SourceURI), inferSourceURI(message))
+	connector := normalizeConnector(firstNonEmpty(query.Connector, inferConnector(message), inferConnectorFromURI(explicitSourceURI)))
+	sourceURI := explicitSourceURI
+	if sourceURI == "" {
+		if match := inferSyncSource(message, connector, syncs); match.SourceURI != "" {
+			sourceURI = match.SourceURI
+			if connector == "" {
+				connector = normalizeConnector(match.Connector)
+			}
+		}
+	}
 	since, until := inferTimeRange(query, message)
 	intent := classifyIntent(message, connector, sourceURI)
 
@@ -145,10 +157,37 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 }
 
 func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query Query, result Result, message string) (Result, error) {
+	liveFailure := ""
+	if s.shouldAskLiveFirst(result) {
+		answer, err := s.live.Answer(ctx, LiveQuery{
+			Connector: result.Connector,
+			SourceURI: result.SourceURI,
+			Message:   message,
+			Progress:  query.Progress,
+		})
+		if err == nil && strings.TrimSpace(answer) != "" {
+			emitProgress(query.Progress, "• Live Codex answer received.")
+			result.Provider = "codex"
+			result.Answer = strings.TrimSpace(answer)
+			result.Summary = result.Answer
+			return result, nil
+		}
+		if err != nil {
+			liveFailure = compactLiveError(err)
+		} else {
+			liveFailure = "Codex returned no live answer."
+		}
+		emitProgress(query.Progress, "• Live Codex did not complete; checking Local DB fallback.")
+	}
+
 	limit := clampLimit(query.Limit)
+	localSourceURI := result.SourceURI
+	if isConnectorScopeURI(result.Connector, result.SourceURI) {
+		localSourceURI = ""
+	}
 	eventQuery := repository.EventQuery{
 		Connector: result.Connector,
-		SourceURI: result.SourceURI,
+		SourceURI: localSourceURI,
 		Text:      inferSearchText(message),
 		Since:     result.Since,
 		Until:     result.Until,
@@ -159,21 +198,11 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 	if err != nil {
 		return Result{}, fmt.Errorf("chat: query artifacts: %w", err)
 	}
+	emitProgress(query.Progress, fmt.Sprintf("• Local DB returned %d artifact(s).", len(artifacts)))
 	result.Artifacts = artifacts
 	result.Answer, result.Summary = buildArtifactAnswer(result, limit)
-	if s.shouldAskLive(result, message) {
-		answer, err := s.live.Answer(ctx, LiveQuery{
-			Connector: result.Connector,
-			SourceURI: result.SourceURI,
-			Message:   message,
-		})
-		if err == nil && strings.TrimSpace(answer) != "" {
-			result.Provider = "codex"
-			result.Answer = strings.TrimSpace(answer)
-			result.Summary = result.Answer
-			return result, nil
-		}
-		result.Answer = result.Answer + "\n\nLive Codex lookup did not complete, so this answer is based on local artifacts only."
+	if liveFailure != "" {
+		result.Answer = fmt.Sprintf("Live Codex lookup failed: %s\n\n%s", liveFailure, result.Answer)
 		result.Summary = result.Answer
 		return result, nil
 	}
@@ -188,18 +217,22 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 	return result, nil
 }
 
-func (s *Service) shouldAskLive(result Result, message string) bool {
-	if s.live == nil {
-		return false
+func emitProgress(progress func(string), line string) {
+	if progress != nil && strings.TrimSpace(line) != "" {
+		progress(line)
 	}
-	if result.SourceURI == "" || !supportsLiveConnector(result.Connector) {
-		return false
-	}
-	if isCommitQuestion(message) {
-		return !hasCommitArtifact(result.Artifacts)
-	}
-	lower := strings.ToLower(message)
-	return hasAny(lower, "more information", "more info", "details", "detail", "latest", "current", "recent", "summarize", "summary")
+}
+
+func (s *Service) shouldAskLiveFirst(result Result) bool {
+	return s.live != nil &&
+		result.SourceURI != "" &&
+		result.Connector != "filesystem" &&
+		supportsLiveConnector(result.Connector)
+}
+
+func isConnectorScopeURI(connector, sourceURI string) bool {
+	return normalizeConnector(connector) != "" &&
+		normalizeConnector(connector) == normalizeConnector(sourceURI)
 }
 
 func (s *Service) resolveWorkspace(ctx context.Context, query Query) (repository.Workspace, error) {
@@ -277,10 +310,36 @@ func inferConnector(message string) string {
 	return ""
 }
 
+func inferConnectorFromURI(uri string) string {
+	lower := strings.ToLower(strings.TrimSpace(uri))
+	switch {
+	case lower == "":
+		return ""
+	case strings.HasPrefix(lower, "#"), strings.HasPrefix(lower, "slack://"), strings.Contains(lower, "slack.com"):
+		return "slack"
+	case strings.HasPrefix(lower, "github://"), strings.Contains(lower, "github.com"), strings.Contains(lower, "api.github.com"):
+		return "github"
+	case githubRepoPattern.MatchString(strings.TrimSpace(uri)):
+		return "github"
+	case strings.HasPrefix(lower, "jira://"), strings.Contains(lower, "atlassian.net"), strings.Contains(lower, "/browse/"):
+		return "jira"
+	case strings.HasPrefix(lower, "notion://"), strings.Contains(lower, "notion.so"), strings.Contains(lower, "notion.site"):
+		return "notion"
+	case strings.HasPrefix(lower, "googledrive://"), strings.HasPrefix(lower, "gdrive://"), strings.Contains(lower, "drive.google.com"), strings.Contains(lower, "docs.google.com"):
+		return "googledrive"
+	case strings.HasPrefix(lower, "sharepoint://"), strings.Contains(lower, "sharepoint.com"), strings.Contains(lower, "onedrive.live.com"):
+		return "sharepoint"
+	default:
+		return ""
+	}
+}
+
 func normalizeConnector(connector string) string {
 	connector = strings.ToLower(strings.TrimSpace(connector))
 	connector = strings.ReplaceAll(connector, "google-drive", "googledrive")
 	connector = strings.ReplaceAll(connector, "google_drive", "googledrive")
+	connector = strings.ReplaceAll(connector, "google drive", "googledrive")
+	connector = strings.ReplaceAll(connector, "gdrive", "googledrive")
 	return connector
 }
 
@@ -392,13 +451,11 @@ func describeScope(result Result) string {
 	return strings.Join(parts, " ")
 }
 
-func inferSourceURIFromSyncs(message, connector string, syncs []repository.ConnectorSync) string {
+func inferSyncSource(message, connector string, syncs []repository.ConnectorSync) repository.ConnectorSync {
 	messageTokens := sourceMatchTokens(message)
-	if len(messageTokens) == 0 {
-		return ""
-	}
+	normalizedConnector := normalizeConnector(connector)
 	for _, sync := range syncs {
-		if connector != "" && normalizeConnector(sync.Connector) != connector {
+		if normalizedConnector != "" && normalizeConnector(sync.Connector) != normalizedConnector {
 			continue
 		}
 		sourceURI := strings.TrimSpace(sync.SourceURI)
@@ -407,11 +464,22 @@ func inferSourceURIFromSyncs(message, connector string, syncs []repository.Conne
 		}
 		for token := range sourceMatchTokens(sourceURI) {
 			if messageTokens[token] {
-				return sourceURI
+				return sync
 			}
 		}
 	}
-	return ""
+	if normalizedConnector == "" {
+		return repository.ConnectorSync{}
+	}
+	for _, sync := range syncs {
+		if normalizeConnector(sync.Connector) != normalizedConnector {
+			continue
+		}
+		if isConnectorScopeURI(normalizedConnector, sync.SourceURI) {
+			return sync
+		}
+	}
+	return repository.ConnectorSync{}
 }
 
 func sourceMatchTokens(value string) map[string]bool {
@@ -558,6 +626,21 @@ func previewText(text string, limit int) string {
 		return preview[:limit]
 	}
 	return preview[:limit-3] + "..."
+}
+
+func compactLiveError(err error) string {
+	text := strings.TrimSpace(err.Error())
+	if text == "" {
+		return "unknown error"
+	}
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return previewText(line, 180)
+		}
+	}
+	return previewText(text, 180)
 }
 
 func buildStatusAnswer(syncs []repository.ConnectorSync) string {

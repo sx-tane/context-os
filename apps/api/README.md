@@ -73,10 +73,12 @@ apps/api/
 | GET    | `/health`               | Liveness check — returns `{"status":"ok"}`                                               |
 | GET    | `/workspace`            | Lists registered local workspaces                                                        |
 | POST   | `/workspace/upsert`     | Registers or updates a local workspace path                                              |
+| POST   | `/workspace/source`     | Saves a connected source reference without ingesting external source content             |
 | DELETE | `/workspace?path=...`   | Deletes a workspace row and DB-backed local memory without recreating it                  |
 | GET    | `/workspace/status`     | Returns local event/entity/mismatch counts and connector sync state                      |
 | GET    | `/artifacts`            | Queries local ingested artifacts by workspace, connector, source URI, date range, and text |
-| POST   | `/chat/query`           | Natural-language query over workspace artifacts, sync state, status, and optional Codex-backed live source context |
+| POST   | `/chat/query`           | Natural-language query over live Codex source context first for plugin-backed sources, with local artifact fallback |
+| POST   | `/chat/query/stream`    | SSE chat query route that streams live Codex progress, heartbeat status, and the final answer |
 | GET    | `/github/status`        | Checks `GITHUB_TOKEN` and returns account identity                                       |
 | GET    | `/googledrive/status`   | Checks Google Drive OAuth/service-account/folder setup                                   |
 | POST   | `/googledrive/ingest`   | Ingest Docs, Sheets, and Slides from a Drive folder                                      |
@@ -99,11 +101,14 @@ apps/api/
 | POST   | `/sharepoint/ingest`    | Ingest a SharePoint or OneDrive item via Microsoft Graph                                 |
 | POST   | `/sharepoint/ingest/stream` | Stream Codex-backed SharePoint ingest progress over SSE                              |
 | GET    | `/codex/status`         | Codex CLI install/login/plugin status                                                    |
+| GET    | `/codex/sources`        | Lists Codex-accessible source references for GitHub, Jira, Slack, Notion, Google Drive, and SharePoint/OneDrive |
 | POST   | `/codex/login`          | Run `codex login --device-auth` and stream logs as SSE                                   |
 | POST   | `/codex/plugin-reauth`  | Re-add plugin with `BROWSER=echo`; OAuth URL printed in SSE log (UI not wired — use CLI) |
 | GET    | `/swagger/`             | Interactive Swagger UI (served from generated docs)                                      |
 
-`/artifacts` is DB-backed and does not call live connectors. It requires a workspace scope and accepts optional `connector`, `source_uri`, `q`, `since`, `until`, and `limit` query parameters. `/chat/query` first uses workspace artifacts and sync state; for configured Codex-backed sources it can ask the connected Codex plugin for source-specific details when local artifacts are not enough, such as latest commit or current repository questions.
+`/artifacts` is DB-backed and does not call live connectors. It requires a workspace scope and accepts optional `connector`, `source_uri`, `q`, `since`, `until`, and `limit` query parameters. `/codex/sources` lists readable source references for plugin-backed connectors so the setup UI can show concrete repos, projects, channels, pages, folders, and sites as optional scope filters. `/workspace/source` writes a `connector_syncs` row with `status="connected"`, `event_count=0`, and no `last_synced_at`; this is the connected-source registry for external plugin-backed sources. A connector-level source can use `source_uri` equal to the connector name, such as `github`, when setup only enables the plugin for live chat. `/chat/query/stream` is the preferred UI route and streams Codex-style progress lines plus heartbeat status while the live lookup runs. `/chat/query` remains the non-streaming fallback. Both chat routes use live Codex lookup first when a GitHub, Jira, Slack, Notion, Google Drive, or SharePoint source URI is supplied or resolved from `connector_syncs`. If live lookup fails, the response says so and falls back to local artifacts where available. Filesystem questions remain local-first because filesystem content is ingested into ContextOS storage.
+
+Local DB artifacts, connector syncs, graph state, findings, evidence, confidence, and audit history remain the source of truth for double-checking and local analysis. Live Codex answers are current external-source lookups and are not treated as persisted evidence until the user explicitly runs ingest or analysis.
 
 Workspace endpoints return explicit API response objects with snake_case JSON fields such as `path`, `created_at`, `event_count`, and `source_uri`; handlers do not expose raw repository structs.
 

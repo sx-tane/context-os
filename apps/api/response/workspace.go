@@ -94,16 +94,21 @@ func NewWorkspaceStatus(
 func NewWorkspaceSyncs(syncs []repository.ConnectorSync) []WorkspaceSync {
 	items := make([]WorkspaceSync, 0, len(syncs))
 	for _, sync := range syncs {
-		items = append(items, WorkspaceSync{
-			WorkspaceID:  sync.WorkspaceID,
-			Connector:    sync.Connector,
-			SourceURI:    sync.SourceURI,
-			Cursor:       sync.Cursor,
-			LastSyncedAt: sync.LastSyncedAt,
-			EventCount:   sync.EventCount,
-			Status:       sync.Status,
-			LastError:    sync.LastError,
-		})
+		items = append(items, NewWorkspaceSync(sync))
 	}
 	return items
+}
+
+// NewWorkspaceSync maps one repository sync row into an API response.
+func NewWorkspaceSync(sync repository.ConnectorSync) WorkspaceSync {
+	return WorkspaceSync{
+		WorkspaceID:  sync.WorkspaceID,
+		Connector:    sync.Connector,
+		SourceURI:    sync.SourceURI,
+		Cursor:       sync.Cursor,
+		LastSyncedAt: sync.LastSyncedAt,
+		EventCount:   sync.EventCount,
+		Status:       sync.Status,
+		LastError:    sync.LastError,
+	}
 }

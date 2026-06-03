@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const liveAnswerTimeout = 2 * time.Minute
+const liveAnswerTimeout = 5 * time.Minute
 
 var codexBinCandidates = []string{
 	"${HOME}/nvm/current/bin/codex",
@@ -62,8 +62,12 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	var log bytes.Buffer
-	cmd.Stdout = &log
-	cmd.Stderr = &log
+	progressLog := &progressBuffer{buf: &log, progress: query.Progress}
+	emitProgress(query.Progress, fmt.Sprintf("› Live Codex: %s plugin lookup", plugin))
+	emitProgress(query.Progress, fmt.Sprintf("• Source: %s", sourceURI))
+	emitProgress(query.Progress, "• Starting Codex CLI exec.")
+	cmd.Stdout = progressLog
+	cmd.Stderr = progressLog
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
@@ -73,6 +77,7 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 
 	select {
 	case err := <-done:
+		progressLog.Flush()
 		if err != nil {
 			text := strings.TrimSpace(log.String())
 			if text == "" {
@@ -85,8 +90,10 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 		<-done
+		progressLog.Flush()
 		return "", fmt.Errorf("codex live chat timed out after %s", liveAnswerTimeout)
 	}
+	emitProgress(query.Progress, "• Codex CLI completed; reading answer.")
 
 	content, err := os.ReadFile(filepath.Clean(outPath))
 	if err != nil {
@@ -100,6 +107,42 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 		return "", errors.New("codex returned no live chat answer")
 	}
 	return answer, nil
+}
+
+type progressBuffer struct {
+	buf      *bytes.Buffer
+	progress func(string)
+	partial  string
+}
+
+func (p *progressBuffer) Write(data []byte) (int, error) {
+	if p.buf != nil {
+		_, _ = p.buf.Write(data)
+	}
+	text := p.partial + string(data)
+	lines := strings.Split(text, "\n")
+	p.partial = lines[len(lines)-1]
+	for _, line := range lines[:len(lines)-1] {
+		p.emit(line)
+	}
+	return len(data), nil
+}
+
+func (p *progressBuffer) Flush() {
+	p.emit(p.partial)
+	p.partial = ""
+}
+
+func (p *progressBuffer) emit(line string) {
+	line = strings.TrimSpace(line)
+	if line == "" || p.progress == nil {
+		return
+	}
+	if strings.HasPrefix(line, "›") || strings.HasPrefix(line, "•") {
+		p.progress(line)
+		return
+	}
+	p.progress("• " + line)
 }
 
 func resolveCodexCommand() string {
@@ -156,6 +199,7 @@ Question: %s
 Rules:
 - Do not modify any external data.
 - Prefer exact source facts over general repository or workspace summaries.
+- For GitHub only, if the plugin cannot answer and gh CLI is already authenticated, read-only gh commands are acceptable fallback context.
 - Include source names, timestamps, authors, commit hashes, issue or PR numbers, and links when available.
 - If the plugin cannot access the source or the requested fact is unavailable, say that clearly.
 - Return a concise chat answer, not JSON.`, plugin, sourceURI, strings.TrimSpace(message))

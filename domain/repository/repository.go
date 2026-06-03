@@ -80,7 +80,7 @@ type ConnectorSync struct {
 	LastSyncedAt *time.Time
 	// EventCount is the number of events ingested in the last sync run.
 	EventCount int
-	// Status is the current sync state: idle | syncing | error.
+	// Status is the current sync state: connected | idle | syncing | error.
 	Status string
 	// LastError is the last error message, empty if no error.
 	LastError string

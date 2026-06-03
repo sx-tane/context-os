@@ -19,7 +19,7 @@ Implementations live in `internal/store`. Nothing in `domain/` depends on `inter
 - `Workspace` — stored workspace record with `id`, `name`, `path`.
 - `IngestEvent` — raw source event captured after ingestion with `content_hash` for dedup.
 - `EventQuery` — workspace-scoped artifact filter used by `/artifacts` and local chat queries.
-- `ConnectorSync` — replay cursor + status per `(workspace_id, connector, source_uri)`.
+- `ConnectorSync` — replay cursor + status per `(workspace_id, connector, source_uri)`. `status="connected"` represents a saved external source reference with no local ingest cursor or event count yet.
 
 ## Graph Reads
 

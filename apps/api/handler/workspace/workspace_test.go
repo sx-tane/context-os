@@ -142,6 +142,118 @@ func TestDeleteMissingWorkspaceSucceeds(t *testing.T) {
 	}
 }
 
+// TestSourceRegistersConnectedSource verifies workspace source registration saves a connected sync row without ingest state.
+func TestSourceRegistersConnectedSource(t *testing.T) {
+	workspace := repository.Workspace{ID: "workspace", Name: "workspace", Path: "/workspace"}
+	syncs := &recordingSyncRepo{}
+	handler := workspacehandler.NewHandler(
+		workspaceRepo{workspaces: []repository.Workspace{workspace}},
+		nil,
+		nil,
+		nil,
+		syncs,
+	)
+	body := []byte(`{"workspace_id":"/workspace","connector":"github","source_uri":"context-os/context-os"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/workspace/source", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.Source(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if len(syncs.upserts) != 1 {
+		t.Fatalf("upsert count = %d, want 1", len(syncs.upserts))
+	}
+	sync := syncs.upserts[0]
+	if sync.WorkspaceID != "workspace" {
+		t.Fatalf("WorkspaceID = %q, want workspace", sync.WorkspaceID)
+	}
+	if sync.Connector != "github" {
+		t.Fatalf("Connector = %q, want github", sync.Connector)
+	}
+	if sync.SourceURI != "context-os/context-os" {
+		t.Fatalf("SourceURI = %q, want context-os/context-os", sync.SourceURI)
+	}
+	if sync.Status != "connected" {
+		t.Fatalf("Status = %q, want connected", sync.Status)
+	}
+	if sync.EventCount != 0 {
+		t.Fatalf("EventCount = %d, want 0", sync.EventCount)
+	}
+	if sync.LastSyncedAt != nil {
+		t.Fatalf("LastSyncedAt = %v, want nil", sync.LastSyncedAt)
+	}
+	responseBody := decodeObject(t, rec.Body.Bytes())
+	if responseBody["status"] != "connected" {
+		t.Fatalf("response status = %v, want connected", responseBody["status"])
+	}
+	if responseBody["event_count"] != float64(0) {
+		t.Fatalf("response event_count = %v, want 0", responseBody["event_count"])
+	}
+}
+
+// TestSourceCreatesWorkspaceWhenNeeded verifies source registration upserts a workspace before saving sync state.
+func TestSourceCreatesWorkspaceWhenNeeded(t *testing.T) {
+	workspaces := &recordingWorkspaceRepo{}
+	syncs := &recordingSyncRepo{}
+	handler := workspacehandler.NewHandler(workspaces, nil, nil, nil, syncs)
+	body := []byte(`{"workspace_id":"/new/project","connector":"jira","source_uri":"https://acme.atlassian.net/browse/ABC-1"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/workspace/source", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.Source(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if len(workspaces.upserts) != 1 {
+		t.Fatalf("workspace upserts = %d, want 1", len(workspaces.upserts))
+	}
+	if workspaces.upserts[0].Path != "/new/project" {
+		t.Fatalf("workspace Path = %q, want /new/project", workspaces.upserts[0].Path)
+	}
+	if workspaces.upserts[0].Name != "project" {
+		t.Fatalf("workspace Name = %q, want project", workspaces.upserts[0].Name)
+	}
+	if len(syncs.upserts) != 1 {
+		t.Fatalf("sync upserts = %d, want 1", len(syncs.upserts))
+	}
+	if syncs.upserts[0].WorkspaceID != "created-workspace" {
+		t.Fatalf("sync WorkspaceID = %q, want created-workspace", syncs.upserts[0].WorkspaceID)
+	}
+}
+
+// TestSourceRejectsMissingRequiredFields verifies source registration rejects incomplete connected-source requests.
+func TestSourceRejectsMissingRequiredFields(t *testing.T) {
+	handler := workspacehandler.NewHandler(workspaceRepo{}, nil, nil, nil, &recordingSyncRepo{})
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "workspace", body: `{"connector":"github","source_uri":"owner/repo"}`, want: "workspace_id is required"},
+		{name: "connector", body: `{"workspace_id":"/workspace","source_uri":"owner/repo"}`, want: "connector is required"},
+		{name: "source", body: `{"workspace_id":"/workspace","connector":"github"}`, want: "source_uri is required"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/workspace/source", bytes.NewReader([]byte(tc.body)))
+			rec := httptest.NewRecorder()
+			handler.Source(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+			}
+			body := decodeObject(t, rec.Body.Bytes())
+			if body["message"] != tc.want {
+				t.Errorf("message = %v, want %q", body["message"], tc.want)
+			}
+		})
+	}
+}
+
 type workspaceRepo struct {
 	workspaces []repository.Workspace
 }
@@ -200,6 +312,24 @@ func (r syncRepo) ListByWorkspace(_ context.Context, _ string) ([]repository.Con
 	return r.syncs, nil
 }
 
+type recordingSyncRepo struct {
+	syncs   []repository.ConnectorSync
+	upserts []repository.ConnectorSync
+}
+
+func (r *recordingSyncRepo) Upsert(_ context.Context, sync repository.ConnectorSync) error {
+	r.upserts = append(r.upserts, sync)
+	return nil
+}
+
+func (r *recordingSyncRepo) Get(_ context.Context, _, _, _ string) (*repository.ConnectorSync, error) {
+	return nil, nil
+}
+
+func (r *recordingSyncRepo) ListByWorkspace(_ context.Context, _ string) ([]repository.ConnectorSync, error) {
+	return r.syncs, nil
+}
+
 type resettableWorkspaceRepo struct {
 	workspaceRepo
 	deletedPaths []string
@@ -215,6 +345,18 @@ func (r *resettableWorkspaceRepo) DeleteByPath(_ context.Context, path string) e
 	r.deletedPaths = append(r.deletedPaths, path)
 	r.workspaces = r.workspaces[:0]
 	return nil
+}
+
+type recordingWorkspaceRepo struct {
+	workspaceRepo
+	upserts []repository.Workspace
+}
+
+func (r *recordingWorkspaceRepo) Upsert(_ context.Context, workspace repository.Workspace) (repository.Workspace, error) {
+	workspace.ID = "created-workspace"
+	r.upserts = append(r.upserts, workspace)
+	r.workspaces = append(r.workspaces, workspace)
+	return workspace, nil
 }
 
 // decodeObject decodes a JSON object from body.
