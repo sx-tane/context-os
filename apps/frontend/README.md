@@ -27,13 +27,13 @@ Projects are keyed by **workspace folder path** (stored in `localStorage` and mi
 
 | Command | Behavior |
 |---|---|
-| source question | Calls `POST /chat/query`; plugin-backed source links and saved sources use live Codex first, then local DB fallback |
+| source question | Calls `/chat/query/stream`; plugin-backed concrete sources use live Codex first, auto-save evidence to Local DB, refresh Activity, then fall back to `/chat/query` if streaming is unavailable |
 | `show findings` | Runs analysis and shows mismatches for the latest ready connector |
 | `status` | Routed through local chat status handling |
 | `install knowledge` / `add source` | Opens the inline source setup panel |
 | `clear` | Clear chat history for current project |
 
-Natural language source questions do not fall back to findings. If live Codex lookup fails, the answer says so before using local artifacts. If no matching local artifact exists, the answer says no local data was found.
+Natural language source questions do not fall back to findings. If live Codex lookup fails, the answer says so before using local artifacts. If no matching local artifact exists, the answer says no local data was found. Broad connector lookups such as `jira` or `github` remain read-only; concrete sources such as `BKGDEV-8466`, Jira browse URLs, GitHub repositories, Slack channels, and docs show a compact `Local DB:` save status. Activity refreshes after a saved live answer, while Graph and Findings update only after the user runs analysis.
 
 ## Initial Knowledge Installment
 
@@ -45,7 +45,7 @@ The `KnowledgeInstall` component (`src/lib/components/knowledge/KnowledgeInstall
 - Marks the project as knowledge-ready on completion.
 - Reopenable at any time via the sidebar button.
 
-External source setup does not bulk-ingest or analyze source content. Local DB artifacts, graph output, findings, evidence, and confidence remain the source of truth for double-checking after explicit ingest or Run Analysis.
+External source setup does not bulk-ingest or analyze source content. Live chat against a concrete source can save the fetched evidence into the Local DB, but broad connector setup remains read-only until a concrete source is queried or an explicit ingest/analysis path runs. Local DB artifacts, graph output, findings, evidence, and confidence remain the source of truth for double-checking after explicit ingest or Run Analysis.
 
 ## Design Rules
 
@@ -124,10 +124,10 @@ cd apps/frontend
 bun run codegen
 ```
 
-This reads `apps/api/_docs/swagger.json` and writes `src/lib/generated/api.d.ts`. The generated file is committed to the repository because TypeScript needs it to compile. `start-all.sh` runs this step automatically on every startup.
+This reads `apps/api/docs/swagger.json` and writes `src/lib/generated/api.d.ts`. The generated file is committed to the repository because TypeScript needs it to compile. `start-all.sh` runs this step automatically on every startup.
 
 ```
-swag init  →  apps/api/_docs/swagger.json  →  bun run codegen  →  src/lib/generated/api.d.ts
+swag init  →  apps/api/docs/swagger.json  →  bun run codegen  →  src/lib/generated/api.d.ts
 ```
 
 Frontend-specific types that have no swagger equivalent (`IngestRequest`, `SourceConnectorConfig`, `ConnectorKind`, etc.) remain in `src/lib/types.ts` and are maintained manually.

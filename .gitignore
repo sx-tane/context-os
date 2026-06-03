@@ -42,7 +42,6 @@ apps/frontend/.vite/
 apps/frontend/api
 
 # Auto-generated Swagger/OpenAPI docs (regenerate with: swag init)
-apps/api/_docs/
 
 # Logs
 *.log

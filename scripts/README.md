@@ -36,7 +36,7 @@ Starts all local services in a single terminal session. Run this after setup is 
 What it does:
 
 - Runs `uv sync` in `apps/ai-worker` if `uv` is available
-- Regenerates OpenAPI docs (`swag init` → `apps/api/_docs/`) and Redoc HTML if `swag` is installed
+- Regenerates OpenAPI docs (`swag init` → `apps/api/docs/`) and Redoc HTML if `swag` is installed
 - Regenerates frontend TypeScript types from the OpenAPI spec (`bun run codegen` or `npm run codegen` in `apps/frontend`)
 - Checks all required Codex plugins. Missing plugins are reported without prompting; to install them during startup, run `INSTALL_CODEX_PLUGINS=1 ./scripts/start-all.sh`:
   - `github@openai-curated`
@@ -89,9 +89,9 @@ Once running:
 - **http://localhost:8080/health** — API health endpoint
 - **http://localhost:8080/swagger/** — Interactive Swagger UI
 - **http://localhost:8080/swagger/doc.json** — Raw OpenAPI spec (Postman/Insomnia)
-- **apps/api/\_docs/api.html** — Standalone Redoc HTML (open directly in browser after docs are generated)
+- **apps/api/docs/api.html** — Standalone Redoc HTML (open directly in browser after docs are generated)
 
-Generated docs under `apps/api/_docs/` are local artifacts (gitignored) and are not required for the API to start. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository and are regenerated automatically on each startup.
+Generated docs under `apps/api/docs/` are committed OpenAPI artifacts and the source for frontend type generation. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository and are regenerated automatically on each startup.
 
 ---
 

@@ -163,13 +163,13 @@ if command -v swag >/dev/null 2>&1; then
   echo "Regenerating OpenAPI docs..."
   (
     cd "$ROOT_DIR"
-    swag init -g apps/api/main.go -o apps/api/_docs --quiet 2>/dev/null || \
-      swag init -g apps/api/main.go -o apps/api/_docs
+    swag init -g apps/api/main.go -o apps/api/docs --quiet 2>/dev/null || \
+      swag init -g apps/api/main.go -o apps/api/docs
   )
   if command -v npx >/dev/null 2>&1; then
     npx --yes @redocly/cli build-docs \
-      "$ROOT_DIR/apps/api/_docs/swagger.yaml" \
-      --output "$ROOT_DIR/apps/api/_docs/api.html" \
+      "$ROOT_DIR/apps/api/docs/swagger.yaml" \
+      --output "$ROOT_DIR/apps/api/docs/api.html" \
       --title "ContextOS API" 2>/dev/null || true
   fi
 else

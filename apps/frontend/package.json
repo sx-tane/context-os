@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "sync": "svelte-kit sync",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "codegen": "openapi-typescript ../api/_docs/swagger.json -o src/lib/generated/api.d.ts",
+    "codegen": "openapi-typescript ../api/docs/swagger.json -o src/lib/generated/api.d.ts",
     "test": "jest --config jest.config.cjs",
     "test:coverage": "jest --config jest.config.cjs --coverage"
   },
