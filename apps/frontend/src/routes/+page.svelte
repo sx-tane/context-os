@@ -451,7 +451,7 @@
             lastAnalysisAt = new Date().toISOString();
             addMessage(
                 assistantMsg(
-                    "Demo analysis complete for 3 selected sources. Found 2 findings.\n演示分析已完成，覆盖 3 个来源，发现 2 个问题。",
+                    "Demo analysis complete for 3 selected sources. Found 2 findings.",
                     {
                         kind: "findings",
                         findingsResult: findings,
@@ -984,17 +984,7 @@
 
     function relationshipLabel(value: string) {
         const normalized = value.replaceAll("_", " ");
-        const zh: Record<string, string> = {
-            requires: "需要",
-            "depends on": "依赖",
-            "expects contract": "期望契约",
-            "implemented by": "由其实现",
-            validates: "验证",
-            tracks: "跟踪",
-            owns: "负责",
-            related: "相关",
-        };
-        return `${normalized} / ${zh[normalized] ?? "关系"}`;
+        return normalized;
     }
 
     function findingSummary(mismatch: unknown) {
@@ -1203,10 +1193,10 @@
 
     function demoArtifacts(): Artifact[] {
         return [
-            demoArtifact("demo-artifact-1", "jira", "DEMO-42", "Refund status acceptance criteria / 退款状态验收标准", "PMO asks for refund status in checkout before launch review. / PMO 要求在发布评审前，结账页必须显示退款状态。", "2026-01-01T09:25:00.000Z"),
-            demoArtifact("demo-artifact-2", "github", "context-os/demo-api#18", "Payments API ownership question / 支付 API 负责人问题", "Backend PR covers API plumbing but does not assign a service owner. / 后端 PR 覆盖了 API 管道，但还没有指定服务负责人。", "2026-01-01T09:15:00.000Z"),
-            demoArtifact("demo-artifact-3", "slack", "#launch-review", "Launch review decision thread / 发布评审决策线程", "Team agrees the UI is ready but backend ownership is still unresolved. / 团队认为 UI 已就绪，但后端归属仍未解决。", "2026-01-01T09:20:00.000Z"),
-            demoArtifact("demo-artifact-4", "github", "context-os/demo-api#21", "refundStatus naming drift / refundStatus 命名漂移", "Frontend uses refundStatus while service notes mention refund_state. / 前端使用 refundStatus，但服务说明仍提到 refund_state。", "2026-01-01T09:10:00.000Z"),
+            demoArtifact("demo-artifact-1", "jira", "DEMO-42", "Refund status acceptance criteria", "PMO asks for refund status in checkout before launch review.", "2026-01-01T09:25:00.000Z"),
+            demoArtifact("demo-artifact-2", "github", "context-os/demo-api#18", "Payments API ownership question", "Backend PR covers API plumbing but does not assign a service owner.", "2026-01-01T09:15:00.000Z"),
+            demoArtifact("demo-artifact-3", "slack", "#launch-review", "Launch review decision thread", "Team agrees the UI is ready but backend ownership is still unresolved.", "2026-01-01T09:20:00.000Z"),
+            demoArtifact("demo-artifact-4", "github", "context-os/demo-api#21", "refundStatus naming drift", "Frontend uses refundStatus while service notes mention refund_state.", "2026-01-01T09:10:00.000Z"),
         ];
     }
 
@@ -1337,7 +1327,7 @@
                     {#if $chatMessages.length === 0}
                         <article class="message assistant">
                             <span>CONTEXT-OS</span>
-                            <p>{hasSources ? "Ask about Slack messages, GitHub PRs, Jira tickets, docs, findings, or recent activity. / 可以询问 Slack 消息、GitHub PR、Jira 工单、文档、发现项或近期活动。" : "Connect GitHub repos, Slack channels, or docs first. / 请先连接 GitHub 仓库、Slack 频道或文档来源。"}</p>
+                            <p>{hasSources ? "Ask about Slack messages, GitHub PRs, Jira tickets, docs, findings, or recent activity." : "Connect GitHub repos, Slack channels, or docs first."}</p>
                         </article>
                     {:else}
                         {#each $chatMessages as message (message.id)}
@@ -1647,12 +1637,6 @@
                                 </div>
                             {/if}
 
-                            <div class="legend">
-                                <strong>ENTITY TYPES</strong>
-                                {#each graphLegendTypes as item (item.type)}
-                                    <span style={typeAccentStyle(item.type)}><i></i>{item.type} <b>{item.count}</b></span>
-                                {/each}
-                            </div>
                         </div>
 
                         <aside class="node-card">
@@ -1694,13 +1678,23 @@
                                     </div>
                                     <hr />
                                 {/if}
-                                <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis. / 证据会在来源摄取和分析后显示。"}</p>
+                                <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis."}</p>
                             {:else}
                                 <div>
                                     <span>Node Details</span>
                                     <strong>none</strong>
                                 </div>
                                 <p>Select an entity row to inspect confidence, relationships, and source evidence.</p>
+                            {/if}
+                            {#if graphLegendTypes.length}
+                                <section class="node-legend" aria-label="Entity types">
+                                    <strong>Entity Types</strong>
+                                    <div>
+                                        {#each graphLegendTypes as item (item.type)}
+                                            <span style={typeAccentStyle(item.type)}><i></i>{item.type} <b>{item.count}</b></span>
+                                        {/each}
+                                    </div>
+                                </section>
                             {/if}
                         </aside>
                     </div>
@@ -2045,6 +2039,11 @@
         gap: 10px;
         overflow: auto;
         padding: 14px 16px 16px;
+        scrollbar-width: none;
+    }
+
+    .insight-pane::-webkit-scrollbar {
+        display: none;
     }
 
     .graph-workspace {
@@ -2070,7 +2069,7 @@
         display: grid;
         grid-template-columns: 220px minmax(520px, 1fr);
         gap: 16px;
-        padding-top: 76px;
+        padding-top: 0;
     }
 
     .entity-index {
@@ -2158,7 +2157,7 @@
         color: #1c1b18;
     }
 
-    .legend i {
+    .node-legend i {
         width: 9px;
         height: 9px;
         border-radius: 50%;
@@ -2341,7 +2340,6 @@
         color: #625f55;
     }
 
-    .legend,
     .empty-graph {
         position: absolute;
         border: 1px solid rgba(215, 210, 200, 0.65);
@@ -2364,8 +2362,7 @@
     }
 
     .node-card span,
-    .node-card strong,
-    .legend strong {
+    .node-card strong {
         font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 12px;
     }
@@ -2433,32 +2430,40 @@
         color: #8a8678;
     }
 
-    .legend {
-        left: 18px;
-        top: 14px;
+    .node-legend {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, auto));
-        gap: 8px 14px;
-        max-width: calc(100% - 150px);
-        padding: 10px 12px;
+        gap: 8px;
+        border-top: 1px solid #d7d2c8;
+        margin-top: 14px;
+        padding-top: 12px;
         color: #625f55;
         font-size: 12px;
     }
 
-    .legend strong {
-        grid-column: 1 / -1;
+    .node-legend > strong {
         color: #d85d3f;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 11px;
+        text-transform: uppercase;
     }
 
-    .legend span {
+    .node-legend div {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px 12px;
+    }
+
+    .node-legend span {
         display: inline-flex;
         align-items: center;
+        min-width: 0;
         gap: 6px;
         text-transform: none;
+        overflow: hidden;
         white-space: nowrap;
     }
 
-    .legend b {
+    .node-legend b {
         color: #8a8678;
         font-weight: 400;
     }
@@ -2898,8 +2903,8 @@
     }
 
     .setup-panel {
-        max-height: min(520px, 42dvh);
-        overflow: auto;
+        max-height: none;
+        overflow: visible;
         border-bottom: 1px solid #d7d2c8;
         padding: 0 12px 12px;
     }
@@ -3174,7 +3179,7 @@
         .graph-map-layout {
             grid-template-rows: auto minmax(420px, 1fr);
             min-height: 660px;
-            padding-top: 112px;
+            padding-top: 0;
         }
 
         .focus-graph {
@@ -3193,9 +3198,8 @@
             width: 34%;
         }
 
-        .legend {
-            max-width: calc(100% - 20px);
-            grid-template-columns: repeat(2, minmax(0, auto));
+        .node-legend div {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
 </style>
