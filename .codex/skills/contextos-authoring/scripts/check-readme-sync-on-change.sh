@@ -5,7 +5,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 range="${1:-HEAD}"
-exclude_file="$repo_root/.github/skills/contextos-authoring/references/readme-coverage-exclusions.txt"
+exclude_file="$repo_root/.codex/skills/contextos-authoring/references/readme-coverage-exclusions.txt"
 
 if [[ ! -d "$repo_root/.git" ]]; then
   echo "not inside a git repository: $repo_root" >&2

@@ -4,9 +4,9 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-copilot_instructions="$repo_root/.github/copilot-instructions.md"
-github_readme="$repo_root/.github/README.md"
-authoring_skill="$repo_root/.github/skills/contextos-authoring/SKILL.md"
+copilot_instructions="$repo_root/AGENTS.md"
+github_readme="$repo_root/.codex/README.md"
+authoring_skill="$repo_root/.codex/skills/contextos-authoring/SKILL.md"
 
 score=0
 findings=()
@@ -14,7 +14,7 @@ findings=()
 if grep -qi 'Mermaid diagram' "$copilot_instructions"; then
   score=$((score + 40))
 else
-  findings+=("missing-copilot-mermaid-rule")
+    findings+=("missing-agents-mermaid-rule")
 fi
 
 for term in architecture workflows pipeline "skill routing"; do

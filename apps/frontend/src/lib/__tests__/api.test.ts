@@ -10,6 +10,7 @@ import {
   postChatQuery,
   getGraphData,
   upsertWorkspace,
+  deleteWorkspace,
   getWorkspaceStatus,
 } from "../api";
 
@@ -149,6 +150,25 @@ describe("postFindings", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/presentation/findings",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns a structured API unreachable error when fetch fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await postFindings({ connector: "filesystem" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+      expect(result.body.message).toContain("Start the API");
+    }
+  });
+
+  it("preserves AbortError rejections", async () => {
+    const abortError = new DOMException("aborted", "AbortError");
+    fetchMock.mockRejectedValue(abortError);
+    await expect(postFindings({ connector: "filesystem" })).rejects.toBe(
+      abortError,
     );
   });
 });
@@ -382,6 +402,34 @@ describe("upsertWorkspace", () => {
   it("returns null when response is non-2xx", async () => {
     fetchMock.mockResolvedValue({ ok: false } as Response);
     expect(await upsertWorkspace("/proj", "name")).toBeNull();
+  });
+});
+
+// ---- deleteWorkspace ----
+
+describe("deleteWorkspace", () => {
+  it("returns true when backend delete succeeds", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ deleted: true }, true, 200));
+    await expect(deleteWorkspace("/proj")).resolves.toBe(true);
+  });
+
+  it("calls DELETE /api/workspace with encoded path", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ deleted: true }, true, 200));
+    await deleteWorkspace("/my/project");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace?path=%2Fmy%2Fproject",
+      { method: "DELETE" },
+    );
+  });
+
+  it("returns false when backend delete fails", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "failed" }, false, 500));
+    await expect(deleteWorkspace("/proj")).resolves.toBe(false);
+  });
+
+  it("returns false when fetch throws", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    await expect(deleteWorkspace("/proj")).resolves.toBe(false);
   });
 });
 

@@ -21,7 +21,7 @@ flowchart TD
 
 | Agent                 | File                             | Trigger                                                                                  | Does It Edit? |
 | --------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- | ------------- |
-| ContextOS Implementer | `contextos-implementer.agent.md` | Use for implementation, tests, connectors, handlers, harnesses, and customization edits. | Yes           |
+| ContextOS Implementer | `contextos-implementer.agent.md` | Use for implementation, tests, frontend design, connectors, handlers, harnesses, and customization edits. | Yes           |
 | ContextOS Architect   | `contextos-architect.agent.md`   | Use for architecture planning, phase breakdown, dependency mapping, and risk review.     | No            |
 
 ## Clarification Rule
@@ -31,6 +31,7 @@ If the user request is unclear, the agent should restate the interpreted prompt 
 ## Agent Selection Rule
 
 - Use ContextOS Implementer when the task asks to change files, run tests, add docs, create skills, or fix behavior.
+- The implementer is wired to `contextos-frontend-design` for Svelte UI layout, spacing, buttons, graph/source/chat visuals, and current frontend component patterns.
 - Use ContextOS Architect when the task asks for planning, sequencing, system design, tradeoffs, or issue breakdown without edits.
 
 ## README Alignment

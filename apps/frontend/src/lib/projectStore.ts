@@ -200,8 +200,11 @@ export function addWorkspace(workspacePath: string, name?: string): void {
   openProject(cleanPath);
 }
 
-/** Remove a workspace from the local switcher without deleting backend data. */
+/** Remove a workspace from local project, chat, source state, and the switcher. */
 export function removeWorkspace(workspacePath: string): void {
+  const storage = getLocalStorage();
+  storage?.removeItem(STORAGE_KEY_PREFIX + workspacePath);
+  storage?.removeItem(CHAT_KEY_PREFIX + workspacePath);
   _workspaces.update((items) => {
     const next = items.filter((item) => item.workspacePath !== workspacePath);
     saveWorkspacePaths(next.map((item) => item.workspacePath));

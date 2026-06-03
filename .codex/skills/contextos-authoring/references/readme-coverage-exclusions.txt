@@ -2,6 +2,7 @@
 # Keep this list minimal. Remove entries if you want stricter coverage.
 
 .github
+.codex/skills
 tests/harness/fixtures
 tests/harness/golden
 tests/harness/scenarios

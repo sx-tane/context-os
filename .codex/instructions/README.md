@@ -21,7 +21,8 @@ flowchart TD
 | ---------------------------------- | ------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
 | `api-handlers.instructions.md`     | `apps/api/**/*.go`                                | API handlers, request types, and response types. | `contextos-api-handler`                 |
 | `connectors.instructions.md`       | `internal/source/**/*.go`                         | Source connector implementations.                | `contextos-api-handler`                 |
-| `customization.instructions.md`    | `.github/{agents,instructions,skills}/**/*.md`    | Agents, instruction files, and skill markdown.   | `contextos-authoring`                   |
+| `customization.instructions.md`    | `.github/{agents,instructions,skills}/**/*.md`, `.codex/{agents,instructions,skills}/**/*.md` | Agents, instruction files, and skill markdown.   | `contextos-authoring`                   |
+| `frontend-design.instructions.md`  | `apps/frontend/src/**/*.svelte`                   | Frontend Svelte UI layout and component visuals. | `contextos-frontend-design`             |
 | `frontend-tests.instructions.md`   | `apps/frontend/src/**/*.test.ts`                  | Frontend Jest/SWC TypeScript tests.              | `frontend-jest-swc-patterns`            |
 | `go-pipeline.instructions.md`      | `{domain,internal,tests}/**/*.go`                 | Go domain, internal pipeline, and Go test files. | `go-best-practices`, `go-test-patterns` |
 | `reasoning-output.instructions.md` | `internal/{reasoning,presentation,graph}/**/*.go` | Reasoning, presentation, and graph outputs.      | `contextos-misalignment-report`         |

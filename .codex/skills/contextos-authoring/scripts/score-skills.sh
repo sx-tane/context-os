@@ -4,10 +4,11 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-skills_dir="$repo_root/.github/skills"
-github_readme="$repo_root/.github/README.md"
-implementer_agent="$repo_root/.github/agents/contextos-implementer.agent.md"
-architect_agent="$repo_root/.github/agents/contextos-architect.agent.md"
+customization_root="$repo_root/.codex"
+skills_dir="$customization_root/skills"
+github_readme="$customization_root/README.md"
+implementer_agent="$customization_root/agents/contextos-implementer.agent.md"
+architect_agent="$customization_root/agents/contextos-architect.agent.md"
 
 if [[ ! -d "$skills_dir" ]]; then
   echo "skills directory not found: $skills_dir" >&2

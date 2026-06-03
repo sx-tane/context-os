@@ -4,7 +4,7 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-exclude_file="$repo_root/.github/skills/contextos-authoring/references/readme-coverage-exclusions.txt"
+exclude_file="$repo_root/.codex/skills/contextos-authoring/references/readme-coverage-exclusions.txt"
 out_file="/tmp/contextos-missing-readmes.txt"
 
 : > "$out_file"

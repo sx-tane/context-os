@@ -44,7 +44,7 @@ See `agents/README.md` for agent selection and `instructions/README.md` for `app
 
 | Agent                   | Use For                                                                                 | Main Skill Families                                                                                                                                                       |
 | ----------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ContextOS Implementer` | Production-minded code, tests, connectors, handlers, harnesses, and customization edits | Go quality, Go tests, pipeline stages, identity benchmarks, misalignment reports, API handlers, frontend connectors, frontend tests, harnesses, authoring, issue workflow |
+| `ContextOS Implementer` | Production-minded code, tests, connectors, handlers, harnesses, and customization edits | Go quality, Go tests, pipeline stages, identity benchmarks, misalignment reports, API handlers, frontend design, frontend connectors, frontend tests, harnesses, authoring, issue workflow |
 | `ContextOS Architect`   | Phase planning, domain boundaries, dependency mapping, and delivery risk review         | Pipeline delivery, identity benchmarks, misalignment reports, harness engineering, API/frontend connector patterns, frontend tests, authoring, issue workflow             |
 
 ## Instructions
@@ -54,6 +54,7 @@ See `agents/README.md` for agent selection and `instructions/README.md` for `app
 | `api-handlers.instructions.md`     | `apps/api/**/*.go`                                | `contextos-api-handler`                 |
 | `connectors.instructions.md`       | `internal/source/**/*.go`                         | `contextos-api-handler`                 |
 | `customization.instructions.md`    | `.github/{agents,instructions,skills}/**/*.md`    | `contextos-authoring`                   |
+| `frontend-design.instructions.md`  | `apps/frontend/src/**/*.svelte`                   | `contextos-frontend-design`             |
 | `frontend-tests.instructions.md`   | `apps/frontend/src/**/*.test.ts`                  | `frontend-jest-swc-patterns`            |
 | `go-pipeline.instructions.md`      | `{domain,internal,tests}/**/*.go`                 | `go-best-practices`, `go-test-patterns` |
 | `reasoning-output.instructions.md` | `internal/{reasoning,presentation,graph}/**/*.go` | `contextos-misalignment-report`         |
@@ -64,6 +65,7 @@ See `agents/README.md` for agent selection and `instructions/README.md` for `app
 | ----------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- | ----------------------------------- | --------------------- |
 | `contextos-api-handler`                   | New API handler, source connector route, `/status`, `/ingest`, `/ingest/stream` | Handler skeleton                        | Handler checklist                   | None                  |
 | `contextos-authoring`                     | New or changed skill, instruction, or agent                                     | Agent, instruction, and skill skeletons | Authoring checklist                 | Skill score helper    |
+| `contextos-frontend-design`               | Svelte UI design, layout, spacing, buttons, panels, graph/source/chat visuals   | Frontend style skeleton                  | Frontend design checklist           | None                  |
 | `contextos-frontend-connector`            | New Svelte connector component or `+page.svelte` registration                   | Connector skeleton                      | Connector checklist                 | None                  |
 | `contextos-harness-engineering`           | Fixtures, scenarios, goldens, benchmarks, or regression gates                   | Scenario template                       | Harness checklist                   | None                  |
 | `contextos-identity-resolution-benchmark` | Alias matching, merge thresholds, precision/recall evaluation                   | Benchmark dataset template              | Evaluation matrix and conflict tree | Benchmark runner      |
@@ -135,6 +137,7 @@ flowchart TD
 Current policy excludes:
 
 - `.github` (customization internals)
+- `.codex/skills` (Codex skill internals use `SKILL.md`, `assets/`, and `references/` instead of per-folder README files)
 - `tests/harness/fixtures` (fixture payloads)
 - `tests/harness/golden` (golden artifacts)
 - `tests/harness/scenarios` (scenario definitions)

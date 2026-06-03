@@ -115,6 +115,20 @@ If the skill is unavailable, enforce these inline rules:
 - Register the new component in `+page.svelte` with all four Codex props.
 - `bun run check` must pass with 0 errors after any component change.
 
+## Frontend Design Delivery
+
+When modifying Svelte page or component UI, layout, spacing, controls, graph views, source setup, or chat visuals, apply the **contextos-frontend-design** skill.
+Use the [style skeleton](../skills/contextos-frontend-design/assets/frontend-style-skeleton.md) for aligned CSS snippets.
+Run the [design checklist](../skills/contextos-frontend-design/references/frontend-design-checklist.md) before marking the task complete.
+If the skill is unavailable, enforce these inline rules:
+
+- Read the nearest frontend README before changing visual behavior.
+- Use warm neutral backgrounds, mono typography, flat rows, and separators over decorative cards.
+- Use the padded underline-fill button treatment for primary, secondary, close, skip, save, and danger actions.
+- Give rows, panels, and controls explicit left/right padding.
+- Keep graph views focused on selected-entity relationships, with important names visible without hover.
+- Run `npm run check` from `apps/frontend` after Svelte UI changes.
+
 ## Frontend Test Patterns
 
 When writing or reviewing any `*.test.ts` file under `apps/frontend`, always apply the **frontend-jest-swc-patterns** skill.

@@ -16,6 +16,7 @@
     } from "$lib/types";
     import {
         API_URL,
+        deleteWorkspace,
         getArtifacts,
         getGraphData,
         getWorkspaceStatus,
@@ -38,25 +39,59 @@
         removeWorkspace,
         workspaces,
     } from "$lib/projectStore";
+    import {
+        aggregateFindings,
+        buildFindingsRunSummary,
+        type FindingsFailure,
+    } from "$lib/findingsAggregator";
     import KnowledgeInstall from "$lib/components/knowledge/KnowledgeInstall.svelte";
 
-    type GraphNode = GraphEntity & {
-        x: number;
-        y: number;
-        degree: number;
-    };
     type GraphLink = {
         id: string;
         source: string;
         target: string;
         label: string;
         strength: number;
+        evidence?: string[];
     };
-    type GraphLegendType = {
+    type GraphTypeSummary = {
         type: string;
-        className: string;
         count: number;
+        color: string;
     };
+    type EntityIndexItem = GraphEntity & {
+        degree: number;
+    };
+    type EntityIndexSection = {
+        label: string;
+        entities: EntityIndexItem[];
+    };
+    type RelationshipRow = {
+        entityName: string;
+        confidence: number;
+        evidence?: string[];
+    };
+    type RelationshipKindGroup = {
+        kind: string;
+        incoming: RelationshipRow[];
+        outgoing: RelationshipRow[];
+    };
+    type FocusGraphRow = {
+        id: string;
+        side: "incoming" | "outgoing";
+        y: number;
+        entity: GraphEntity;
+        link: GraphLink;
+        color: string;
+    };
+    type AnalysisSourceStatus = {
+        connector: ConnectorKind;
+        uri: string;
+        status: "queued" | "running" | "done" | "failed";
+        detail?: string;
+    };
+
+    const analysisSourceTimeoutMs = 90_000;
 
     let apiStatus: ServiceStatus = "checking";
     let codexLoggedIn = false;
@@ -72,16 +107,7 @@
     let workspaceStatus: WorkspaceStatus | null = null;
     let graphData: GraphData | null = null;
     let selectedEntity: GraphEntity | null = null;
-    let graphNodes: GraphNode[] = [];
-    let graphLinks: GraphLink[] = [];
-    let graphLayoutKey = "";
-    let graphCanvas: HTMLDivElement;
-    let graphPan = { x: 0, y: 0 };
-    let graphZoom = 1;
-    let dragState:
-        | { kind: "node"; id: string; lastX: number; lastY: number }
-        | { kind: "pan"; startX: number; startY: number; originX: number; originY: number }
-        | null = null;
+    let entityQuery = "";
     let lastChatResult: ChatQueryResult | null = null;
     let lastFindings: FindingsResult | null = null;
     let activityArtifacts: Artifact[] = [];
@@ -91,16 +117,34 @@
     );
     $: graphEntities = graphData?.entities ?? [];
     $: graphRelationships = graphData?.relationships ?? [];
-    $: syncGraphLayout(graphEntities, graphRelationships);
+    $: graphLinks = buildGraphLinks(graphEntities, graphRelationships);
+    $: graphEntityById = new Map(graphEntities.map((entity) => [entity.id, entity]));
+    $: graphDegree = linkDegree(graphLinks);
     $: selectedLinks = selectedEntity
         ? graphLinks.filter((link) => link.source === selectedEntity?.id || link.target === selectedEntity?.id)
         : [];
-    $: graphLegendTypes = buildGraphLegendTypes(graphNodes);
+    $: linkedEntityIds = selectedEntity ? linkedIdsForEntity(selectedEntity.id, selectedLinks) : new Set<string>();
+    $: entityIndexSections = buildEntityIndexSections(
+        graphEntities,
+        graphDegree,
+        selectedEntity,
+        linkedEntityIds,
+        entityQuery,
+    );
+    $: relationshipGroups = selectedEntity
+        ? buildRelationshipGroups(selectedEntity, selectedLinks, graphEntityById)
+        : [];
+    $: focusRows = selectedEntity
+        ? buildFocusGraphRows(selectedEntity, selectedLinks, graphEntityById)
+        : [];
+    $: incomingFocusRows = focusRows.filter((row) => row.side === "incoming");
+    $: outgoingFocusRows = focusRows.filter((row) => row.side === "outgoing");
+    $: graphLegendTypes = buildGraphLegendTypes(graphEntities);
     $: if (
         graphEntities.length > 0 &&
         (!selectedEntity || !graphEntities.some((entity) => entity.id === selectedEntity?.id))
     ) {
-        selectedEntity = graphEntities[0];
+        selectedEntity = topGraphEntity(graphEntities, graphDegree);
     }
     $: if (graphEntities.length === 0) {
         selectedEntity = null;
@@ -181,8 +225,13 @@
     }
 
     async function removeActiveWorkspace() {
-        if ($workspaces.length <= 1) return;
-        removeWorkspace(workspacePath);
+        const path = workspacePath;
+        const deleted = await deleteWorkspace(path);
+        if (!deleted) {
+            addMessage(assistantMsg("Workspace remove failed: backend delete did not complete."));
+            return;
+        }
+        removeWorkspace(path);
         workspacePath = getProject().workspacePath;
         newWorkspacePath = "";
         lastChatResult = null;
@@ -218,6 +267,16 @@
     function loadingMsg(text: string): ChatMessage {
         return {
             id: makeId(),
+            role: "assistant",
+            text,
+            createdAt: now(),
+            loading: true,
+        };
+    }
+
+    function progressMsg(id: string, text: string): ChatMessage {
+        return {
+            id,
             role: "assistant",
             text,
             createdAt: now(),
@@ -331,44 +390,94 @@
                 "googledrive",
             ]);
             const completed: FindingsResult[] = [];
-            const failures: string[] = [];
+            const failures: FindingsFailure[] = [];
+            const sourceStatuses: AnalysisSourceStatus[] = ready.map((source) => ({
+                connector: source.connector,
+                uri: source.uri,
+                status: "queued",
+            }));
 
-            for (const source of ready) {
+            const updateProgress = () => {
+                replaceMessage(load.id, progressMsg(load.id, buildAnalysisProgress(sourceStatuses)));
+            };
+            updateProgress();
+
+            for (const [index, source] of ready.entries()) {
                 const provider = codexConnectors.has(source.connector)
                     ? "codex"
                     : "token";
-                const res = await postFindings({
-                    workspace_id: workspacePath,
-                    connector: source.connector,
-                    uri: source.uri,
-                    provider,
-                    role: "pmo",
-                    include_execution: false,
-                });
-                if (res.ok) {
-                    completed.push(res.body);
-                    lastFindings = res.body;
-                } else {
-                    failures.push(
-                        `${source.connector}:${source.uri} - ${res.body.message ?? res.body.error ?? "unknown error"}`,
-                    );
+                sourceStatuses[index] = {
+                    ...sourceStatuses[index],
+                    status: "running",
+                    detail: "request sent",
+                };
+                updateProgress();
+
+                const controller = new AbortController();
+                const timeout = window.setTimeout(() => controller.abort(), analysisSourceTimeoutMs);
+                try {
+                    const res = await postFindings({
+                        workspace_id: workspacePath,
+                        connector: source.connector,
+                        uri: source.uri,
+                        provider,
+                        role: "pmo",
+                        include_execution: false,
+                    }, { signal: controller.signal });
+                    if (res.ok) {
+                        completed.push(res.body);
+                        sourceStatuses[index] = {
+                            ...sourceStatuses[index],
+                            status: "done",
+                            detail: `${res.body.event_count ?? 0} events, ${res.body.mismatch_count ?? res.body.mismatches?.length ?? 0} findings`,
+                        };
+                    } else {
+                        const message = res.body.message ?? res.body.error ?? "unknown error";
+                        failures.push({
+                            connector: source.connector,
+                            uri: source.uri,
+                            message,
+                        });
+                        sourceStatuses[index] = {
+                            ...sourceStatuses[index],
+                            status: "failed",
+                            detail: message,
+                        };
+                    }
+                } catch (error) {
+                    const message = isAbortError(error)
+                        ? `timed out after ${Math.round(analysisSourceTimeoutMs / 1000)}s`
+                        : String(error);
+                    failures.push({
+                        connector: source.connector,
+                        uri: source.uri,
+                        message,
+                    });
+                    sourceStatuses[index] = {
+                        ...sourceStatuses[index],
+                        status: "failed",
+                        detail: message,
+                    };
+                } finally {
+                    window.clearTimeout(timeout);
+                    updateProgress();
                 }
             }
 
-            const mismatchTotal = completed.reduce(
-                (sum, result) => sum + (result.mismatch_count ?? result.mismatches?.length ?? 0),
-                0,
-            );
-            const summary =
-                `Analysis complete for ${completed.length}/${ready.length} selected source${ready.length === 1 ? "" : "s"}.` +
-                ` Found ${mismatchTotal} finding${mismatchTotal === 1 ? "" : "s"}.` +
-                (failures.length ? `\n\nFailed:\n- ${failures.join("\n- ")}` : "");
+            const aggregated = aggregateFindings(completed);
+            lastFindings = aggregated;
+            const summary = buildFindingsRunSummary({
+                sourceCount: ready.length,
+                completedCount: completed.length,
+                result: aggregated,
+                failures,
+            });
 
             replaceMessage(
                 load.id,
                 assistantMsg(summary, {
                     kind: "findings",
-                    findingsResult: completed[completed.length - 1],
+                    findingsResult: aggregated ?? undefined,
                 }),
             );
         } catch (error) {
@@ -380,6 +489,23 @@
             busy = false;
             await refreshWorkspace();
         }
+    }
+
+    function buildAnalysisProgress(statuses: AnalysisSourceStatus[]) {
+        const done = statuses.filter((source) => source.status === "done").length;
+        const failed = statuses.filter((source) => source.status === "failed").length;
+        const lines = statuses.map((source, index) => {
+            const label = `${index + 1}. ${source.connector}:${source.uri}`;
+            if (source.status === "queued") return `${label} - queued`;
+            if (source.status === "running") return `${label} - running`;
+            if (source.status === "done") return `${label} - done${source.detail ? ` (${source.detail})` : ""}`;
+            return `${label} - failed${source.detail ? `: ${source.detail}` : ""}`;
+        });
+        return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed.\n${lines.join("\n")}`;
+    }
+
+    function isAbortError(error: unknown) {
+        return error instanceof DOMException && error.name === "AbortError";
     }
 
     async function handleKnowledgeDone() {
@@ -409,40 +535,6 @@
         return `Codex connected${currentCodexAccount ? ` as ${normalizeCodexAccount(currentCodexAccount)}` : ""}`;
     }
 
-    function nodeStyle(node: GraphNode) {
-        return `left:${node.x}%;top:${node.y}%;`;
-    }
-
-    function entityClass(entity: GraphEntity) {
-        const value = entity.type.toLowerCase();
-        if (value.includes("person")) return "person";
-        if (value.includes("org") || value.includes("company")) return "org";
-        if (value.includes("feature") || value.includes("project")) return "feature";
-        return "entity";
-    }
-
-    function syncGraphLayout(entities: GraphEntity[], relationships: GraphRelationship[]) {
-        const baseLinks = buildGraphLinks(entities, relationships);
-        const degree = linkDegree(baseLinks);
-        const visible = selectGraphEntities(entities, degree, 76);
-        const visibleIds = new Set(visible.map((entity) => entity.id));
-        const links = baseLinks
-            .filter((link) => visibleIds.has(link.source) && visibleIds.has(link.target))
-            .slice(0, 120);
-        const key = `${visible.map((entity) => entity.id).join("|")}::${links.map((link) => link.id).join("|")}`;
-        if (key === graphLayoutKey) return;
-
-        const visibleDegree = linkDegree(links);
-        const previous = new Map(graphNodes.map((node) => [node.id, node]));
-        const nextNodes = layoutGraphNodes(visible, visibleDegree, previous);
-
-        graphLayoutKey = key;
-        graphLinks = links;
-        graphNodes = nextNodes;
-        graphPan = { x: 0, y: 0 };
-        graphZoom = 1;
-    }
-
     function buildGraphLinks(entities: GraphEntity[], relationships: GraphRelationship[]) {
         if (relationships.length > 0) {
             return relationships
@@ -452,9 +544,10 @@
                     target: relationship.to_id,
                     label: relationship.kind,
                     strength: relationship.confidence ?? 0.5,
+                    evidence: relationship.evidence,
                 }))
                 .sort((a, b) => b.strength - a.strength)
-                .slice(0, 180);
+                .filter((link) => entities.some((entity) => entity.id === link.source) && entities.some((entity) => entity.id === link.target));
         }
 
         const links = new Map<string, GraphLink>();
@@ -486,52 +579,6 @@
             degree.set(link.target, (degree.get(link.target) ?? 0) + 1);
         }
         return degree;
-    }
-
-    function selectGraphEntities(entities: GraphEntity[], degree: Map<string, number>, limit: number) {
-        return [...entities]
-            .sort((a, b) => {
-                const degreeDelta = (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0);
-                if (degreeDelta !== 0) return degreeDelta;
-                return (b.confidence ?? 0) - (a.confidence ?? 0);
-            })
-            .slice(0, limit);
-    }
-
-    function layoutGraphNodes(
-        entities: GraphEntity[],
-        degree: Map<string, number>,
-        previous: Map<string, GraphNode>,
-    ) {
-        const groups = groupGraphEntities(entities);
-        const centers = clusterCenters(groups.length);
-        const nodes: GraphNode[] = [];
-
-        groups.forEach((group, groupIndex) => {
-            const center = centers[groupIndex] ?? { x: 50, y: 48 };
-            const sorted = [...group.entities].sort(
-                (a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0),
-            );
-            sorted.forEach((entity, index) => {
-                const existing = previous.get(entity.id);
-                if (existing) {
-                    nodes.push({ ...entity, x: existing.x, y: existing.y, degree: degree.get(entity.id) ?? 0 });
-                    return;
-                }
-                const ring = Math.floor(index / 10);
-                const position = index % 10;
-                const radius = index === 0 ? 0 : 8 + ring * 7;
-                const angle = position * 2.399963 + groupIndex * 0.65;
-                nodes.push({
-                    ...entity,
-                    x: clamp(center.x + Math.cos(angle) * radius, 7, 93),
-                    y: clamp(center.y + Math.sin(angle) * radius, 10, 88),
-                    degree: degree.get(entity.id) ?? 0,
-                });
-            });
-        });
-
-        return nodes;
     }
 
     function connectGroups(
@@ -578,26 +625,6 @@
         return groups;
     }
 
-    function groupGraphEntities(entities: GraphEntity[]) {
-        const groups = [...groupBy(entities, (entity) => entity.type || "unknown").entries()]
-            .map(([key, groupEntities]) => ({ key, entities: groupEntities }))
-            .sort((a, b) => b.entities.length - a.entities.length);
-        return groups.length ? groups : [{ key: "graph", entities }];
-    }
-
-    function clusterCenters(count: number) {
-        if (count <= 1) return [{ x: 50, y: 45 }];
-        const centers: { x: number; y: number }[] = [];
-        for (let index = 0; index < count; index += 1) {
-            const angle = (index / Math.max(count, 1)) * Math.PI * 2 - Math.PI / 2;
-            centers.push({
-                x: 50 + Math.cos(angle) * 26,
-                y: 46 + Math.sin(angle) * 22,
-            });
-        }
-        return centers;
-    }
-
     function dedupeEntities(entities: GraphEntity[]) {
         return [...new Map(entities.map((entity) => [entity.id, entity])).values()];
     }
@@ -610,112 +637,191 @@
         return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80);
     }
 
-    function graphNodeById(id: string) {
-        return graphNodes.find((node) => node.id === id);
-    }
-
-    function shouldShowNodeLabel(node: GraphNode) {
-        return node.degree >= 3 || selectedEntity?.id === node.id;
-    }
-
-    function buildGraphLegendTypes(nodes: GraphNode[]): GraphLegendType[] {
-        const counts = new Map<string, { type: string; count: number; className: string }>();
-        for (const node of nodes) {
-            const type = node.type || "entity";
+    function buildGraphLegendTypes(entities: GraphEntity[]): GraphTypeSummary[] {
+        const counts = new Map<string, GraphTypeSummary>();
+        for (const entity of entities) {
+            const type = entity.type || "entity";
             const key = type.toLowerCase();
             const current = counts.get(key);
             if (current) {
                 current.count += 1;
             } else {
-                counts.set(key, { type, count: 1, className: entityClass(node) });
+                counts.set(key, { type, count: 1, color: graphTypeColor(type) });
             }
         }
         return [...counts.values()]
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 6);
+            .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
     }
 
-    function clamp(value: number, min: number, max: number) {
-        return Math.min(max, Math.max(min, value));
+    function compareGraphEntities(a: GraphEntity & { degree: number }, b: GraphEntity & { degree: number }) {
+        if (b.degree !== a.degree) return b.degree - a.degree;
+        const confidenceDelta = (b.confidence ?? 0) - (a.confidence ?? 0);
+        if (confidenceDelta !== 0) return confidenceDelta;
+        return a.name.localeCompare(b.name);
     }
 
-    function startNodeDrag(event: PointerEvent, node: GraphNode) {
-        event.preventDefault();
-        event.stopPropagation();
-        selectedEntity = node;
-        dragState = { kind: "node", id: node.id, lastX: node.x, lastY: node.y };
+    function topGraphEntity(entities: GraphEntity[], degree: Map<string, number>) {
+        return [...entities]
+            .map((entity) => ({ ...entity, degree: degree.get(entity.id) ?? 0 }))
+            .sort(compareGraphEntities)[0] ?? entities[0];
     }
 
-    function startGraphPan(event: PointerEvent) {
-        if (event.button !== 0 || (event.target as HTMLElement).closest(".node-card, .legend")) return;
-        dragState = {
-            kind: "pan",
-            startX: event.clientX,
-            startY: event.clientY,
-            originX: graphPan.x,
-            originY: graphPan.y,
-        };
-    }
-
-    function handleGraphPointerMove(event: PointerEvent) {
-        if (!dragState || !graphCanvas) return;
-        if (dragState.kind === "pan") {
-            graphPan = {
-                x: clamp(dragState.originX + event.clientX - dragState.startX, -260, 260),
-                y: clamp(dragState.originY + event.clientY - dragState.startY, -180, 180),
-            };
-            return;
-        }
-
-        const nodeId = dragState.id;
-        const rect = graphCanvas.getBoundingClientRect();
-        const x = ((event.clientX - rect.left - graphPan.x) / (rect.width * graphZoom)) * 100;
-        const y = ((event.clientY - rect.top - graphPan.y) / (rect.height * graphZoom)) * 100;
-        const nextX = clamp(x, 4, 96);
-        const nextY = clamp(y, 6, 94);
-        const dx = nextX - dragState.lastX;
-        const dy = nextY - dragState.lastY;
-        const linkedIds = linkedNodeIds(nodeId);
-        graphNodes = graphNodes.map((node) =>
-            node.id === nodeId
-                ? { ...node, x: nextX, y: nextY }
-                : linkedIds.has(node.id)
-                    ? {
-                            ...node,
-                            x: clamp(node.x + dx * 0.42, 4, 96),
-                            y: clamp(node.y + dy * 0.42, 6, 94),
-                        }
-                : node,
-        );
-        dragState = { ...dragState, lastX: nextX, lastY: nextY };
-    }
-
-    function stopGraphDrag() {
-        dragState = null;
-    }
-
-    function linkedNodeIds(nodeId: string) {
+    function linkedIdsForEntity(entityId: string, links: GraphLink[]) {
         const ids = new Set<string>();
-        for (const link of graphLinks) {
-            if (link.source === nodeId) ids.add(link.target);
-            if (link.target === nodeId) ids.add(link.source);
+        for (const link of links) {
+            if (link.source === entityId) ids.add(link.target);
+            if (link.target === entityId) ids.add(link.source);
         }
         return ids;
     }
 
-    function zoomGraph(delta: number) {
-        graphZoom = clamp(Number((graphZoom + delta).toFixed(2)), 0.55, 2.4);
+    function buildEntityIndexSections(
+        entities: GraphEntity[],
+        degree: Map<string, number>,
+        selected: GraphEntity | null,
+        linkedIds: Set<string>,
+        query: string,
+    ): EntityIndexSection[] {
+        const items = entities
+            .map((entity) => ({ ...entity, degree: degree.get(entity.id) ?? 0 }))
+            .sort(compareGraphEntities);
+        const normalizedQuery = query.trim().toLowerCase();
+        if (normalizedQuery) {
+            return [
+                {
+                    label: "Matches",
+                    entities: items
+                        .filter((entity) =>
+                            `${entity.name} ${entity.type}`.toLowerCase().includes(normalizedQuery),
+                        )
+                        .slice(0, 60),
+                },
+            ].filter((section) => section.entities.length > 0);
+        }
+
+        const used = new Set<string>();
+        const sections: EntityIndexSection[] = [];
+        if (selected) {
+            const selectedItem = items.find((entity) => entity.id === selected.id);
+            if (selectedItem) {
+                sections.push({ label: "Selected", entities: [selectedItem] });
+                used.add(selectedItem.id);
+            }
+        }
+
+        const linked = items
+            .filter((entity) => linkedIds.has(entity.id) && !used.has(entity.id))
+            .slice(0, 14);
+        if (linked.length) {
+            sections.push({ label: "Linked", entities: linked });
+            for (const entity of linked) used.add(entity.id);
+        }
+
+        const top = items
+            .filter((entity) => !used.has(entity.id))
+            .slice(0, Math.max(12, 36 - used.size));
+        if (top.length) sections.push({ label: "Top entities", entities: top });
+        return sections;
     }
 
-    function resetGraphView() {
-        graphPan = { x: 0, y: 0 };
-        graphZoom = 1;
+    function buildFocusGraphRows(
+        entity: GraphEntity,
+        links: GraphLink[],
+        entitiesById: Map<string, GraphEntity>,
+    ): FocusGraphRow[] {
+        const incoming = buildSideRows(entity, links, entitiesById, "incoming");
+        const outgoing = buildSideRows(entity, links, entitiesById, "outgoing");
+        return [...positionFocusRows(incoming), ...positionFocusRows(outgoing)];
     }
 
-    function handleGraphWheel(event: WheelEvent) {
-        event.preventDefault();
-        const delta = event.deltaY > 0 ? -0.12 : 0.12;
-        zoomGraph(delta);
+    function buildSideRows(
+        entity: GraphEntity,
+        links: GraphLink[],
+        entitiesById: Map<string, GraphEntity>,
+        side: "incoming" | "outgoing",
+    ): FocusGraphRow[] {
+        const rows: FocusGraphRow[] = [];
+        for (const link of links) {
+            if (side === "incoming" && link.target !== entity.id) continue;
+            if (side === "outgoing" && link.source !== entity.id) continue;
+            const otherId = side === "incoming" ? link.source : link.target;
+            const other = entitiesById.get(otherId);
+            if (!other) continue;
+            rows.push({
+                id: `${side}:${link.id}`,
+                side,
+                y: 50,
+                entity: other,
+                link,
+                color: graphTypeColor(other.type || "entity"),
+            });
+        }
+        return rows
+            .sort((a, b) => b.link.strength - a.link.strength || a.entity.name.localeCompare(b.entity.name))
+            .slice(0, 14);
+    }
+
+    function positionFocusRows(rows: FocusGraphRow[]) {
+        if (rows.length === 0) return rows;
+        const step = Math.min(11, 72 / Math.max(rows.length - 1, 1));
+        const start = 50 - ((rows.length - 1) * step) / 2;
+        return rows.map((row, index) => ({
+            ...row,
+            y: Math.max(12, Math.min(88, start + index * step)),
+        }));
+    }
+
+    function graphTypeColor(type: string) {
+        const palette = [
+            "#1f5f8b",
+            "#2d6a4f",
+            "#b5523a",
+            "#6f5aa8",
+            "#8a6a20",
+            "#2f7f7f",
+            "#9b476e",
+            "#59633a",
+            "#7f4f2a",
+            "#405f9a",
+        ];
+        let hash = 0;
+        for (const char of type.toLowerCase()) {
+            hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+        }
+        return palette[hash % palette.length];
+    }
+
+    function typeAccentStyle(type: string) {
+        return `--type-color:${graphTypeColor(type || "entity")};`;
+    }
+
+    function buildRelationshipGroups(
+        entity: GraphEntity,
+        links: GraphLink[],
+        entitiesById: Map<string, GraphEntity>,
+    ): RelationshipKindGroup[] {
+        const groups = new Map<string, RelationshipKindGroup>();
+        for (const link of links) {
+            const kind = link.label || "related";
+            const group = groups.get(kind) ?? { kind, incoming: [], outgoing: [] };
+            const source = entitiesById.get(link.source);
+            const target = entitiesById.get(link.target);
+            if (link.source === entity.id && target) {
+                group.outgoing.push({
+                    entityName: target.name,
+                    confidence: link.strength,
+                    evidence: link.evidence,
+                });
+            } else if (link.target === entity.id && source) {
+                group.incoming.push({
+                    entityName: source.name,
+                    confidence: link.strength,
+                    evidence: link.evidence,
+                });
+            }
+            groups.set(kind, group);
+        }
+        return [...groups.values()].sort((a, b) => a.kind.localeCompare(b.kind));
     }
 
     function formatTime(value?: string) {
@@ -828,8 +934,6 @@
     <title>ContextOS</title>
 </svelte:head>
 
-<svelte:window on:pointermove={handleGraphPointerMove} on:pointerup={stopGraphDrag} />
-
 <main class="app-shell">
     <header class="topbar">
         <strong>CONTEXTOS</strong>
@@ -846,7 +950,7 @@
             <form class="new-workspace" on:submit|preventDefault={createWorkspace}>
                 <input bind:value={newWorkspacePath} placeholder="New workspace path" />
                 <button type="submit" disabled={newWorkspacePath.trim() === ""}>New</button>
-                <button type="button" on:click={removeActiveWorkspace} disabled={$workspaces.length <= 1}>Remove</button>
+                <button type="button" on:click={removeActiveWorkspace} disabled={busy}>Remove</button>
             </form>
         </div>
         <div class="top-status">
@@ -877,7 +981,21 @@
                             <article class="message" class:user={message.role === "user"}>
                                 <span>{message.role === "user" ? "YOU" : "CONTEXT-OS"}</span>
                                 {#if message.loading}
-                                    <p>Working...</p>
+                                    <div class="message-body">
+                                        {#each messageLines(message.text || "Working...") as line}
+                                            {#if line.kind === "blank"}
+                                                <div class="message-gap"></div>
+                                            {:else if line.kind === "heading"}
+                                                <h4>{line.text}</h4>
+                                            {:else if line.kind === "number"}
+                                                <p class="number-line">{line.text}</p>
+                                            {:else if line.kind === "bullet"}
+                                                <p class="bullet-line">{line.text}</p>
+                                            {:else}
+                                                <p>{line.text}</p>
+                                            {/if}
+                                        {/each}
+                                    </div>
                                 {:else}
                                     <div class="message-body">
                                         {#each messageLines(message.text) as line}
@@ -1021,6 +1139,11 @@
                                     <p>{mismatch.description ?? mismatch.recommended_action ?? "Review this item against source evidence."}</p>
                                 </article>
                             {/each}
+                        {:else if lastFindings}
+                            <div class="empty-state">
+                                <strong>Analysis ran, no mismatch signals detected</strong>
+                                <p>Sources: {lastFindings.uri ?? readySources.length}. Events: {lastFindings.event_count ?? workspaceStatus?.event_count ?? 0}. Entities: {lastFindings.entity_count ?? workspaceStatus?.entity_count ?? 0}.</p>
+                            </div>
                         {:else}
                             <div class="empty-state">
                                 <strong>{hasSources ? "No findings yet" : "Connect sources to unlock findings"}</strong>
@@ -1030,64 +1153,116 @@
                     </div>
                 {:else if activeInsightTab === "graph"}
                     <div class="graph-workspace">
-                        <div
-                            class="graph-canvas"
-                            class:dragging={dragState !== null}
-                            bind:this={graphCanvas}
-                            role="application"
-                            aria-label="Draggable entity graph"
-                            on:pointerdown={startGraphPan}
-                            on:wheel={handleGraphWheel}
-                        >
-                            <div class="graph-tools" aria-label="Graph zoom controls">
-                                <button type="button" on:click={() => zoomGraph(0.18)}>+</button>
-                                <button type="button" on:click={() => zoomGraph(-0.18)}>-</button>
-                                <button type="button" on:click={resetGraphView}>{Math.round(graphZoom * 100)}%</button>
-                            </div>
+                        <div class="graph-canvas" aria-label="Typed entity map">
                             <div class="graph-count">
-                                <strong>{graphNodes.length}</strong>
-                                <span>shown of {graphEntities.length}</span>
+                                <strong>{graphEntities.length}</strong>
+                                <span>entities | {graphLinks.length} links</span>
                             </div>
 
-                            <div
-                                class="graph-plane"
-                                style={`transform: translate(${graphPan.x}px, ${graphPan.y}px) scale(${graphZoom});`}
-                            >
-                                <svg class="graph-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                                    {#each graphLinks as link (link.id)}
-                                        {@const source = graphNodeById(link.source)}
-                                        {@const target = graphNodeById(link.target)}
-                                        {#if source && target}
-                                            <line
-                                                x1={source.x}
-                                                y1={source.y}
-                                                x2={target.x}
-                                                y2={target.y}
-                                                class:strong={link.strength > 0.85}
-                                            />
+                            {#if graphEntities.length > 0}
+                                <div class="graph-map-layout">
+                                    <div class="entity-index" aria-label="Entity index grouped by type">
+                                        <div class="entity-index-head">
+                                            <strong>Entities</strong>
+                                            <span>{entityIndexSections.reduce((sum, section) => sum + section.entities.length, 0)} shown</span>
+                                        </div>
+                                        <input
+                                            class="entity-search"
+                                            type="search"
+                                            bind:value={entityQuery}
+                                            placeholder="Filter entities"
+                                            aria-label="Filter graph entities"
+                                        />
+                                        {#each entityIndexSections as section (section.label)}
+                                            <section class="index-section">
+                                                <h3>{section.label}</h3>
+                                                <div class="entity-list">
+                                                    {#each section.entities as entity (entity.id)}
+                                                        <button
+                                                            type="button"
+                                                            class="entity-row"
+                                                            class:selected={selectedEntity?.id === entity.id}
+                                                            class:linked={selectedEntity !== null && selectedLinks.some((link) => link.source === entity.id || link.target === entity.id)}
+                                                            style={typeAccentStyle(entity.type)}
+                                                            on:click={() => (selectedEntity = entity)}
+                                                        >
+                                                            <span>{entity.name}</span>
+                                                            <small>{entity.degree} link{entity.degree === 1 ? "" : "s"}</small>
+                                                        </button>
+                                                    {/each}
+                                                </div>
+                                            </section>
+                                        {/each}
+                                        {#if entityIndexSections.length === 0}
+                                            <p class="entity-index-empty">No matching entities.</p>
                                         {/if}
-                                    {/each}
-                                </svg>
+                                    </div>
 
-                                {#each graphNodes as entity (entity.id)}
-                                    <button
-                                        type="button"
-                                        class={`node ${entityClass(entity)}`}
-                                        class:selected={selectedEntity?.id === entity.id}
-                                        class:connected={entity.degree > 0}
-                                        class:labeled={shouldShowNodeLabel(entity)}
-                                        style={nodeStyle(entity)}
-                                        title={`${entity.name}${entity.degree ? ` · ${entity.degree} links` : ""}`}
-                                        on:pointerdown={(event) => startNodeDrag(event, entity)}
-                                        on:click={() => (selectedEntity = entity)}
-                                    >
-                                        <span></span>
-                                        <em>{entity.name}</em>
-                                    </button>
-                                {/each}
-                            </div>
+                                    <div class="focus-graph" aria-label="Selected entity relationship graph">
+                                        {#if selectedEntity}
+                                            <svg class="focus-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                                                {#each focusRows as row (row.id)}
+                                                    <path
+                                                        d={row.side === "incoming"
+                                                            ? `M 20 ${row.y} C 36 ${row.y}, 34 50, 48 50`
+                                                            : `M 52 50 C 66 50, 64 ${row.y}, 80 ${row.y}`}
+                                                        stroke={row.color}
+                                                        class:strong={row.link.strength > 0.85}
+                                                    />
+                                                {/each}
+                                            </svg>
 
-                            {#if graphEntities.length === 0}
+                                            <div class="focus-column incoming">
+                                                <strong>Incoming</strong>
+                                                {#each incomingFocusRows as row (row.id)}
+                                                    <button
+                                                        type="button"
+                                                        class="focus-node"
+                                                        style={`top:${row.y}%;--type-color:${row.color};`}
+                                                        on:click={() => (selectedEntity = row.entity)}
+                                                    >
+                                                        <span>{row.entity.name}</span>
+                                                        <small>{row.link.label.replaceAll("_", " ")}</small>
+                                                    </button>
+                                                {/each}
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                class="focus-center"
+                                                style={typeAccentStyle(selectedEntity.type)}
+                                                title={selectedEntity.name}
+                                            >
+                                                <span>{selectedEntity.type}</span>
+                                                <strong>{selectedEntity.name}</strong>
+                                                <small>{selectedLinks.length} link{selectedLinks.length === 1 ? "" : "s"}</small>
+                                            </button>
+
+                                            <div class="focus-column outgoing">
+                                                <strong>Outgoing</strong>
+                                                {#each outgoingFocusRows as row (row.id)}
+                                                    <button
+                                                        type="button"
+                                                        class="focus-node"
+                                                        style={`top:${row.y}%;--type-color:${row.color};`}
+                                                        on:click={() => (selectedEntity = row.entity)}
+                                                    >
+                                                        <span>{row.entity.name}</span>
+                                                        <small>{row.link.label.replaceAll("_", " ")}</small>
+                                                    </button>
+                                                {/each}
+                                            </div>
+
+                                            {#if focusRows.length === 0}
+                                                <div class="focus-empty">
+                                                    <strong>No direct links</strong>
+                                                    <p>Select another entity from the index to inspect relationships.</p>
+                                                </div>
+                                            {/if}
+                                        {/if}
+                                    </div>
+                                </div>
+                            {:else}
                                 <div class="empty-graph">
                                     <strong>No graph data yet</strong>
                                     <p>{hasSources ? "Run analysis to populate local entities and relationships." : "Connect sources first, then run analysis to build the graph."}</p>
@@ -1097,7 +1272,7 @@
                             <div class="legend">
                                 <strong>ENTITY TYPES</strong>
                                 {#each graphLegendTypes as item (item.type)}
-                                    <span><i class={item.className}></i>{item.type} <b>{item.count}</b></span>
+                                    <span style={typeAccentStyle(item.type)}><i></i>{item.type} <b>{item.count}</b></span>
                                 {/each}
                             </div>
                         </div>
@@ -1109,19 +1284,36 @@
                                     <strong>{selectedEntity.type}</strong>
                                 </div>
                                 <p><b>Name:</b> {selectedEntity.name}</p>
-                                <p><b>Links:</b> {graphNodeById(selectedEntity.id)?.degree ?? 0}</p>
+                                <p><b>Links:</b> {graphDegree.get(selectedEntity.id) ?? 0}</p>
                                 <p><b>Confidence:</b> {Math.round((selectedEntity.confidence ?? 0) * 100)}%</p>
+                                <p><b>Source:</b> {selectedEntity.source || "unknown"}</p>
                                 <hr />
-                                {#if selectedLinks.length}
-                                    <ul class="node-links">
-                                        {#each selectedLinks.slice(0, 6) as link (link.id)}
-                                            {@const other = graphNodeById(link.source === selectedEntity.id ? link.target : link.source)}
-                                            <li>
-                                                <span class="relationship-kind">{link.label.replaceAll("_", " ")}</span>
-                                                <strong>{other?.name ?? "Unknown"}</strong>
-                                            </li>
+                                {#if relationshipGroups.length}
+                                    <div class="node-links">
+                                        {#each relationshipGroups as group (group.kind)}
+                                            <section>
+                                                <h4>{group.kind.replaceAll("_", " ")}</h4>
+                                                {#if group.outgoing.length}
+                                                    <small>Outgoing</small>
+                                                    {#each group.outgoing as row}
+                                                        <article>
+                                                            <strong>{row.entityName}</strong>
+                                                            <span>{Math.round(row.confidence * 100)}%</span>
+                                                        </article>
+                                                    {/each}
+                                                {/if}
+                                                {#if group.incoming.length}
+                                                    <small>Incoming</small>
+                                                    {#each group.incoming as row}
+                                                        <article>
+                                                            <strong>{row.entityName}</strong>
+                                                            <span>{Math.round(row.confidence * 100)}%</span>
+                                                        </article>
+                                                    {/each}
+                                                {/if}
+                                            </section>
                                         {/each}
-                                    </ul>
+                                    </div>
                                     <hr />
                                 {/if}
                                 <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis."}</p>
@@ -1130,7 +1322,7 @@
                                     <span>Node Details</span>
                                     <strong>none</strong>
                                 </div>
-                                <p>Select or drag a node to inspect its confidence, links, and source evidence.</p>
+                                <p>Select an entity row to inspect confidence, relationships, and source evidence.</p>
                             {/if}
                         </aside>
                     </div>
@@ -1211,14 +1403,13 @@
         grid-template-columns: 128px minmax(0, 1fr) auto;
         align-items: center;
         border-bottom: 1px solid #d7d2c8;
-        background: rgba(248, 246, 239, 0.9);
+        background: #ebe8e0;
         padding: 0 12px;
         gap: 14px;
     }
 
     .topbar strong,
     .topbar button,
-    .context-switcher,
     .top-status,
     .source-strip,
     .source-summary,
@@ -1234,12 +1425,11 @@
     .new-workspace button,
     .insight-head button,
     .chat-head button,
-    .composer button,
-    .graph-tools button {
+    .composer button {
         border: 0;
         border-bottom: 1px solid #bdb7a8;
         border-radius: 0;
-        background: #f8f6ef;
+        background-color: transparent;
         background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
         background-position: 100% 0;
         background-size: 200% 100%;
@@ -1257,7 +1447,6 @@
     .insight-head button:hover:not(:disabled),
     .chat-head button:hover,
     .composer button:hover:not(:disabled),
-    .graph-tools button:hover:not(:disabled),
     .insight-head nav button.active {
         border-bottom-color: #1c1b18;
         background-position: 0 0;
@@ -1268,8 +1457,7 @@
     .new-workspace button:disabled,
     .insight-head button:disabled,
     .chat-head button:disabled,
-    .composer button:disabled,
-    .graph-tools button:disabled {
+    .composer button:disabled {
         cursor: not-allowed;
         opacity: 0.42;
     }
@@ -1318,8 +1506,9 @@
     }
 
     .topbar button {
+        height: 38px;
         min-width: 76px;
-        padding: 5px 12px;
+        padding: 0 12px;
         font-size: 12px;
     }
 
@@ -1370,7 +1559,7 @@
         height: 100%;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 304px;
+        grid-template-columns: minmax(0, 1fr) 324px;
         gap: 0;
     }
 
@@ -1378,58 +1567,83 @@
         position: relative;
         min-height: 0;
         overflow: hidden;
-        cursor: grab;
-        touch-action: none;
-        background:
-            radial-gradient(circle, rgba(28, 27, 24, 0.13) 1px, transparent 1px) 0 0 / 22px 22px,
-            linear-gradient(180deg, #f1eee5, #ebe8e0);
+        background: linear-gradient(180deg, #f1eee5, #ebe8e0);
         border-right: 1px solid #d7d2c8;
+        padding: 16px;
     }
 
-    .graph-canvas.dragging {
-        cursor: grabbing;
-    }
-
-    .graph-plane {
-        position: absolute;
-        inset: 0;
-        transform-origin: 0 0;
-        transition: transform 120ms ease;
-    }
-
-    .graph-canvas.dragging .graph-plane {
-        transition: none;
-    }
-
-    .graph-links {
-        position: absolute;
-        inset: 0;
-        width: 100%;
+    .graph-map-layout {
         height: 100%;
-        overflow: visible;
-        pointer-events: none;
+        min-height: 520px;
+        display: grid;
+        grid-template-columns: 220px minmax(520px, 1fr);
+        gap: 16px;
+        padding-top: 76px;
     }
 
-    .graph-links line {
-        stroke: rgba(31, 95, 139, 0.34);
-        stroke-width: 1.45;
-        vector-effect: non-scaling-stroke;
-    }
-
-    .graph-links line.strong {
-        stroke: rgba(216, 93, 63, 0.54);
-        stroke-width: 2.1;
-    }
-
-    .graph-tools {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 5;
+    .entity-index {
+        min-height: 0;
+        max-height: calc(100vh - 230px);
+        overflow: auto;
+        scrollbar-width: none;
         display: flex;
-        gap: 4px;
-        background: rgba(248, 246, 239, 0.88);
-        padding: 2px 0;
+        flex-direction: column;
+        gap: 12px;
+        padding-right: 2px;
+        overscroll-behavior: contain;
+    }
+
+    .entity-index::-webkit-scrollbar,
+    .messages::-webkit-scrollbar {
+        display: none;
+    }
+
+    .entity-index-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid #d7d2c8;
+        padding-bottom: 8px;
+    }
+
+    .entity-index-head strong,
+    .index-section h3 {
+        color: #1c1b18;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+    }
+
+    .entity-index-head span,
+    .entity-index-empty {
+        color: #8a8678;
+        font-size: 11px;
+    }
+
+    .entity-search {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid #bdb7a8;
+        border-radius: 0;
+        background: transparent;
+        color: #1c1b18;
+        font: inherit;
+        padding: 7px 0;
+    }
+
+    .entity-search:focus {
+        border-bottom-color: #1c1b18;
+        outline: none;
+    }
+
+    .index-section {
+        min-width: 0;
+    }
+
+    .index-section h3 {
+        margin: 0 0 5px;
+        color: #d85d3f;
     }
 
     .graph-count {
@@ -1452,95 +1666,187 @@
         color: #1c1b18;
     }
 
-    .graph-tools button {
-        min-width: 34px;
-        height: 30px;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 12px;
-    }
-
-    .node {
-        position: absolute;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        border: 0;
-        border-radius: 999px;
-        background: transparent;
-        color: #535047;
-        cursor: grab;
-        padding: 4px;
-        transform: translate(-50%, -50%);
-        user-select: none;
-    }
-
-    .node:hover,
-    .node.selected {
-        color: #1c1b18;
-        z-index: 3;
-    }
-
-    .node:hover {
-        background: rgba(248, 246, 239, 0.94);
-        box-shadow: 0 8px 22px rgba(28, 27, 24, 0.1);
-    }
-
-    .node:hover em,
-    .node.labeled em,
-    .node.selected em {
-        display: inline-block;
-    }
-
-    .node.selected em {
-        font-weight: 700;
-    }
-
-    .node span,
     .legend i {
         width: 9px;
         height: 9px;
         border-radius: 50%;
-        background: #1f5f8b;
+        background: var(--type-color);
         display: inline-block;
         flex: 0 0 auto;
     }
 
-    .node.connected span {
-        box-shadow: 0 0 0 3px rgba(31, 95, 139, 0.14);
+    .entity-list {
+        display: grid;
+        gap: 0;
     }
 
-    .node.selected span {
-        box-shadow: 0 0 0 4px rgba(216, 93, 63, 0.2);
+    .entity-row {
+        min-width: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: center;
+        gap: 2px;
+        border: 0;
+        border-top: 1px solid rgba(215, 210, 200, 0.72);
+        border-left: 3px solid transparent;
+        background: transparent;
+        color: #28261f;
+        padding: 6px 0 6px 8px;
+        text-align: left;
     }
 
-    .node em {
-        display: none;
-        max-width: 132px;
+    .entity-row:hover,
+    .entity-row.selected {
+        border-left-color: var(--type-color);
+        background: rgba(255, 253, 247, 0.58);
+    }
+
+    .entity-row.linked:not(.selected) {
+        border-left-color: rgba(31, 95, 139, 0.38);
+    }
+
+    .entity-row span {
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        border: 1px solid rgba(215, 210, 200, 0.8);
-        border-radius: 999px;
-        background: rgba(248, 246, 239, 0.96);
-        padding: 3px 7px;
-        color: #28261f;
+    }
+
+    .entity-row small {
+        color: #8a8678;
+        font-size: 9px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .focus-graph {
+        position: relative;
+        min-width: 0;
+        min-height: 520px;
+        overflow: hidden;
+        border: 1px solid rgba(215, 210, 200, 0.78);
+        background:
+            radial-gradient(circle, rgba(28, 27, 24, 0.09) 1px, transparent 1px) 0 0 / 22px 22px,
+            rgba(248, 246, 239, 0.62);
+    }
+
+    .focus-lines {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+
+    .focus-lines path {
+        fill: none;
+        stroke-width: 1.4;
+        stroke-opacity: 0.34;
+        vector-effect: non-scaling-stroke;
+    }
+
+    .focus-lines path.strong {
+        stroke-width: 2.2;
+        stroke-opacity: 0.58;
+    }
+
+    .focus-center,
+    .focus-node {
+        position: absolute;
+        z-index: 2;
+        min-width: 0;
+        border: 0;
+        border-top: 1px solid rgba(215, 210, 200, 0.84);
+        background: #f8f6ef;
+        color: #1c1b18;
+    }
+
+    .focus-center {
+        left: 50%;
+        top: 50%;
+        width: min(240px, 34%);
+        min-height: 86px;
+        display: grid;
+        gap: 6px;
+        transform: translate(-50%, -50%);
+        border-top: 4px solid var(--type-color);
+        border-bottom: 1px solid rgba(215, 210, 200, 0.84);
+        padding: 14px;
+        text-align: left;
+    }
+
+    .focus-center span,
+    .focus-center small,
+    .focus-node small,
+    .focus-column > strong {
+        color: #8a8678;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 10px;
-        font-style: normal;
+        text-transform: uppercase;
     }
 
-    .node.org span,
-    .legend .org {
-        background: #2d6a4f;
+    .focus-center strong {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        color: #1c1b18;
+        font-size: 15px;
+        line-height: 1.25;
     }
 
-    .node.person span,
-    .legend .person {
-        background: #d85d3f;
+    .focus-column {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 31%;
+        pointer-events: none;
     }
 
-    .node.feature span,
-    .legend .feature {
-        background: #8a8678;
+    .focus-column.incoming {
+        left: 14px;
+    }
+
+    .focus-column.outgoing {
+        right: 14px;
+    }
+
+    .focus-column > strong {
+        position: absolute;
+        top: 12px;
+        left: 0;
+    }
+
+    .focus-node {
+        width: 100%;
+        display: grid;
+        gap: 4px;
+        transform: translateY(-50%);
+        border-left: 4px solid var(--type-color);
+        padding: 8px 10px;
+        text-align: left;
+        pointer-events: auto;
+    }
+
+    .focus-node:hover {
+        background: #fffdf7;
+        border-left-color: var(--type-color);
+    }
+
+    .focus-node span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .focus-empty {
+        position: absolute;
+        left: 50%;
+        top: calc(50% + 92px);
+        width: min(280px, 70%);
+        transform: translateX(-50%);
+        text-align: center;
+        color: #625f55;
     }
 
     .legend,
@@ -1591,39 +1897,58 @@
     .node-links {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 12px;
         margin: 0;
         padding: 0;
-        list-style: none;
     }
 
-    .node-links li {
+    .node-links section {
         display: grid;
-        gap: 2px;
+        gap: 6px;
         border-bottom: 1px solid #d7d2c8;
         background: transparent;
-        padding: 8px 0;
+        padding: 0 0 10px;
     }
 
-    .node-links li span {
-        color: #8a8678;
+    .node-links h4 {
+        margin: 0;
+        color: #1c1b18;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 11px;
         text-transform: uppercase;
     }
 
-    .node-links li strong {
+    .node-links small {
+        color: #8a8678;
+        font-size: 10px;
+        text-transform: uppercase;
+    }
+
+    .node-links article {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+    }
+
+    .node-links article strong {
         color: #1c1b18;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 
+    .node-links article span {
+        color: #8a8678;
+    }
+
     .legend {
         left: 18px;
-        bottom: 18px;
+        top: 14px;
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, auto));
+        grid-template-columns: repeat(4, minmax(0, auto));
         gap: 8px 14px;
-        padding: 14px;
+        max-width: calc(100% - 150px);
+        padding: 10px 12px;
         color: #625f55;
         font-size: 12px;
     }
@@ -1839,7 +2164,6 @@
         white-space: nowrap;
     }
 
-    .muted,
     small {
         color: #8a8678;
     }
@@ -1883,6 +2207,7 @@
         flex-direction: column;
         gap: 12px;
         overflow: auto;
+        scrollbar-width: none;
         overscroll-behavior: contain;
         padding: 16px;
     }
@@ -1966,9 +2291,10 @@
 
     .evidence-item {
         margin-top: 10px;
-        border: 1px solid #ece7dd;
-        border-radius: 8px;
-        background: #fffdf6;
+        border: 0;
+        border-top: 1px solid #d7d2c8;
+        border-radius: 0;
+        background: transparent;
         padding: 10px;
     }
 
@@ -2056,7 +2382,7 @@
         max-height: min(520px, 42dvh);
         overflow: auto;
         border-bottom: 1px solid #d7d2c8;
-        padding-bottom: 12px;
+        padding: 0 12px 12px;
     }
 
     .console-strip {
@@ -2081,6 +2407,15 @@
         .graph-workspace {
             grid-template-columns: 1fr;
             grid-template-rows: minmax(420px, 1fr) auto;
+        }
+
+        .graph-map-layout {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto minmax(460px, 1fr);
+        }
+
+        .entity-index {
+            max-height: 240px;
         }
 
         .node-card {
@@ -2112,6 +2447,37 @@
         .graph-workspace {
             grid-template-rows: minmax(360px, 1fr) auto;
             padding: 8px;
+        }
+
+        .graph-canvas {
+            padding: 10px;
+        }
+
+        .graph-map-layout {
+            grid-template-rows: auto minmax(420px, 1fr);
+            min-height: 660px;
+            padding-top: 112px;
+        }
+
+        .focus-graph {
+            min-height: 420px;
+        }
+
+        .entity-index {
+            max-height: 220px;
+        }
+
+        .focus-center {
+            width: min(220px, 42%);
+        }
+
+        .focus-column {
+            width: 34%;
+        }
+
+        .legend {
+            max-width: calc(100% - 20px);
+            grid-template-columns: repeat(2, minmax(0, auto));
         }
     }
 </style>

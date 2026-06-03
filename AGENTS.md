@@ -29,6 +29,7 @@ Load the relevant skill from `.codex/skills/<skill>/SKILL.md` before specialized
 - `go-test-patterns`: Go `_test.go` files and test style review.
 - `contextos-pipeline-stage-delivery`: pipeline stage behavior, contracts, events, and traceability.
 - `contextos-api-handler`: API handlers, source connector routes, status, ingest, and stream endpoints.
+- `contextos-frontend-design`: Svelte page/component UI design, spacing, buttons, panels, graph views, source setup, and chat visual consistency.
 - `contextos-frontend-connector`: Svelte connector components and connector registration.
 - `frontend-jest-swc-patterns`: frontend `*.test.ts` files, `$lib` mocks, fetch mocks, and setter lifecycle tests.
 - `contextos-harness-engineering`: fixtures, scenarios, goldens, benchmarks, and regression gates.
@@ -48,6 +49,7 @@ The Copilot `applyTo` globs were migrated into `.codex/instructions/`. Codex sho
 - `{domain,internal,tests}/**/*.go`: follow Go pipeline instructions and use `go-best-practices` plus `go-test-patterns`.
 - `internal/{reasoning,presentation,graph}/**/*.go`: follow reasoning output instructions and use `contextos-misalignment-report`.
 - `apps/frontend/src/**/*.test.ts`: follow frontend test instructions and use `frontend-jest-swc-patterns`.
+- `apps/frontend/src/**/*.svelte`: follow frontend design instructions and use `contextos-frontend-design`; add `contextos-frontend-connector` only for connector components.
 - `.github/{agents,instructions,skills}/**/*.md` and `.codex/{agents,instructions,skills}/**/*.md`: follow customization authoring instructions and use `contextos-authoring`.
 
 ## Implementation Rules

@@ -44,6 +44,11 @@ The `KnowledgeInstall` component (`src/lib/components/knowledge/KnowledgeInstall
 - Marks the project as knowledge-ready on completion.
 - Reopenable at any time via the sidebar button.
 
+## Design Rules
+
+Svelte UI work follows the Codex frontend design skill at [`../../.codex/skills/contextos-frontend-design/`](../../.codex/skills/contextos-frontend-design/).
+Use the current restrained mono theme: warm background, separator-based rows, padded underline-fill controls, local hidden-scroll panes where needed, and readable graph/source/chat surfaces without extra boxed noise.
+
 ## Project Store
 
 `src/lib/projectStore.ts` — Svelte writable store persisted to `localStorage`:
@@ -139,4 +144,4 @@ cd apps/frontend
 bun run test:coverage
 ```
 
-The canonical test patterns live in [frontend-jest-swc-patterns](../../.github/skills/frontend-jest-swc-patterns/) and apply to `src/lib/__tests__/*.test.ts`.
+The canonical test patterns live in [frontend-jest-swc-patterns](../../.codex/skills/frontend-jest-swc-patterns/) and apply to `src/lib/__tests__/*.test.ts`.

@@ -178,6 +178,7 @@ Every customization change must keep the matching README current:
 | ----------------------------------------- | ----------------------------------------------------------------------- |
 | `contextos-api-handler`                   | new handler, `/connector/status`, `/connector/ingest`, source connector |
 | `contextos-authoring`                     | new skill, instruction file, agent, wiring map                          |
+| `contextos-frontend-design`               | Svelte UI design, spacing, buttons, panels, graph/source/chat visuals   |
 | `contextos-frontend-connector`            | new `*Connector.svelte`, connector card, AbortController, runIngest     |
 | `contextos-harness-engineering`           | fixtures, scenarios, goldens, benchmarks, regression gates              |
 | `contextos-identity-resolution-benchmark` | identity resolution, alias merge, entity matching                       |

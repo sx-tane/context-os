@@ -26,9 +26,11 @@ Single source of truth for all communication with the Go API (`/api`).
 | `probeService(url)`                                  | `GET /health` with a 3 s timeout; returns `"ok"` or `"unreachable"`.                                                                             |
 | `getJSON<T>(path)`                                   | Generic `GET` that deserialises JSON or returns `null` on any error.                                                                             |
 | `postIngest(connector, body, opts)`                  | `POST /<connector>/ingest` with a JSON body; returns a typed discriminated union `{ ok: true, body: IngestResult }                               | { ok: false, body: ApiErrorBody }`. |
+| `postFindings(body, opts)`                           | `POST /presentation/findings`; preserves backend JSON errors and converts network fetch failures into `{ ok: false, status: 0, body: { error: "api_unreachable", message } }`. |
 | `postFilesystemUpload(formData, opts)`               | `POST /filesystem/upload` with `multipart/form-data`; same discriminated-union return.                                                           |
 | `getWorkspaces()`                                    | Fetches registered API workspaces and returns an empty list when unavailable.                                                                     |
 | `upsertWorkspace(path, name)`                        | Registers or updates a local workspace path.                                                                                                     |
+| `deleteWorkspace(path)`                              | Calls `DELETE /workspace?path=...` and returns whether backend workspace data was deleted.                                                       |
 | `getWorkspaceStatus(path)`                           | Fetches workspace event/entity/mismatch counts and connector sync state.                                                                          |
 | `getArtifacts(params)`                               | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit.                            |
 | `postChatQuery(body, opts)`                          | Sends deterministic local chat questions to `POST /chat/query`; source questions return artifact-backed answers instead of presentation findings.  |
@@ -71,6 +73,14 @@ Central type registry for the frontend.
 | `ArtifactList`              | API response for local ingested source artifacts.                                    |
 | `ChatQueryRequest`          | Request body for deterministic local chat queries.                                   |
 | `ChatQueryResult`           | Local chat answer with intent, answer text, artifact evidence, range, and sync state. |
+| `GraphRelationship`         | Persisted graph edge exposed by `/graph`, including source and evidence identifiers. |
+| `GraphData`                 | Graph response with flattened entities, relationships, and summary stats.            |
+
+---
+
+## findingsAggregator.ts
+
+Merges per-source `postFindings` responses into one `FindingsResult` for the homepage. It combines mismatch arrays, sums mismatch/event/entity counts, and builds the chat summary text that distinguishes a successful zero-finding analysis from source failures.
 
 ---
 

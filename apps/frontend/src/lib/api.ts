@@ -92,12 +92,26 @@ export async function postFindings(
   | { ok: true; status: number; body: FindingsResult }
   | { ok: false; status: number; body: ApiErrorBody }
 > {
-  const res = await fetch(`${API_URL}/presentation/findings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: options.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/presentation/findings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message:
+          "API is unreachable. Start the API with scripts/start-all.sh or check the frontend /api proxy.",
+      },
+    };
+  }
   const responseBody = await readJSON(res);
   if (res.ok) {
     return {
@@ -111,6 +125,12 @@ export async function postFindings(
     status: res.status,
     body: responseBody,
   };
+}
+
+function isAbortError(error: unknown) {
+  return (
+    error instanceof DOMException && error.name === "AbortError"
+  );
 }
 
 export async function postFilesystemUpload(
@@ -266,6 +286,18 @@ export async function resetWorkspace(
     return normalizeWorkspaceStatus(await readJSON(res));
   } catch {
     return null;
+  }
+}
+
+export async function deleteWorkspace(path: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${API_URL}/workspace?path=${encodeURIComponent(path)}`,
+      { method: "DELETE" },
+    );
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

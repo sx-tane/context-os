@@ -87,7 +87,7 @@
             uriPlaceholder: "https://tenant.sharepoint.com/sites/project",
             uriHint: "SharePoint site or OneDrive folder URL",
             color: "#0078D4",
-            icon: `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M11.5 0C7.358 0 4 3.358 4 7.5c0 .23.013.457.035.682A4.496 4.496 0 0 0 0 12.5C0 14.985 2.015 17 4.5 17H5v-1.5H4.5C2.843 15.5 1.5 14.157 1.5 12.5c0-1.52 1.11-2.79 2.578-3.025l.595-.094-.127-.592A5.962 5.962 0 0 1 4.5 7.5C4.5 4.467 6.967 2 10 2c2.722 0 5.003 1.922 5.427 4.585l.1.62.627-.032c.115-.005.23-.007.346-.007 2.21 0 4 1.79 4 4s-1.79 4-4 4H16V16h.5c3.038 0 5.5-2.462 5.5-5.5 0-2.894-2.24-5.268-5.083-5.478C16.003 2.147 13.97 0 11.5 0zm.5 10v8.586l-1.793-1.793-1.414 1.414L12 21.414l3.207-3.207-1.414-1.414L12 18.586V10h-1 1z"/></svg>`,
+            icon: `<span class="text-icon">SP</span>`,
         },
         {
             connector: "googledrive",
@@ -97,7 +97,7 @@
             uriPlaceholder: "https://drive.google.com/drive/folders/id",
             uriHint: "Google Drive folder URL or ID",
             color: "#4285F4",
-            icon: `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6.28 20.4L2.64 14.01 8.37 4.04 12 10.42 6.28 20.4zm5.43 0H14.4l5.96-10.39H17.6L11.71 20.4zm6.25-11.98l-3.64-6.38h-7.28l3.64 6.38h7.28z"/></svg>`,
+            icon: `<span class="text-icon">GD</span>`,
         },
         {
             connector: "filesystem",
@@ -354,10 +354,9 @@
 <div class={embedded ? "ki-inline" : "ki-overlay"}>
     <div class="ki-panel" class:inline={embedded}>
         <div class="ki-header">
-            <h2>Source Setup</h2>
+            <h2>Workspace Sources</h2>
             <p class="subtitle">
-                Connect your data sources. ContextOS will ingest each one and
-                build a knowledge graph you can query in chat.
+                {$project.name} · {$project.workspacePath}
             </p>
             <button class="close-btn" on:click={onClose} aria-label="Close"
                 >Close</button
@@ -557,33 +556,47 @@
         font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
     }
 
+    :global(.text-icon) {
+        font: 700 0.78rem "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+        letter-spacing: 0;
+    }
+
+    button,
+    input {
+        font-family: inherit;
+    }
+
     .ki-panel {
-        background: #fff;
-        border-radius: 1rem;
+        --ki-pad-x: 1rem;
+        background: #f8f6ef;
+        border-radius: 0.75rem;
         width: min(640px, 95vw);
         max-height: 90vh;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 20px 40px rgba(0 0 0 / 0.2);
+        box-shadow: 0 20px 40px rgba(0 0 0 / 0.14);
         font-family: inherit;
+        box-sizing: border-box;
+        padding: 0 var(--ki-pad-x) 1rem;
     }
     .ki-panel.inline {
+        --ki-pad-x: 0;
         width: 100%;
         max-height: none;
-        border-radius: 0.75rem;
-        border: 1px solid #ddd8cf;
+        border-radius: 0;
+        border: 0;
         box-shadow: none;
-        background: #f4f1e9;
+        background: transparent;
     }
 
     .ki-header {
         position: sticky;
         top: 0;
         background: inherit;
-        padding: 1.25rem 1.5rem 0.75rem;
+        padding: 1rem 0 0.75rem;
         padding-right: 6rem;
-        border-bottom: 1px solid #f3f4f6;
+        border-bottom: 1px solid #d7d2c8;
     }
     .ki-header h2 {
         margin: 0 0 0.25rem;
@@ -591,32 +604,48 @@
     }
     .subtitle {
         margin: 0;
-        color: #6b7280;
-        font-size: 0.875rem;
+        color: #8a8678;
+        font-size: 0.78rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .close-btn {
         position: absolute;
-        top: 1rem;
-        right: 1rem;
-        background: none;
-        border: 1px solid #d7d2c8;
-        border-radius: 0.375rem;
+        top: 0.9rem;
+        right: 0;
+        height: 30px;
+        border: 0;
+        border-bottom: 1px solid #d7d2c8;
+        border-radius: 0;
+        background-color: transparent;
+        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+        background-position: 100% 0;
+        background-size: 200% 100%;
         font-size: 0.78rem;
+        font-weight: 700;
         font-family: inherit;
         cursor: pointer;
         color: #1c1b18;
-        padding: 0.35rem 0.65rem;
+        padding: 0 10px;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s;
     }
     .close-btn:hover {
-        color: #111827;
+        border-bottom-color: #1c1b18;
+        background-position: 0 0;
+        color: #f8f6ef;
     }
 
     .warn-banner {
         background: #fef3c7;
         color: #92400e;
-        padding: 0.6rem 1.5rem;
+        margin-top: 0.75rem;
+        padding: 0.6rem 0.75rem;
         font-size: 0.85rem;
-        border-bottom: 1px solid #fcd34d;
+        border-left: 2px solid #f59e0b;
     }
     .warn-banner code {
         background: #fde68a;
@@ -625,34 +654,32 @@
     }
 
     .connectors-list {
-        padding: 0.75rem 1.5rem;
+        padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0;
     }
 
     .connector-card {
         display: flex;
         align-items: flex-start;
         gap: 0.875rem;
-        border: 1.5px solid #e5e7eb;
-        border-radius: 0.625rem;
-        padding: 0.75rem 0.875rem;
+        border: 0;
+        border-bottom: 1px solid #d7d2c8;
+        border-radius: 0;
+        padding: 0.85rem 14px;
         cursor: pointer;
-        transition:
-            border-color 0.15s,
-            box-shadow 0.15s;
+        transition: background 0.15s;
         position: relative;
-        background: #fff;
+        background: transparent;
         font-family: inherit;
+        box-sizing: border-box;
     }
     .connector-card:hover:not(.disabled) {
-        border-color: #93c5fd;
-        box-shadow: 0 0 0 3px #eff6ff;
+        background: rgba(255, 253, 247, 0.55);
     }
     .connector-card.checked {
-        border-color: #1c1b18;
-        background: #ebe8e0;
+        background: rgba(255, 253, 247, 0.72);
     }
     .connector-card.disabled {
         opacity: 0.5;
@@ -662,7 +689,7 @@
     .brand-icon {
         width: 40px;
         height: 40px;
-        border-radius: 0.5rem;
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -707,7 +734,7 @@
         width: 18px;
         height: 18px;
         flex-shrink: 0;
-        margin-top: 2px;
+        margin: 2px 0 0 auto;
         cursor: pointer;
         accent-color: #2563eb;
     }
@@ -728,8 +755,8 @@
         color: #991b1b;
     }
     .pill.neutral {
-        background: #e5e7eb;
-        color: #6b7280;
+        background: #e5e1d8;
+        color: #625f55;
     }
 
     .uri-row {
@@ -742,23 +769,22 @@
         gap: 0.35rem;
         max-height: 12rem;
         overflow: auto;
-        border: 1px solid #e5e7eb;
-        border-radius: 0.5rem;
-        background: #fffdf7;
-        padding: 0.5rem;
+        border-left: 2px solid #d7d2c8;
+        background: transparent;
+        padding: 0.3rem 0 0.3rem 0.7rem;
     }
 
     .source-option {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        border-radius: 0.375rem;
-        padding: 0.35rem 0.4rem;
+        border-radius: 0;
+        padding: 0.35rem 0;
         cursor: pointer;
     }
 
     .source-option:hover {
-        background: #f4f1e9;
+        background: transparent;
     }
 
     .source-option span,
@@ -783,14 +809,30 @@
     }
 
     .mini-btn {
+        height: 30px;
         width: max-content;
-        border: 1px solid #d1d5db;
-        border-radius: 0.35rem;
-        background: #fff;
+        border: 0;
+        border-bottom: 1px solid #d1d5db;
+        border-radius: 0;
+        background-color: transparent;
+        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+        background-position: 100% 0;
+        background-size: 200% 100%;
         color: #111827;
-        padding: 0.25rem 0.55rem;
+        padding: 0 10px;
         font-size: 0.75rem;
+        font-weight: 700;
         font-family: inherit;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s;
+    }
+
+    .mini-btn:hover {
+        border-bottom-color: #1c1b18;
+        background-position: 0 0;
+        color: #f8f6ef;
     }
 
     .error-text {
@@ -799,8 +841,9 @@
 
     .uri-input {
         width: 100%;
-        border: 1px solid #d1d5db;
-        border-radius: 0.375rem;
+        border: 0;
+        border-bottom: 1px solid #bdb7a8;
+        border-radius: 0;
         padding: 0.4rem 0.6rem;
         font-size: 0.85rem;
         box-sizing: border-box;
@@ -808,7 +851,7 @@
         font-family: inherit;
     }
     .uri-input:focus {
-        border-color: #2563eb;
+        border-bottom-color: #1c1b18;
     }
     .hint {
         font-size: 0.75rem;
@@ -819,10 +862,10 @@
 
     .log {
         margin-top: 0.4rem;
-        background: #1e1e2e;
-        color: #cdd6f4;
+        background: #1c1b18;
+        color: #f8f6ef;
         padding: 0.5rem 0.75rem;
-        border-radius: 0.375rem;
+        border-radius: 0;
         font-size: 0.72rem;
         max-height: 6rem;
         overflow-y: auto;
@@ -833,9 +876,9 @@
     .ki-footer {
         position: sticky;
         bottom: 0;
-        background: #fff;
-        padding: 1rem 1.5rem;
-        border-top: 1px solid #f3f4f6;
+        background: inherit;
+        padding: 1rem 0 0;
+        border-top: 1px solid #d7d2c8;
         display: flex;
         gap: 0.75rem;
         align-items: center;
@@ -850,41 +893,59 @@
     }
 
     .btn {
-        padding: 0.5rem 1.25rem;
-        border-radius: 0.5rem;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 0;
         font-size: 0.875rem;
-        font-weight: 500;
-        border: 1px solid #d7d2c8;
+        font-weight: 700;
+        border: 0;
+        border-bottom: 1px solid #d7d2c8;
+        background-color: transparent;
+        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+        background-position: 100% 0;
+        background-size: 200% 100%;
         cursor: pointer;
-        transition: background 0.15s;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s,
+            opacity 0.15s;
         font-family: inherit;
     }
     .btn.primary {
-        background: #f8f6ef;
         color: #1c1b18;
     }
     .btn.primary:hover:not(:disabled) {
-        background: #ebe8e0;
+        background-position: 0 0;
+        border-bottom-color: #1c1b18;
+        color: #f8f6ef;
     }
     .btn.primary:disabled {
-        background: #ebe8e0;
         color: #8a8678;
         cursor: not-allowed;
+        opacity: 0.42;
     }
     .btn.secondary {
-        background: #f8f6ef;
         color: #1c1b18;
     }
     .btn.secondary:hover {
-        background: #ebe8e0;
+        background-position: 0 0;
+        border-bottom-color: #1c1b18;
+        color: #f8f6ef;
     }
     .btn.danger {
         margin-left: auto;
-        background: #fff5f3;
-        border: 1px solid #d85d3f;
+        background-image: linear-gradient(90deg, #9b3328 0 50%, transparent 50% 100%);
+        border-bottom: 1px solid #d85d3f;
         color: #9b3328;
     }
     .btn.danger:hover:not(:disabled) {
-        background: #ffe3dc;
+        background-position: 0 0;
+        border-bottom-color: #9b3328;
+        color: #f8f6ef;
+    }
+    .btn.danger:disabled {
+        cursor: not-allowed;
+        opacity: 0.42;
     }
 </style>
