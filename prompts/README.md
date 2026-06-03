@@ -2,7 +2,13 @@
 
 Prompt templates for local AI execution and assistive reasoning workflows.
 
-This folder currently contains only this README. Add prompt files here when a local worker or automation flow consumes reusable prompt text.
+`findings.md` is the active production prompt consumed by local findings and reasoning flows. Older cross-layer and entity-context draft prompts were removed so this folder has one clear source of truth for generated finding language.
+
+## Files
+
+| File | Responsibility | Update when |
+| --- | --- | --- |
+| [`findings.md`](findings.md) | Evidence-first finding language for local reasoning and presentation flows. | Finding format, evidence policy, confidence wording, or recommendation expectations change. |
 
 ## Responsibilities
 
