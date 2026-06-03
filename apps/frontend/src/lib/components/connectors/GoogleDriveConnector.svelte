@@ -18,6 +18,7 @@
   export let codexAccount: string;
   export let codexPlugins: CodexPlugin[];
   export let refreshCodexStatus: () => Promise<void>;
+  $: void refreshCodexStatus;
   // Local state
   let uri = "";
   let provider: IngestProvider = "codex";

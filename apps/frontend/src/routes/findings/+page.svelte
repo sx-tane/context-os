@@ -126,7 +126,7 @@
                 bind:value={content}
                 rows="5"
                 placeholder="Optional inline content for local analysis"
-            />
+            ></textarea>
         </label>
 
         <label class="toggle">

@@ -2,15 +2,11 @@
     import { onMount } from "svelte";
     import type {
         Artifact,
-        ChatMessage,
         ChatQueryResult,
         CodexPlugin,
-        ConnectorKnowledge,
-        ConnectorKind,
         FindingsResult,
         GraphData,
         GraphEntity,
-        GraphRelationship,
         ServiceStatus,
         WorkspaceStatus,
     } from "$lib/types";
@@ -20,8 +16,6 @@
         getArtifacts,
         getGraphData,
         getWorkspaceStatus,
-        postChatQuery,
-        postFindings,
         probeService,
     } from "$lib/api";
     import {
@@ -40,59 +34,26 @@
         removeWorkspace,
         workspaces,
     } from "$lib/projectStore";
+    import ChatPanel from "$lib/components/chat/ChatPanel.svelte";
+    import ActivityView from "$lib/components/insights/ActivityView.svelte";
+    import FindingsView from "$lib/components/insights/FindingsView.svelte";
+    import GraphView from "$lib/components/insights/GraphView.svelte";
+    import WorkspaceSummary from "$lib/components/insights/WorkspaceSummary.svelte";
     import {
-        aggregateFindings,
-        buildFindingsRunSummary,
-        type FindingsFailure,
-    } from "$lib/findingsAggregator";
-    import KnowledgeInstall from "$lib/components/knowledge/KnowledgeInstall.svelte";
-
-    type GraphLink = {
-        id: string;
-        source: string;
-        target: string;
-        label: string;
-        strength: number;
-        evidence?: string[];
-    };
-    type GraphTypeSummary = {
-        type: string;
-        count: number;
-        color: string;
-    };
-    type EntityIndexItem = GraphEntity & {
-        degree: number;
-    };
-    type EntityIndexSection = {
-        label: string;
-        entities: EntityIndexItem[];
-    };
-    type RelationshipRow = {
-        entityName: string;
-        confidence: number;
-        evidence?: string[];
-    };
-    type RelationshipKindGroup = {
-        kind: string;
-        incoming: RelationshipRow[];
-        outgoing: RelationshipRow[];
-    };
-    type FocusGraphRow = {
-        id: string;
-        side: "incoming" | "outgoing";
-        y: number;
-        entity: GraphEntity;
-        link: GraphLink;
-        color: string;
-    };
-    type AnalysisSourceStatus = {
-        connector: ConnectorKind;
-        uri: string;
-        status: "queued" | "running" | "done" | "failed";
-        detail?: string;
-    };
-
-    const analysisSourceTimeoutMs = 90_000;
+        demoArtifacts,
+        demoChatQueryResult,
+        demoFindings,
+        demoGraphData,
+        demoWorkspaceStatus,
+    } from "$lib/demoWorkspace";
+    import { buildGraphLinks } from "$lib/graphViewModel";
+    import { runAnalysis } from "$lib/analysisRunner";
+    import {
+        assistantMsg,
+        classifyChatCommand,
+        runChatQuery,
+        userMsg,
+    } from "$lib/chatController";
 
     let apiStatus: ServiceStatus = "checking";
     let workerStatus: ServiceStatus = "checking";
@@ -109,7 +70,6 @@
     let workspaceStatus: WorkspaceStatus | null = null;
     let graphData: GraphData | null = null;
     let selectedEntity: GraphEntity | null = null;
-    let entityQuery = "";
     let lastChatResult: ChatQueryResult | null = null;
     let lastFindings: FindingsResult | null = null;
     let lastAnalysisAt = "";
@@ -125,37 +85,6 @@
     $: graphEntities = graphData?.entities ?? [];
     $: graphRelationships = graphData?.relationships ?? [];
     $: graphLinks = buildGraphLinks(graphEntities, graphRelationships);
-    $: graphEntityById = new Map(graphEntities.map((entity) => [entity.id, entity]));
-    $: graphDegree = linkDegree(graphLinks);
-    $: selectedLinks = selectedEntity
-        ? graphLinks.filter((link) => link.source === selectedEntity?.id || link.target === selectedEntity?.id)
-        : [];
-    $: linkedEntityIds = selectedEntity ? linkedIdsForEntity(selectedEntity.id, selectedLinks) : new Set<string>();
-    $: entityIndexSections = buildEntityIndexSections(
-        graphEntities,
-        graphDegree,
-        selectedEntity,
-        linkedEntityIds,
-        entityQuery,
-    );
-    $: relationshipGroups = selectedEntity
-        ? buildRelationshipGroups(selectedEntity, selectedLinks, graphEntityById)
-        : [];
-    $: focusRows = selectedEntity
-        ? buildFocusGraphRows(selectedEntity, selectedLinks, graphEntityById)
-        : [];
-    $: incomingFocusRows = focusRows.filter((row) => row.side === "incoming");
-    $: outgoingFocusRows = focusRows.filter((row) => row.side === "outgoing");
-    $: graphLegendTypes = buildGraphLegendTypes(graphEntities);
-    $: if (
-        graphEntities.length > 0 &&
-        (!selectedEntity || !graphEntities.some((entity) => entity.id === selectedEntity?.id))
-    ) {
-        selectedEntity = topGraphEntity(graphEntities, graphDegree);
-    }
-    $: if (graphEntities.length === 0) {
-        selectedEntity = null;
-    }
     $: mismatchCount =
         workspaceStatus?.mismatch_count ?? lastFindings?.mismatch_count ?? 0;
     $: statusLine = buildStatusLine(
@@ -169,7 +98,6 @@
     $: sourceSummary = `${readySources.length} source${readySources.length === 1 ? "" : "s"}`;
     $: topContext = `${$project.name} · ${sourceSummary}`;
     $: hasSources = readySources.length > 0;
-    $: sourceGroups = groupSources(readySources);
     $: recentArtifacts = activityArtifacts.length > 0 ? activityArtifacts : (lastChatResult?.artifacts ?? []);
     $: protectedWorkspace = workspacePath === DEFAULT_WORKSPACE_PATH || workspacePath === DEMO_WORKSPACE_PATH;
 
@@ -306,51 +234,6 @@
         }
     }
 
-    function makeId() {
-        return Math.random().toString(36).slice(2) + Date.now().toString(36);
-    }
-
-    function now() {
-        return new Date().toISOString();
-    }
-
-    function userMsg(text: string): ChatMessage {
-        return { id: makeId(), role: "user", text, createdAt: now() };
-    }
-
-    function assistantMsg(
-        text: string,
-        card?: ChatMessage["card"],
-    ): ChatMessage {
-        return {
-            id: makeId(),
-            role: "assistant",
-            text,
-            createdAt: now(),
-            card,
-        };
-    }
-
-    function loadingMsg(text: string): ChatMessage {
-        return {
-            id: makeId(),
-            role: "assistant",
-            text,
-            createdAt: now(),
-            loading: true,
-        };
-    }
-
-    function progressMsg(id: string, text: string): ChatMessage {
-        return {
-            id,
-            role: "assistant",
-            text,
-            createdAt: now(),
-            loading: true,
-        };
-    }
-
     async function submitCommand() {
         const text = command.trim();
         if (!text || busy) return;
@@ -360,250 +243,47 @@
     }
 
     async function routeCommand(text: string) {
-        const lower = text.toLowerCase();
-        if (lower === "clear") {
+        const action = classifyChatCommand(text);
+        if (action === "clear") {
             clearChat();
             lastChatResult = null;
             lastFindings = null;
             addMessage(assistantMsg("Chat history cleared for this workspace."));
             return;
         }
-        if (
-            lower.includes("install") ||
-            lower.includes("setup") ||
-            lower.includes("add source") ||
-            lower.includes("connect source")
-        ) {
+        if (action === "openSources") {
             sourcePanelOpen = true;
             addMessage(assistantMsg("Source setup is open in the workspace panel."));
             return;
         }
-        if (
-            lower.includes("finding") ||
-            lower.includes("mismatch") ||
-            lower.startsWith("analyze") ||
-            lower.startsWith("analyse")
-        ) {
+        if (action === "runFindings") {
             await runFindings();
             return;
         }
-        await runLocalQuery(text);
-    }
-
-    async function runLocalQuery(text: string) {
-        const load = loadingMsg("Checking connected source context...");
-        addMessage(load);
-        busy = true;
-        try {
-            if (workspacePath === DEMO_WORKSPACE_PATH) {
-                const result = demoChatQueryResult(text);
-                lastChatResult = result;
-                activityArtifacts = result.artifacts;
-                replaceMessage(
-                    load.id,
-                    assistantMsg(result.answer, {
-                        kind: "query",
-                        chatResult: result,
-                    }),
-                );
-                return;
-            }
-
-            const res = await postChatQuery({
-                workspace_id: workspacePath,
-                message: text,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                local_date: localDateString(new Date()),
-                limit: 20,
-            });
-            if (res.ok) {
-                lastChatResult = res.body;
-                replaceMessage(
-                    load.id,
-                    assistantMsg(res.body.answer, {
-                        kind: "query",
-                        chatResult: res.body,
-                    }),
-                );
-                return;
-            }
-            replaceMessage(
-                load.id,
-                assistantMsg(
-                    `Source query failed: ${res.body.message ?? res.body.error ?? "unknown error"}`,
-                ),
-            );
-        } catch (error) {
-            replaceMessage(
-                load.id,
-                assistantMsg(`Source query failed: ${String(error)}`),
-            );
-        } finally {
-            busy = false;
-            await refreshWorkspace();
-        }
+        await runChatQuery({
+            text,
+            workspacePath,
+            addMessage,
+            replaceMessage,
+            setBusy: (value) => (busy = value),
+            setLastChatResult: (result) => (lastChatResult = result),
+            setActivityArtifacts: (artifacts) => (activityArtifacts = artifacts),
+            refreshWorkspace,
+        });
     }
 
     async function runFindings() {
-        if (workspacePath === DEMO_WORKSPACE_PATH) {
-            const findings = demoFindings();
-            lastFindings = findings;
-            lastAnalysisAt = new Date().toISOString();
-            addMessage(
-                assistantMsg(
-                    "Demo analysis complete for 3 selected sources. Found 2 findings.",
-                    {
-                        kind: "findings",
-                        findingsResult: findings,
-                    },
-                ),
-            );
-            return;
-        }
-
-        const ready = getProject().connectors.filter(
-            (source) => source.status === "ready",
-        );
-        if (ready.length === 0) {
-            sourcePanelOpen = true;
-            addMessage(
-                assistantMsg(
-                    "No ready sources in this workspace yet. Configure at least one source first.",
-                ),
-            );
-            return;
-        }
-
-        const load = loadingMsg(`Running local analysis for ${ready.length} selected source${ready.length === 1 ? "" : "s"}...`);
-        addMessage(load);
-        busy = true;
-        try {
-            const codexConnectors = new Set<ConnectorKind>([
-                "github",
-                "jira",
-                "slack",
-                "notion",
-                "sharepoint",
-                "googledrive",
-            ]);
-            const completed: FindingsResult[] = [];
-            const failures: FindingsFailure[] = [];
-            const sourceStatuses: AnalysisSourceStatus[] = ready.map((source) => ({
-                connector: source.connector,
-                uri: source.uri,
-                status: "queued",
-            }));
-
-            const updateProgress = () => {
-                replaceMessage(load.id, progressMsg(load.id, buildAnalysisProgress(sourceStatuses)));
-            };
-            updateProgress();
-
-            for (const [index, source] of ready.entries()) {
-                const provider = codexConnectors.has(source.connector)
-                    ? "codex"
-                    : "token";
-                sourceStatuses[index] = {
-                    ...sourceStatuses[index],
-                    status: "running",
-                    detail: "request sent",
-                };
-                updateProgress();
-
-                const controller = new AbortController();
-                const timeout = window.setTimeout(() => controller.abort(), analysisSourceTimeoutMs);
-                try {
-                    const res = await postFindings({
-                        workspace_id: workspacePath,
-                        connector: source.connector,
-                        uri: source.uri,
-                        provider,
-                        role: "pmo",
-                        include_execution: false,
-                    }, { signal: controller.signal });
-                    if (res.ok) {
-                        completed.push(res.body);
-                        sourceStatuses[index] = {
-                            ...sourceStatuses[index],
-                            status: "done",
-                            detail: `${res.body.event_count ?? 0} events, ${res.body.mismatch_count ?? res.body.mismatches?.length ?? 0} findings`,
-                        };
-                    } else {
-                        const message = res.body.message ?? res.body.error ?? "unknown error";
-                        failures.push({
-                            connector: source.connector,
-                            uri: source.uri,
-                            message,
-                        });
-                        sourceStatuses[index] = {
-                            ...sourceStatuses[index],
-                            status: "failed",
-                            detail: message,
-                        };
-                    }
-                } catch (error) {
-                    const message = isAbortError(error)
-                        ? `timed out after ${Math.round(analysisSourceTimeoutMs / 1000)}s`
-                        : String(error);
-                    failures.push({
-                        connector: source.connector,
-                        uri: source.uri,
-                        message,
-                    });
-                    sourceStatuses[index] = {
-                        ...sourceStatuses[index],
-                        status: "failed",
-                        detail: message,
-                    };
-                } finally {
-                    window.clearTimeout(timeout);
-                    updateProgress();
-                }
-            }
-
-            const aggregated = aggregateFindings(completed);
-            lastFindings = aggregated;
-            lastAnalysisAt = new Date().toISOString();
-            const summary = buildFindingsRunSummary({
-                sourceCount: ready.length,
-                completedCount: completed.length,
-                result: aggregated,
-                failures,
-            });
-
-            replaceMessage(
-                load.id,
-                assistantMsg(summary, {
-                    kind: "findings",
-                    findingsResult: aggregated ?? undefined,
-                }),
-            );
-        } catch (error) {
-            replaceMessage(
-                load.id,
-                assistantMsg(`Analysis failed: ${String(error)}`),
-            );
-        } finally {
-            busy = false;
-            await refreshWorkspace();
-        }
-    }
-
-    function buildAnalysisProgress(statuses: AnalysisSourceStatus[]) {
-        const done = statuses.filter((source) => source.status === "done").length;
-        const failed = statuses.filter((source) => source.status === "failed").length;
-        const lines = statuses.map((source, index) => {
-            const label = `${index + 1}. ${source.connector}:${source.uri}`;
-            if (source.status === "queued") return `${label} - queued`;
-            if (source.status === "running") return `${label} - running`;
-            if (source.status === "done") return `${label} - done${source.detail ? ` (${source.detail})` : ""}`;
-            return `${label} - failed${source.detail ? `: ${source.detail}` : ""}`;
+        await runAnalysis({
+            workspacePath,
+            readySources: getProject().connectors.filter((source) => source.status === "ready"),
+            addMessage,
+            replaceMessage,
+            setBusy: (value) => (busy = value),
+            setLastFindings: (result) => (lastFindings = result),
+            setLastAnalysisAt: (value) => (lastAnalysisAt = value),
+            openSources: () => (sourcePanelOpen = true),
+            refreshWorkspace,
         });
-        return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed.\n${lines.join("\n")}`;
-    }
-
-    function isAbortError(error: unknown) {
-        return error instanceof DOMException && error.name === "AbortError";
     }
 
     async function handleKnowledgeDone() {
@@ -660,416 +340,6 @@
         return `${label}: offline`;
     }
 
-    function buildGraphLinks(entities: GraphEntity[], relationships: GraphRelationship[]) {
-        if (relationships.length > 0) {
-            return relationships
-                .map((relationship) => ({
-                    id: relationship.id,
-                    source: relationship.from_id,
-                    target: relationship.to_id,
-                    label: relationship.kind,
-                    strength: relationship.confidence ?? 0.5,
-                    evidence: relationship.evidence,
-                }))
-                .sort((a, b) => b.strength - a.strength)
-                .filter((link) => entities.some((entity) => entity.id === link.source) && entities.some((entity) => entity.id === link.target));
-        }
-
-        const links = new Map<string, GraphLink>();
-        connectGroups(links, groupBy(entities, (entity) => entity.source || "unknown"), "source", 0.8, 4);
-        connectGroups(links, groupBy(entities, (entity) => normalizedEvidence(entity)), "evidence", 0.55, 3);
-
-        const aliasGroups = new Map<string, GraphEntity[]>();
-        for (const entity of entities) {
-            const aliases = [
-                ...(entity.aliases ?? []),
-                ...(entity.candidates ?? []).map((candidate) => candidate.alias),
-            ];
-            for (const alias of aliases) {
-                const key = normalizeGraphKey(alias);
-                if (!key) continue;
-                aliasGroups.set(key, [...(aliasGroups.get(key) ?? []), entity]);
-            }
-        }
-        connectGroups(links, aliasGroups, "alias", 0.95, 5);
-        return [...links.values()]
-            .sort((a, b) => b.strength - a.strength)
-            .slice(0, 130);
-    }
-
-    function linkDegree(links: GraphLink[]) {
-        const degree = new Map<string, number>();
-        for (const link of links) {
-            degree.set(link.source, (degree.get(link.source) ?? 0) + 1);
-            degree.set(link.target, (degree.get(link.target) ?? 0) + 1);
-        }
-        return degree;
-    }
-
-    function connectGroups(
-        links: Map<string, GraphLink>,
-        groups: Map<string, GraphEntity[]>,
-        label: string,
-        strength: number,
-        maxPerGroup: number,
-    ) {
-        for (const group of groups.values()) {
-            const unique = dedupeEntities(group);
-            if (unique.length < 2) continue;
-            const sorted = unique
-                .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
-                .slice(0, maxPerGroup + 1);
-            for (let index = 1; index < sorted.length; index += 1) {
-                addGraphLink(links, sorted[0], sorted[index], label, strength);
-            }
-        }
-    }
-
-    function addGraphLink(
-        links: Map<string, GraphLink>,
-        source: GraphEntity,
-        target: GraphEntity,
-        label: string,
-        strength: number,
-    ) {
-        if (source.id === target.id) return;
-        const ids = [source.id, target.id].sort();
-        const key = `${ids[0]}:${ids[1]}`;
-        const existing = links.get(key);
-        if (existing && existing.strength >= strength) return;
-        links.set(key, { id: key, source: ids[0], target: ids[1], label, strength });
-    }
-
-    function groupBy(entities: GraphEntity[], keyFn: (entity: GraphEntity) => string) {
-        const groups = new Map<string, GraphEntity[]>();
-        for (const entity of entities) {
-            const key = keyFn(entity);
-            if (!key) continue;
-            groups.set(key, [...(groups.get(key) ?? []), entity]);
-        }
-        return groups;
-    }
-
-    function dedupeEntities(entities: GraphEntity[]) {
-        return [...new Map(entities.map((entity) => [entity.id, entity])).values()];
-    }
-
-    function normalizedEvidence(entity: GraphEntity) {
-        return normalizeGraphKey(entity.evidence?.[0] ?? "");
-    }
-
-    function normalizeGraphKey(value: string) {
-        return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80);
-    }
-
-    function buildGraphLegendTypes(entities: GraphEntity[]): GraphTypeSummary[] {
-        const counts = new Map<string, GraphTypeSummary>();
-        for (const entity of entities) {
-            const type = entity.type || "entity";
-            const key = type.toLowerCase();
-            const current = counts.get(key);
-            if (current) {
-                current.count += 1;
-            } else {
-                counts.set(key, { type, count: 1, color: graphTypeColor(type) });
-            }
-        }
-        return [...counts.values()]
-            .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
-    }
-
-    function compareGraphEntities(a: GraphEntity & { degree: number }, b: GraphEntity & { degree: number }) {
-        if (b.degree !== a.degree) return b.degree - a.degree;
-        const confidenceDelta = (b.confidence ?? 0) - (a.confidence ?? 0);
-        if (confidenceDelta !== 0) return confidenceDelta;
-        return a.name.localeCompare(b.name);
-    }
-
-    function topGraphEntity(entities: GraphEntity[], degree: Map<string, number>) {
-        return [...entities]
-            .map((entity) => ({ ...entity, degree: degree.get(entity.id) ?? 0 }))
-            .sort(compareGraphEntities)[0] ?? entities[0];
-    }
-
-    function linkedIdsForEntity(entityId: string, links: GraphLink[]) {
-        const ids = new Set<string>();
-        for (const link of links) {
-            if (link.source === entityId) ids.add(link.target);
-            if (link.target === entityId) ids.add(link.source);
-        }
-        return ids;
-    }
-
-    function buildEntityIndexSections(
-        entities: GraphEntity[],
-        degree: Map<string, number>,
-        selected: GraphEntity | null,
-        linkedIds: Set<string>,
-        query: string,
-    ): EntityIndexSection[] {
-        const items = entities
-            .map((entity) => ({ ...entity, degree: degree.get(entity.id) ?? 0 }))
-            .sort(compareGraphEntities);
-        const normalizedQuery = query.trim().toLowerCase();
-        if (normalizedQuery) {
-            return [
-                {
-                    label: "Matches",
-                    entities: items
-                        .filter((entity) =>
-                            `${entity.name} ${entity.type}`.toLowerCase().includes(normalizedQuery),
-                        )
-                        .slice(0, 60),
-                },
-            ].filter((section) => section.entities.length > 0);
-        }
-
-        const used = new Set<string>();
-        const sections: EntityIndexSection[] = [];
-        if (selected) {
-            const selectedItem = items.find((entity) => entity.id === selected.id);
-            if (selectedItem) {
-                sections.push({ label: "Selected", entities: [selectedItem] });
-                used.add(selectedItem.id);
-            }
-        }
-
-        const linked = items
-            .filter((entity) => linkedIds.has(entity.id) && !used.has(entity.id))
-            .slice(0, 14);
-        if (linked.length) {
-            sections.push({ label: "Linked", entities: linked });
-            for (const entity of linked) used.add(entity.id);
-        }
-
-        const top = items
-            .filter((entity) => !used.has(entity.id))
-            .slice(0, Math.max(12, 36 - used.size));
-        if (top.length) sections.push({ label: "Top entities", entities: top });
-        return sections;
-    }
-
-    function buildFocusGraphRows(
-        entity: GraphEntity,
-        links: GraphLink[],
-        entitiesById: Map<string, GraphEntity>,
-    ): FocusGraphRow[] {
-        const incoming = buildSideRows(entity, links, entitiesById, "incoming");
-        const outgoing = buildSideRows(entity, links, entitiesById, "outgoing");
-        return [...positionFocusRows(incoming), ...positionFocusRows(outgoing)];
-    }
-
-    function buildSideRows(
-        entity: GraphEntity,
-        links: GraphLink[],
-        entitiesById: Map<string, GraphEntity>,
-        side: "incoming" | "outgoing",
-    ): FocusGraphRow[] {
-        const rows: FocusGraphRow[] = [];
-        for (const link of links) {
-            if (side === "incoming" && link.target !== entity.id) continue;
-            if (side === "outgoing" && link.source !== entity.id) continue;
-            const otherId = side === "incoming" ? link.source : link.target;
-            const other = entitiesById.get(otherId);
-            if (!other) continue;
-            rows.push({
-                id: `${side}:${link.id}`,
-                side,
-                y: 50,
-                entity: other,
-                link,
-                color: graphTypeColor(other.type || "entity"),
-            });
-        }
-        return rows
-            .sort((a, b) => b.link.strength - a.link.strength || a.entity.name.localeCompare(b.entity.name))
-            .slice(0, 14);
-    }
-
-    function positionFocusRows(rows: FocusGraphRow[]) {
-        if (rows.length === 0) return rows;
-        const step = Math.min(11, 72 / Math.max(rows.length - 1, 1));
-        const start = 50 - ((rows.length - 1) * step) / 2;
-        return rows.map((row, index) => ({
-            ...row,
-            y: Math.max(12, Math.min(88, start + index * step)),
-        }));
-    }
-
-    function graphTypeColor(type: string) {
-        const palette = [
-            "#1f5f8b",
-            "#2d6a4f",
-            "#b5523a",
-            "#6f5aa8",
-            "#8a6a20",
-            "#2f7f7f",
-            "#9b476e",
-            "#59633a",
-            "#7f4f2a",
-            "#405f9a",
-        ];
-        let hash = 0;
-        for (const char of type.toLowerCase()) {
-            hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-        }
-        return palette[hash % palette.length];
-    }
-
-    function typeAccentStyle(type: string) {
-        return `--type-color:${graphTypeColor(type || "entity")};`;
-    }
-
-    function buildRelationshipGroups(
-        entity: GraphEntity,
-        links: GraphLink[],
-        entitiesById: Map<string, GraphEntity>,
-    ): RelationshipKindGroup[] {
-        const groups = new Map<string, RelationshipKindGroup>();
-        for (const link of links) {
-            const kind = link.label || "related";
-            const group = groups.get(kind) ?? { kind, incoming: [], outgoing: [] };
-            const source = entitiesById.get(link.source);
-            const target = entitiesById.get(link.target);
-            if (link.source === entity.id && target) {
-                group.outgoing.push({
-                    entityName: target.name,
-                    confidence: link.strength,
-                    evidence: link.evidence,
-                });
-            } else if (link.target === entity.id && source) {
-                group.incoming.push({
-                    entityName: source.name,
-                    confidence: link.strength,
-                    evidence: link.evidence,
-                });
-            }
-            groups.set(kind, group);
-        }
-        return [...groups.values()].sort((a, b) => a.kind.localeCompare(b.kind));
-    }
-
-    function formatTime(value?: string) {
-        if (!value) return "never";
-        return new Intl.DateTimeFormat(undefined, {
-            month: "short",
-            day: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZoneName: "short",
-        }).format(new Date(value));
-    }
-
-    function findingDetectedTime() {
-        return formatTime(lastAnalysisAt || new Date().toISOString());
-    }
-
-    function findingEvidenceTime() {
-        const latest = recentArtifacts
-            .map((artifact) => artifact.ingested_at)
-            .filter(Boolean)
-            .sort()
-            .at(-1);
-        return formatTime(latest || lastAnalysisAt || new Date().toISOString());
-    }
-
-    function severityLabel(value?: string) {
-        const normalized = (value ?? "review").toLowerCase();
-        if (normalized === "high") return "HIGH";
-        if (normalized === "medium") return "MEDIUM";
-        if (normalized === "low") return "LOW";
-        return "REVIEW";
-    }
-
-    function relationshipLabel(value: string) {
-        const normalized = value.replaceAll("_", " ");
-        return normalized;
-    }
-
-    function findingSummary(mismatch: unknown) {
-        const record = mismatch as Record<string, unknown>;
-        return String(record.summary ?? record.mismatch_type ?? record.id ?? "Finding");
-    }
-
-    function findingDescription(mismatch: unknown) {
-        const record = mismatch as Record<string, unknown>;
-        return String(record.description ?? record.recommended_action ?? "Review this item against source evidence.");
-    }
-
-    function findingRecommendedAction(mismatch: unknown) {
-        const record = mismatch as Record<string, unknown>;
-        return String(record.recommended_action ?? "");
-    }
-
-    function findingImpact(mismatch: unknown) {
-        const record = mismatch as Record<string, unknown>;
-        return String(record.impact ?? "");
-    }
-
-    function localDateString(date: Date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-    }
-
-    function groupSources(sources: ConnectorKnowledge[]) {
-        const groups = new Map<string, ConnectorKnowledge[]>();
-        for (const source of sources) {
-            const existing = groups.get(source.connector) ?? [];
-            existing.push(source);
-            groups.set(source.connector, existing);
-        }
-        return [...groups.entries()];
-    }
-
-    type MessageLine = {
-        kind: "heading" | "number" | "bullet" | "body" | "blank";
-        text: string;
-    };
-
-    function messageLines(text: string): MessageLine[] {
-        return text.split("\n").map((line) => {
-            const trimmed = preferEnglishLine(line).trim();
-            if (trimmed === "") return { kind: "blank", text: "" };
-            if (/^\*\*[^*]+\*\*$/.test(trimmed)) {
-                return { kind: "heading", text: cleanMarkdown(trimmed) };
-            }
-            if (/^\d+\.\s+/.test(trimmed)) {
-                return { kind: "number", text: cleanMarkdown(trimmed) };
-            }
-            if (/^[-*]\s+/.test(trimmed)) {
-                return { kind: "bullet", text: cleanMarkdown(trimmed.replace(/^[-*]\s+/, "")) };
-            }
-            return { kind: "body", text: cleanMarkdown(trimmed) };
-        });
-    }
-
-    function preferEnglishLine(line: string) {
-        const cleaned = line.replace(/\r/g, "");
-        const delimiterIndex = cleaned.indexOf(" / ");
-        if (delimiterIndex >= 0) {
-            return cleaned.slice(0, delimiterIndex).trim();
-        }
-        const containsHan = /[\u4e00-\u9fff]/.test(cleaned);
-        const hasAsciiAlpha = /[A-Za-z]/.test(cleaned);
-        if (containsHan && !hasAsciiAlpha) {
-            return "";
-        }
-        return cleaned;
-    }
-
-    function cleanMarkdown(value: string) {
-        return value.replace(/\*\*/g, "").replace(/`/g, "");
-    }
-
-    function previewText(value?: string, max = 360) {
-        const text = cleanMarkdown((value ?? "").replace(/\s+/g, " ").trim());
-        if (text.length <= max) return text;
-        return `${text.slice(0, max).trim()}...`;
-    }
-
     function normalizeCodexAccount(value: string) {
         const clean = value
             .split("\n")
@@ -1079,191 +349,6 @@
         return clean || "Codex logged in";
     }
 
-    function artifactOrigin(artifact: Artifact) {
-        return artifact.connector === "filesystem" ? "LOCAL" : "SOURCE";
-    }
-
-    function artifactProvider(artifact: Artifact) {
-        return artifact.connector === "filesystem" ? "Local file" : "Codex source";
-    }
-
-    function artifactSourceLabel(artifact: Artifact) {
-        const metadata = artifact.metadata ?? {};
-        if (artifact.connector === "slack") {
-            return metadata.slack_channel_id || artifact.source_uri || artifact.title || "Slack";
-        }
-        if (artifact.connector === "github") {
-            const owner = metadata.github_owner;
-            const repo = metadata.github_repo;
-            return owner && repo ? `${owner}/${repo}` : artifact.source_uri || artifact.title || "GitHub";
-        }
-        return artifact.source_uri || artifact.title || artifact.connector;
-    }
-
-    function artifactLink(artifact: Artifact) {
-        const fields = [
-            artifact.source_uri,
-            artifact.metadata?.source_uri,
-            artifact.metadata?.source_url,
-            artifact.metadata?.url,
-            artifact.body,
-            artifact.preview,
-        ];
-        for (const field of fields) {
-            const match = field?.match(/https?:\/\/[^\s)]+/);
-            if (match) return match[0].replace(/[.,;]+$/, "");
-        }
-        return "";
-    }
-
-    function demoWorkspaceStatus(): WorkspaceStatus {
-        return {
-            workspace: {
-                id: DEMO_WORKSPACE_PATH,
-                name: "Demo Workspace",
-                path: DEMO_WORKSPACE_PATH,
-            },
-            workspace_count: 2,
-            event_count: 54,
-            entity_count: 8,
-            relationship_count: 7,
-            mismatch_count: 2,
-            connector_sync_count: 3,
-            audit_count: 9,
-            syncs: [
-                { connector: "github", source_uri: "context-os/demo-api", event_count: 18, status: "ready" },
-                { connector: "slack", source_uri: "#launch-review", event_count: 24, status: "ready" },
-                { connector: "jira", source_uri: "DEMO", event_count: 12, status: "ready" },
-            ],
-        };
-    }
-
-    function demoFindings(): FindingsResult {
-        return {
-            connector: "multiple",
-            uri: "3 demo sources",
-            role: "pmo",
-            trace_id: "demo-trace",
-            summary: "Demo findings show how ContextOS connects source evidence into cross-layer delivery risks.",
-            event_count: 54,
-            entity_count: 8,
-            mismatch_count: 2,
-            severity_count: { high: 1, medium: 1, low: 0 },
-            mismatch_ids: ["demo-finding-1", "demo-finding-2"],
-            mismatches: [
-                {
-                    id: "demo-finding-1",
-                    severity: "high",
-                    mismatch_type: "requirement_gap",
-                    summary: "Checkout requirement missing service owner",
-                    description: "Jira says refund status must ship this sprint, but GitHub work only covers the UI state and Slack has an unresolved backend ownership question.",
-                    evidence: ["jira:DEMO-42", "github:context-os/demo-api#18", "slack:#launch-review"],
-                    confidence: 0.88,
-                    impact: "PMO cannot confirm delivery readiness without backend ownership.",
-                    recommended_action: "Assign a service owner and update the Jira acceptance criteria before release review.",
-                },
-                {
-                    id: "demo-finding-2",
-                    severity: "medium",
-                    mismatch_type: "contract_drift",
-                    summary: "API contract drift for refundStatus",
-                    description: "Frontend discussion references refundStatus, while service notes still describe refund_state.",
-                    evidence: ["github:context-os/demo-api#21", "slack:#launch-review"],
-                    confidence: 0.76,
-                    impact: "QA may validate the wrong response field.",
-                    recommended_action: "Normalize the API contract name and add the field to the test plan.",
-                },
-            ],
-        };
-    }
-
-    function demoGraphData(): GraphData {
-        return {
-            workspace_id: DEMO_WORKSPACE_PATH,
-            count: 8,
-            entity_count: 8,
-            relationship_count: 7,
-            entities: [
-                { id: "entity-checkout", name: "Checkout", type: "feature", source: "jira", confidence: 0.94, evidence: ["DEMO-42 acceptance criteria"] },
-                { id: "entity-refund", name: "Refund Status", type: "requirement", source: "jira", confidence: 0.9, evidence: ["DEMO-42: show refund status"] },
-                { id: "entity-api", name: "Payments API", type: "service", source: "github", confidence: 0.86, evidence: ["context-os/demo-api#18"] },
-                { id: "entity-ui", name: "Checkout UI", type: "presentation", source: "github", confidence: 0.82, evidence: ["context-os/demo-api#21"] },
-                { id: "entity-qa", name: "QA Release Plan", type: "qa", source: "jira", confidence: 0.78, evidence: ["DEMO-51"] },
-                { id: "entity-pmo", name: "Launch Review", type: "pmo", source: "slack", confidence: 0.84, evidence: ["#launch-review decision thread"] },
-                { id: "entity-owner", name: "Service Owner", type: "person", source: "slack", confidence: 0.63, evidence: ["Ownership unresolved in Slack"] },
-                { id: "entity-contract", name: "refundStatus contract", type: "contract", source: "github", confidence: 0.72, evidence: ["OpenAPI notes in PR #21"] },
-            ],
-            relationships: [
-                { id: "rel-1", from_id: "entity-checkout", to_id: "entity-refund", kind: "requires", confidence: 0.94, evidence: ["DEMO-42"] },
-                { id: "rel-2", from_id: "entity-refund", to_id: "entity-api", kind: "depends_on", confidence: 0.86, evidence: ["PR #18"] },
-                { id: "rel-3", from_id: "entity-ui", to_id: "entity-contract", kind: "expects_contract", confidence: 0.82, evidence: ["PR #21"] },
-                { id: "rel-4", from_id: "entity-contract", to_id: "entity-api", kind: "implemented_by", confidence: 0.72, evidence: ["API notes"] },
-                { id: "rel-5", from_id: "entity-qa", to_id: "entity-contract", kind: "validates", confidence: 0.78, evidence: ["DEMO-51"] },
-                { id: "rel-6", from_id: "entity-pmo", to_id: "entity-checkout", kind: "tracks", confidence: 0.84, evidence: ["Launch review"] },
-                { id: "rel-7", from_id: "entity-owner", to_id: "entity-api", kind: "owns", confidence: 0.42, evidence: ["Unconfirmed Slack thread"] },
-            ],
-        };
-    }
-
-    function demoArtifacts(): Artifact[] {
-        return [
-            demoArtifact("demo-artifact-1", "jira", "DEMO-42", "Refund status acceptance criteria", "PMO asks for refund status in checkout before launch review.", "2026-01-01T09:25:00.000Z"),
-            demoArtifact("demo-artifact-2", "github", "context-os/demo-api#18", "Payments API ownership question", "Backend PR covers API plumbing but does not assign a service owner.", "2026-01-01T09:15:00.000Z"),
-            demoArtifact("demo-artifact-3", "slack", "#launch-review", "Launch review decision thread", "Team agrees the UI is ready but backend ownership is still unresolved.", "2026-01-01T09:20:00.000Z"),
-            demoArtifact("demo-artifact-4", "github", "context-os/demo-api#21", "refundStatus naming drift", "Frontend uses refundStatus while service notes mention refund_state.", "2026-01-01T09:10:00.000Z"),
-        ];
-    }
-
-    function demoChatQueryResult(text: string): ChatQueryResult {
-        const lower = text.toLowerCase();
-        const artifacts = demoArtifacts();
-        let answer = "Demo workspace is working locally. It has Jira, GitHub, and Slack evidence saved for the same workspace, so you can inspect findings, graph, and recent activity without connecting real sources.";
-        let summary = "Demo workspace status";
-        let intent = "status";
-
-        if (lower.includes("finding") || lower.includes("mismatch") || lower.includes("refund")) {
-            intent = "findings";
-            summary = "Demo refund status delivery risk";
-            answer = "Jira says refund status must ship this sprint, GitHub currently covers the UI state, and Slack still has an unresolved backend ownership question. ContextOS flags that as a high-confidence requirement gap, with a second medium finding for refundStatus/refund_state contract drift.";
-        } else if (lower.includes("graph") || lower.includes("entity") || lower.includes("relationship")) {
-            intent = "artifacts";
-            summary = "Demo graph evidence";
-            answer = "The demo graph links Checkout, Refund Status, Payments API, Checkout UI, QA Release Plan, Launch Review, Service Owner, and the refundStatus contract. The weakest link is service ownership, which is why the finding appears.";
-        } else if (lower.includes("source") || lower.includes("connected") || lower.includes("ingest")) {
-            intent = "status";
-            summary = "Demo source status";
-            answer = "This demo workspace has 3 ready sources: Jira DEMO, GitHub context-os/demo-api, and Slack #launch-review. They are frontend demo records, so querying the demo does not call the backend workspace API.";
-        }
-
-        return {
-            intent,
-            workspace_id: DEMO_WORKSPACE_PATH,
-            workspace_path: DEMO_WORKSPACE_PATH,
-            provider: "local",
-            answer,
-            summary,
-            artifact_count: artifacts.length,
-            artifacts,
-            syncs: demoWorkspaceStatus().syncs,
-        };
-    }
-
-    function demoArtifact(id: string, connector: string, sourceURI: string, title: string, body: string, ingestedAt: string): Artifact {
-        return {
-            id,
-            workspace_id: DEMO_WORKSPACE_PATH,
-            connector,
-            source_uri: sourceURI,
-            event_type: "document.ingested",
-            title,
-            body,
-            preview: body,
-            content_hash: id,
-            metadata: {},
-            schema_version: "demo.v1",
-            ingested_at: ingestedAt,
-        };
-    }
 </script>
 
 <svelte:head>
@@ -1328,160 +413,27 @@
 
     <section class="main-grid">
         <section class="chat-pane" aria-label="Report agent chat">
-            <section class="chat-card">
-                <div class="chat-head">
-                    <div>
-                        <strong>Report Agent</strong>
-                        <span>{hasSources ? "Ask against selected sources" : "Connect sources before asking"}</span>
-                    </div>
-                    <button on:click={() => clearChat()}>Clear</button>
-                </div>
-
-                <div class="messages" aria-live="polite">
-                    {#if $chatMessages.length === 0}
-                        <article class="message assistant">
-                            <span>CONTEXT-OS</span>
-                            <p>{hasSources ? "Ask about Slack messages, GitHub PRs, Jira tickets, docs, findings, or recent activity." : "Connect GitHub repos, Slack channels, or docs first."}</p>
-                        </article>
-                    {:else}
-                        {#each $chatMessages as message (message.id)}
-                            <article class="message" class:user={message.role === "user"}>
-                                <span>{message.role === "user" ? "YOU" : "CONTEXT-OS"}</span>
-                                {#if message.loading}
-                                    <div class="message-body">
-                                        {#each messageLines(message.text || "Working...") as line}
-                                            {#if line.kind === "blank"}
-                                                <div class="message-gap"></div>
-                                            {:else if line.kind === "heading"}
-                                                <h4>{line.text}</h4>
-                                            {:else if line.kind === "number"}
-                                                <p class="number-line">{line.text}</p>
-                                            {:else if line.kind === "bullet"}
-                                                <p class="bullet-line">{line.text}</p>
-                                            {:else}
-                                                <p>{line.text}</p>
-                                            {/if}
-                                        {/each}
-                                    </div>
-                                {:else}
-                                    <div class="message-body">
-                                        {#each messageLines(message.text) as line}
-                                            {#if line.kind === "blank"}
-                                                <div class="message-gap"></div>
-                                            {:else if line.kind === "heading"}
-                                                <h4>{line.text}</h4>
-                                            {:else if line.kind === "number"}
-                                                <p class="number-line">{line.text}</p>
-                                            {:else if line.kind === "bullet"}
-                                                <p class="bullet-line">{line.text}</p>
-                                            {:else}
-                                                <p>{line.text}</p>
-                                            {/if}
-                                        {/each}
-                                    </div>
-                                {/if}
-                                {#if message.card?.chatResult?.artifacts?.length}
-                                    <details>
-                                        <summary>{message.card.chatResult.artifact_count} evidence items</summary>
-                                        {#each message.card.chatResult.artifacts.slice(0, 5) as artifact (artifact.id)}
-                                            {@const link = artifactLink(artifact)}
-                                            <div class="evidence-item">
-                                                <div class="evidence-meta">
-                                                    <span>{artifact.connector}</span>
-                                                    <small>{formatTime(artifact.ingested_at)}</small>
-                                                </div>
-                                                <strong>{artifactSourceLabel(artifact)}</strong>
-                                                <div class="evidence-source-row">
-                                                    {#if link}
-                                                        <a href={link} target="_blank" rel="noreferrer">Open source</a>
-                                                    {:else}
-                                                        <span>{artifact.source_uri || "Stored local source"}</span>
-                                                    {/if}
-                                                </div>
-                                            </div>
-                                        {/each}
-                                    </details>
-                                {/if}
-                                {#if message.card?.findingsResult?.mismatches?.length}
-                                    <details>
-                                        <summary>{message.card.findingsResult.mismatch_count ?? message.card.findingsResult.mismatches.length} findings</summary>
-                                        {#each message.card.findingsResult.mismatches.slice(0, 5) as mismatch}
-                                            <div class="evidence-item">
-                                                <div class="finding-preview-head">
-                                                    <span>{severityLabel(mismatch.severity)}</span>
-                                                    <strong>{findingSummary(mismatch)}</strong>
-                                                </div>
-                                                <p>{findingDescription(mismatch)}</p>
-                                                {#if findingImpact(mismatch)}
-                                                    <p><b>Impact:</b> {findingImpact(mismatch)}</p>
-                                                {/if}
-                                                {#if findingRecommendedAction(mismatch)}
-                                                    <p><b>Recommended:</b> {findingRecommendedAction(mismatch)}</p>
-                                                {/if}
-                                            </div>
-                                        {/each}
-                                    </details>
-                                {/if}
-                            </article>
-                        {/each}
-                    {/if}
-                </div>
-
-                <form class="composer" on:submit|preventDefault={submitCommand}>
-                    <input
-                        bind:value={command}
-                        disabled={busy || !hasSources}
-                        placeholder={hasSources ? "Ask about PRs, Slack threads, findings, or recent activity..." : "Connect sources first..."}
-                    />
-                    <button class="send-icon" aria-label="Send message" title="Send" disabled={busy || !hasSources || command.trim() === ""}>↑</button>
-                </form>
-            </section>
+            <ChatPanel
+                messages={$chatMessages}
+                {hasSources}
+                {busy}
+                bind:command
+                onClear={clearChat}
+                onSubmit={submitCommand}
+            />
         </section>
 
         <section class="insight-pane" aria-label="Project insights">
-            <section class="source-strip">
-                <div>
-                    <span>CODEX</span>
-                    <strong>{codexLabel}</strong>
-                </div>
-                <div>
-                    <span>WORKSPACE</span>
-                    <strong>{$project.name}</strong>
-                </div>
-                <div>
-                    <span>SOURCES</span>
-                    <strong>{readySources.length}</strong>
-                    <small>{codexLoggedIn ? "Codex connected" : "Codex login needed"}</small>
-                </div>
-            </section>
-
-            {#if sourcePanelOpen}
-                <section class="setup-panel">
-                    <KnowledgeInstall
-                        embedded
-                        {codexLoggedIn}
-                        {codexPlugins}
-                        onClose={() => (sourcePanelOpen = false)}
-                        on:done={handleKnowledgeDone}
-                    />
-                </section>
-            {:else if hasSources}
-                <section class="source-summary">
-                    {#each sourceGroups as [connector, sources]}
-                        <div>
-                            <strong>{connector}</strong>
-                            <span>{sources.length} selected</span>
-                        </div>
-                    {/each}
-                </section>
-            {:else}
-                <section class="source-summary empty-source-summary">
-                    <div>
-                        <strong>No sources</strong>
-                        <span>Use Sources to connect Codex plugins</span>
-                    </div>
-                </section>
-            {/if}
+            <WorkspaceSummary
+                {codexLabel}
+                workspaceName={$project.name}
+                {readySources}
+                {codexLoggedIn}
+                {codexPlugins}
+                {sourcePanelOpen}
+                onClose={() => (sourcePanelOpen = false)}
+                onDone={handleKnowledgeDone}
+            />
 
             <section class="insight-card">
                 <div class="insight-head">
@@ -1494,249 +446,24 @@
                 </div>
 
                 {#if activeInsightTab === "findings"}
-                    <div class="findings-view">
-                        {#if lastFindings?.mismatches?.length}
-                            {#each lastFindings.mismatches.slice(0, 6) as mismatch}
-                                <article>
-                                    <div class="finding-title-row">
-                                        <span>{severityLabel(mismatch.severity)}</span>
-                                        <strong>{findingSummary(mismatch)}</strong>
-                                    </div>
-                                    <div class="finding-time-row">
-                                        <small>Detected: {findingDetectedTime()}</small>
-                                        <small>Evidence: {findingEvidenceTime()}</small>
-                                    </div>
-                                    <div class="finding-copy">
-                                        <p>{findingDescription(mismatch)}</p>
-                                        {#if findingImpact(mismatch)}
-                                            <p><b>Impact:</b> {findingImpact(mismatch)}</p>
-                                        {/if}
-                                    </div>
-                                    {#if findingRecommendedAction(mismatch)}
-                                        <div class="finding-action">
-                                            <small>Recommended action</small>
-                                            <p>{findingRecommendedAction(mismatch)}</p>
-                                        </div>
-                                    {/if}
-                                </article>
-                            {/each}
-                        {:else if lastFindings}
-                            <div class="empty-state">
-                                <strong>Analysis ran, no mismatch signals detected</strong>
-                                <p>Detected: {findingDetectedTime()}</p>
-                                <p>Sources: {lastFindings.uri ?? readySources.length}. Events: {lastFindings.event_count ?? workspaceStatus?.event_count ?? 0}. Entities: {lastFindings.entity_count ?? workspaceStatus?.entity_count ?? 0}.</p>
-                            </div>
-                        {:else}
-                            <div class="empty-state">
-                                <strong>{hasSources ? "No findings yet" : "Connect sources to unlock findings"}</strong>
-                                <p>{hasSources ? "Run analysis across selected sources to surface mismatches and delivery risks." : "Select GitHub repos, Slack channels, or docs first."}</p>
-                            </div>
-                        {/if}
-                    </div>
+                    <FindingsView
+                        {lastFindings}
+                        {lastAnalysisAt}
+                        {recentArtifacts}
+                        readySourceCount={readySources.length}
+                        {workspaceStatus}
+                        {hasSources}
+                    />
                 {:else if activeInsightTab === "graph"}
-                    <div class="graph-workspace">
-                        <div class="graph-canvas" aria-label="Typed entity map">
-                            <div class="graph-count">
-                                <strong>{graphEntities.length}</strong>
-                                <span>entities | {graphLinks.length} links</span>
-                            </div>
-
-                            {#if graphEntities.length > 0}
-                                <div class="graph-map-layout">
-                                    <div class="entity-index" aria-label="Entity index grouped by type">
-                                        <div class="entity-index-head">
-                                            <strong>Entities</strong>
-                                            <span>{entityIndexSections.reduce((sum, section) => sum + section.entities.length, 0)} shown</span>
-                                        </div>
-                                        <input
-                                            class="entity-search"
-                                            type="search"
-                                            bind:value={entityQuery}
-                                            placeholder="Filter entities"
-                                            aria-label="Filter graph entities"
-                                        />
-                                        {#each entityIndexSections as section (section.label)}
-                                            <section class="index-section">
-                                                <h3>{section.label}</h3>
-                                                <div class="entity-list">
-                                                    {#each section.entities as entity (entity.id)}
-                                                        <button
-                                                            type="button"
-                                                            class="entity-row"
-                                                            class:selected={selectedEntity?.id === entity.id}
-                                                            class:linked={selectedEntity !== null && selectedLinks.some((link) => link.source === entity.id || link.target === entity.id)}
-                                                            style={typeAccentStyle(entity.type)}
-                                                            on:click={() => (selectedEntity = entity)}
-                                                        >
-                                                            <span>{entity.name}</span>
-                                                    <small>{entity.degree} link{entity.degree === 1 ? "" : "s"}</small>
-                                                        </button>
-                                                    {/each}
-                                                </div>
-                                            </section>
-                                        {/each}
-                                        {#if entityIndexSections.length === 0}
-                                            <p class="entity-index-empty">No matching entities.</p>
-                                        {/if}
-                                    </div>
-
-                                    <div class="focus-graph" aria-label="Selected entity relationship graph">
-                                        {#if selectedEntity}
-                                            <svg class="focus-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                                                {#each focusRows as row (row.id)}
-                                                    <path
-                                                        d={row.side === "incoming"
-                                                            ? `M 20 ${row.y} C 36 ${row.y}, 34 50, 48 50`
-                                                            : `M 52 50 C 66 50, 64 ${row.y}, 80 ${row.y}`}
-                                                        stroke={row.color}
-                                                        class:strong={row.link.strength > 0.85}
-                                                    />
-                                                {/each}
-                                            </svg>
-
-                                            <div class="focus-column incoming">
-                                                <strong>Incoming</strong>
-                                                {#each incomingFocusRows as row (row.id)}
-                                                    <button
-                                                        type="button"
-                                                        class="focus-node"
-                                                        style={`top:${row.y}%;--type-color:${row.color};`}
-                                                        on:click={() => (selectedEntity = row.entity)}
-                                                    >
-                                                        <span>{row.entity.name}</span>
-                                                        <small>{relationshipLabel(row.link.label)}</small>
-                                                    </button>
-                                                {/each}
-                                            </div>
-
-                                            <button
-                                                type="button"
-                                                class="focus-center"
-                                                style={typeAccentStyle(selectedEntity.type)}
-                                                title={selectedEntity.name}
-                                            >
-                                                <span>{selectedEntity.type}</span>
-                                                <strong>{selectedEntity.name}</strong>
-                                                <small>{selectedLinks.length} link{selectedLinks.length === 1 ? "" : "s"}</small>
-                                            </button>
-
-                                            <div class="focus-column outgoing">
-                                                <strong>Outgoing</strong>
-                                                {#each outgoingFocusRows as row (row.id)}
-                                                    <button
-                                                        type="button"
-                                                        class="focus-node"
-                                                        style={`top:${row.y}%;--type-color:${row.color};`}
-                                                        on:click={() => (selectedEntity = row.entity)}
-                                                    >
-                                                        <span>{row.entity.name}</span>
-                                                        <small>{relationshipLabel(row.link.label)}</small>
-                                                    </button>
-                                                {/each}
-                                            </div>
-
-                                            {#if focusRows.length === 0}
-                                                <div class="focus-empty">
-                                                    <strong>No direct links</strong>
-                                                    <p>Select another entity from the index to inspect relationships.</p>
-                                                </div>
-                                            {/if}
-                                        {/if}
-                                    </div>
-                                </div>
-                            {:else}
-                                <div class="empty-graph">
-                                    <strong>No graph data yet</strong>
-                                    <p>{hasSources ? "Run analysis to populate local entities and relationships." : "Connect sources first, then run analysis to build the graph."}</p>
-                                </div>
-                            {/if}
-
-                        </div>
-
-                        <aside class="node-card">
-                            {#if selectedEntity}
-                                <div>
-                                    <span>Node Details</span>
-                                    <strong>{selectedEntity.type}</strong>
-                                </div>
-                                <p><b>Name:</b> {selectedEntity.name}</p>
-                                <p><b>Links:</b> {graphDegree.get(selectedEntity.id) ?? 0}</p>
-                                <p><b>Confidence:</b> {Math.round((selectedEntity.confidence ?? 0) * 100)}%</p>
-                                <p><b>Source:</b> {selectedEntity.source || "unknown"}</p>
-                                <hr />
-                                {#if relationshipGroups.length}
-                                    <div class="node-links">
-                                        {#each relationshipGroups as group (group.kind)}
-                                            <section>
-                                                <h4>{relationshipLabel(group.kind)}</h4>
-                                                {#if group.outgoing.length}
-                                                    <small>Outgoing</small>
-                                                    {#each group.outgoing as row}
-                                                        <article>
-                                                            <strong>{row.entityName}</strong>
-                                                            <span>{Math.round(row.confidence * 100)}%</span>
-                                                        </article>
-                                                    {/each}
-                                                {/if}
-                                                {#if group.incoming.length}
-                                                    <small>Incoming</small>
-                                                    {#each group.incoming as row}
-                                                        <article>
-                                                            <strong>{row.entityName}</strong>
-                                                            <span>{Math.round(row.confidence * 100)}%</span>
-                                                        </article>
-                                                    {/each}
-                                                {/if}
-                                            </section>
-                                        {/each}
-                                    </div>
-                                    <hr />
-                                {/if}
-                                <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis."}</p>
-                            {:else}
-                                <div>
-                                    <span>Node Details</span>
-                                    <strong>none</strong>
-                                </div>
-                                <p>Select an entity row to inspect confidence, relationships, and source evidence.</p>
-                            {/if}
-                            {#if graphLegendTypes.length}
-                                <section class="node-legend" aria-label="Entity types">
-                                    <strong>Entity Types</strong>
-                                    <div>
-                                        {#each graphLegendTypes as item (item.type)}
-                                            <span style={typeAccentStyle(item.type)}><i></i>{item.type} <b>{item.count}</b></span>
-                                        {/each}
-                                    </div>
-                                </section>
-                            {/if}
-                        </aside>
-                    </div>
+                    <GraphView
+                        {graphData}
+                        bind:selectedEntity
+                        {hasSources}
+                    />
                 {:else}
-                    <div class="activity-view">
-                        {#if recentArtifacts.length}
-                            {#each recentArtifacts.slice(0, 8) as artifact (artifact.id)}
-                                <article>
-                                    <div class="activity-meta">
-                                        <span>{artifactOrigin(artifact)}</span>
-                                        <small>{artifact.connector} | {artifactProvider(artifact)}</small>
-                                    </div>
-                                    <strong>{artifact.title || artifact.source_uri}</strong>
-                                    <p>{previewText(artifact.preview)}</p>
-                                    <small>{artifact.source_uri}</small>
-                                    <small>{formatTime(artifact.ingested_at)}</small>
-                                </article>
-                            {/each}
-                        {:else}
-                            <div class="empty-state">
-                                <strong>No activity loaded</strong>
-                                <p>Ask chat about recent activity or run analysis after connecting sources.</p>
-                            </div>
-                        {/if}
-                    </div>
+                    <ActivityView {recentArtifacts} />
                 {/if}
             </section>
-
         </section>
     </section>
 
@@ -1872,20 +599,14 @@
     .topbar strong,
     .topbar button,
     .top-status,
-    .source-strip,
-    .source-summary,
     .insight-head,
-    .chat-head span,
-    .message span,
     .console-strip {
         letter-spacing: 0.05em;
     }
 
     .topbar button,
     .new-workspace button,
-    .insight-head button,
-    .chat-head button,
-    .composer button {
+    .insight-head button {
         border: 0;
         border-bottom: 1px solid #bdb7a8;
         border-radius: 0;
@@ -1905,8 +626,6 @@
     .topbar button:hover,
     .new-workspace button:hover:not(:disabled),
     .insight-head button:hover:not(:disabled),
-    .chat-head button:hover,
-    .composer button:hover:not(:disabled),
     .insight-head nav button.active {
         border-bottom-color: #1c1b18;
         background-position: 0 0;
@@ -1915,9 +634,7 @@
 
     .topbar button:disabled,
     .new-workspace button:disabled,
-    .insight-head button:disabled,
-    .chat-head button:disabled,
-    .composer button:disabled {
+    .insight-head button:disabled {
         cursor: not-allowed;
         opacity: 0.42;
     }
@@ -2060,511 +777,9 @@
         display: none;
     }
 
-    .graph-workspace {
-        height: 100%;
-        min-height: 0;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 324px;
-        gap: 0;
-    }
-
-    .graph-canvas {
-        position: relative;
-        min-height: 0;
-        overflow: hidden;
-        background: linear-gradient(180deg, #f1eee5, #ebe8e0);
-        border-right: 1px solid #d7d2c8;
-        padding: 16px;
-    }
-
-    .graph-map-layout {
-        height: 100%;
-        min-height: 520px;
-        display: grid;
-        grid-template-columns: 220px minmax(520px, 1fr);
-        gap: 16px;
-        padding-top: 0;
-    }
-
-    .entity-index {
-        min-height: 0;
-        max-height: calc(100vh - 230px);
-        overflow: auto;
-        scrollbar-width: none;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        padding-right: 2px;
-        overscroll-behavior: contain;
-    }
-
-    .entity-index::-webkit-scrollbar,
-    .messages::-webkit-scrollbar {
-        display: none;
-    }
-
-    .entity-index-head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 8px;
-        border-bottom: 1px solid #d7d2c8;
-        padding-bottom: 8px;
-    }
-
-    .entity-index-head strong,
-    .index-section h3 {
-        color: #1c1b18;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 11px;
-        text-transform: uppercase;
-    }
-
-    .entity-index-head span,
-    .entity-index-empty {
-        color: #8a8678;
-        font-size: 11px;
-    }
-
-    .entity-search {
-        width: 100%;
-        border: 0;
-        border-bottom: 1px solid #bdb7a8;
-        border-radius: 0;
-        background: transparent;
-        color: #1c1b18;
-        font: inherit;
-        padding: 7px 0;
-    }
-
-    .entity-search:focus {
-        border-bottom-color: #1c1b18;
-        outline: none;
-    }
-
-    .index-section {
-        min-width: 0;
-    }
-
-    .index-section h3 {
-        margin: 0 0 5px;
-        color: #d85d3f;
-    }
-
-    .graph-count {
-        position: absolute;
-        top: 14px;
-        right: 14px;
-        z-index: 5;
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-        border-bottom: 1px solid #bdb7a8;
-        background: rgba(235, 232, 224, 0.82);
-        padding: 6px 2px;
-        color: #625f55;
-        font-size: 11px;
-        pointer-events: none;
-    }
-
-    .graph-count strong {
-        color: #1c1b18;
-    }
-
-    .node-legend i {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: var(--type-color);
-        display: inline-block;
-        flex: 0 0 auto;
-    }
-
-    .entity-list {
-        display: grid;
-        gap: 0;
-    }
-
-    .entity-row {
-        min-width: 0;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        align-items: center;
-        gap: 2px;
-        border: 0;
-        border-top: 1px solid rgba(215, 210, 200, 0.72);
-        border-left: 3px solid transparent;
-        background: transparent;
-        color: #28261f;
-        padding: 6px 0 6px 8px;
-        text-align: left;
-    }
-
-    .entity-row:hover,
-    .entity-row.selected {
-        border-left-color: transparent;
-        background: transparent;
-    }
-
-    .entity-row.linked:not(.selected) {
-        border-left-color: transparent;
-    }
-
-    .entity-row span {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .entity-row small {
-        color: #8a8678;
-        font-size: 9px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .focus-graph {
-        position: relative;
-        min-width: 0;
-        min-height: 520px;
-        overflow: hidden;
-        border: 1px solid rgba(215, 210, 200, 0.78);
-        background:
-            radial-gradient(circle, rgba(28, 27, 24, 0.09) 1px, transparent 1px) 0 0 / 22px 22px,
-            rgba(248, 246, 239, 0.62);
-    }
-
-    .focus-lines {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-    }
-
-    .focus-lines path {
-        fill: none;
-        stroke-width: 1.4;
-        stroke-opacity: 0.34;
-        vector-effect: non-scaling-stroke;
-    }
-
-    .focus-lines path.strong {
-        stroke-width: 2.2;
-        stroke-opacity: 0.58;
-    }
-
-    .focus-center,
-    .focus-node {
-        position: absolute;
-        z-index: 2;
-        min-width: 0;
-        border: 0;
-        border-top: 1px solid rgba(215, 210, 200, 0.84);
-        background: #f8f6ef;
-        color: #1c1b18;
-    }
-
-    .focus-center {
-        left: 50%;
-        top: 50%;
-        width: min(240px, 34%);
-        min-height: 86px;
-        display: grid;
-        gap: 6px;
-        transform: translate(-50%, -50%);
-        border-top: 4px solid var(--type-color);
-        border-bottom: 1px solid rgba(215, 210, 200, 0.84);
-        padding: 14px;
-        text-align: left;
-    }
-
-    .focus-center span,
-    .focus-center small,
-    .focus-node small,
-    .focus-column > strong {
-        color: #8a8678;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 10px;
-        text-transform: uppercase;
-    }
-
-    .focus-center strong {
-        min-width: 0;
-        overflow-wrap: anywhere;
-        color: #1c1b18;
-        font-size: 15px;
-        line-height: 1.25;
-    }
-
-    .focus-column {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 31%;
-        pointer-events: none;
-    }
-
-    .focus-column.incoming {
-        left: 14px;
-    }
-
-    .focus-column.outgoing {
-        right: 14px;
-    }
-
-    .focus-column > strong {
-        position: absolute;
-        top: 12px;
-        left: 0;
-    }
-
-    .focus-node {
-        width: 100%;
-        display: grid;
-        gap: 4px;
-        transform: translateY(-50%);
-        border-left: 4px solid var(--type-color);
-        padding: 8px 10px;
-        text-align: left;
-        pointer-events: auto;
-    }
-
-    .focus-node:hover {
-        background: #fffdf7;
-        border-left-color: var(--type-color);
-    }
-
-    .focus-node span {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .focus-empty {
-        position: absolute;
-        left: 50%;
-        top: calc(50% + 92px);
-        width: min(280px, 70%);
-        transform: translateX(-50%);
-        text-align: center;
-        color: #625f55;
-    }
-
-    .empty-graph {
-        position: absolute;
-        border: 1px solid rgba(215, 210, 200, 0.65);
-        border-radius: 8px;
-        background: rgba(248, 246, 239, 0.92);
-    }
-
-    .node-card {
-        min-height: 0;
-        background: transparent;
-        padding: 16px;
-        font-size: 13px;
-        overflow: auto;
-    }
-
-    .node-card div {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 12px;
-    }
-
-    .node-card span,
-    .node-card strong {
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 12px;
-    }
-
-    .node-card strong {
-        color: #2d6a4f;
-    }
-
-    .node-card p {
-        margin: 9px 0;
-        line-height: 1.45;
-        overflow-wrap: anywhere;
-    }
-
-    .node-card hr {
-        border: 0;
-        border-top: 1px solid #d7d2c8;
-        margin: 14px 0;
-    }
-
-    .node-links {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin: 0;
-        padding: 0;
-    }
-
-    .node-links section {
-        display: grid;
-        gap: 6px;
-        border-bottom: 1px solid #d7d2c8;
-        background: transparent;
-        padding: 0 0 10px;
-    }
-
-    .node-links h4 {
-        margin: 0;
-        color: #1c1b18;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 11px;
-        text-transform: uppercase;
-    }
-
-    .node-links small {
-        color: #8a8678;
-        font-size: 10px;
-        text-transform: uppercase;
-    }
-
-    .node-links article {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 8px;
-    }
-
-    .node-links article strong {
-        color: #1c1b18;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .node-links article span {
-        color: #8a8678;
-    }
-
-    .node-legend {
-        display: grid;
-        gap: 8px;
-        border-top: 1px solid #d7d2c8;
-        margin-top: 14px;
-        padding-top: 12px;
-        color: #625f55;
-        font-size: 12px;
-    }
-
-    .node-legend > strong {
-        color: #d85d3f;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 11px;
-        text-transform: uppercase;
-    }
-
-    .node-legend div {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 7px 12px;
-    }
-
-    .node-legend span {
-        display: inline-flex;
-        align-items: center;
-        min-width: 0;
-        gap: 6px;
-        text-transform: none;
-        overflow: hidden;
-        white-space: nowrap;
-    }
-
-    .node-legend b {
-        color: #8a8678;
-        font-weight: 400;
-    }
-
-    .empty-graph {
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        padding: 18px;
-        text-align: center;
-    }
-
-    .source-strip {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-        align-items: center;
-        border-bottom: 1px solid #d7d2c8;
-        padding: 4px 0 12px;
-    }
-
-    .source-strip span,
-    .findings-view span,
-    .activity-view span,
-    .activity-view small {
-        display: block;
-        color: #8a8678;
-        font-size: 11px;
-        text-transform: uppercase;
-    }
-
-    .source-strip strong {
-        display: block;
-        margin-top: 4px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 13px;
-    }
-
-    .source-strip small {
-        display: block;
-        margin-top: 3px;
-        color: #8a8678;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 11px;
-    }
-
     .insight-head > button {
         padding: 8px 12px;
         white-space: nowrap;
-    }
-
-    .source-summary {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        border-bottom: 1px solid #d7d2c8;
-        padding: 0 0 10px;
-    }
-
-    .source-summary div {
-        min-width: 130px;
-        border-left: 2px solid #d7d2c8;
-        padding: 2px 10px;
-    }
-
-    .source-summary strong,
-    .source-summary span {
-        display: block;
-    }
-
-    .source-summary strong {
-        text-transform: uppercase;
-        font-size: 12px;
-    }
-
-    .source-summary span {
-        margin-top: 4px;
-        color: #8a8678;
-        font-size: 12px;
-    }
-
-    .empty-source-summary div {
-        min-width: 100%;
     }
 
     .insight-card {
@@ -2605,322 +820,6 @@
     .insight-head nav button.active {
         background-position: 0 0;
         color: #f8f6ef;
-    }
-
-    .findings-view,
-    .activity-view {
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        overflow: auto;
-        padding: 14px 0;
-    }
-
-    .findings-view article,
-    .activity-view article,
-    .empty-state {
-        border-bottom: 1px solid #d7d2c8;
-        padding: 14px 0;
-    }
-
-    .finding-title-row,
-    .finding-preview-head {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        min-width: 0;
-    }
-
-    .finding-title-row span,
-    .finding-preview-head span {
-        flex: 0 0 auto;
-        color: #d85d3f;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-    }
-
-    .finding-title-row strong,
-    .finding-preview-head strong {
-        min-width: 0;
-        overflow-wrap: anywhere;
-    }
-
-    .finding-time-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px 14px;
-        margin-top: 6px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid rgba(215, 210, 200, 0.62);
-    }
-
-    .finding-copy,
-    .finding-action {
-        margin-top: 10px;
-    }
-
-    .finding-action {
-        padding-left: 10px;
-        border-left: 2px solid #d7d2c8;
-    }
-
-    .finding-action small {
-        display: block;
-        margin-bottom: 2px;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-    }
-
-    .findings-view strong,
-    .activity-view strong,
-    .empty-state strong {
-        display: block;
-        margin-top: 0;
-    }
-
-    .findings-view p,
-    .activity-view p,
-    .empty-state p {
-        margin: 6px 0 0;
-        color: #5f5b50;
-        line-height: 1.45;
-    }
-
-    .activity-meta {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 12px;
-    }
-
-    .activity-meta small {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    small {
-        color: #8a8678;
-    }
-
-    .chat-card {
-        flex: 1 1 auto;
-        min-height: 280px;
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr) auto;
-        overflow: hidden;
-        background: transparent;
-    }
-
-    .chat-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        border-bottom: 1px solid #d7d2c8;
-        padding: 4px 0 12px;
-    }
-
-    .chat-head strong,
-    .chat-head span {
-        display: block;
-    }
-
-    .chat-head span {
-        margin-top: 3px;
-        color: #8a8678;
-        font-size: 12px;
-    }
-
-    .chat-head button {
-        padding: 7px 12px;
-    }
-
-    .messages {
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        overflow: auto;
-        scrollbar-width: none;
-        overscroll-behavior: contain;
-        padding: 16px;
-    }
-
-    .message {
-        width: min(680px, 90%);
-        border-radius: 14px;
-        background: transparent;
-        padding: 4px 0;
-        line-height: 1.5;
-    }
-
-    .message.user {
-        align-self: flex-end;
-        color: #1c1b18;
-        padding: 4px 0;
-        text-align: right;
-    }
-
-    .message span {
-        display: block;
-        margin-bottom: 6px;
-        color: #8a8678;
-        font-size: 12px;
-    }
-
-    .message p {
-        margin: 0;
-    }
-
-    .message-body {
-        display: grid;
-        gap: 6px;
-    }
-
-    .message-body h4 {
-        margin: 10px 0 2px;
-        font-size: 13px;
-        color: #28261f;
-    }
-
-    .message-body h4:first-child {
-        margin-top: 0;
-    }
-
-    .message-body .number-line {
-        margin-top: 8px;
-        font-weight: 700;
-    }
-
-    .message-body .bullet-line {
-        position: relative;
-        padding-left: 14px;
-    }
-
-    .message-body .bullet-line::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0.72em;
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: #8a8678;
-    }
-
-    .message-gap {
-        height: 4px;
-    }
-
-    details {
-        margin-top: 12px;
-        border-top: 1px solid #d7d2c8;
-        padding-top: 10px;
-    }
-
-    summary {
-        cursor: pointer;
-        font-weight: 700;
-    }
-
-    .evidence-item {
-        margin-top: 10px;
-        border: 0;
-        border-top: 1px solid #d7d2c8;
-        border-radius: 0;
-        background: transparent;
-        padding: 10px;
-    }
-
-    .evidence-meta,
-    .evidence-source-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        min-width: 0;
-    }
-
-    .evidence-meta span {
-        color: #d85d3f;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-    }
-
-    .evidence-item strong {
-        display: block;
-        margin: 7px 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .evidence-source-row a {
-        color: #1f5f8b;
-        font-weight: 700;
-        text-decoration: none;
-    }
-
-    .evidence-source-row a:hover {
-        color: #1c1b18;
-        text-decoration: underline;
-    }
-
-    .evidence-source-row span {
-        min-width: 0;
-        overflow: hidden;
-        color: #8a8678;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 12px;
-    }
-
-    .composer {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 10px;
-        padding: 12px;
-        border-top: 1px solid #d7d2c8;
-    }
-
-    .composer input {
-        min-width: 0;
-        border: 0;
-        border-bottom: 1px solid #bdb7a8;
-        border-radius: 0;
-        background: transparent;
-        padding: 11px 12px;
-        outline: none;
-    }
-
-    .composer input:focus {
-        border-bottom-color: #1c1b18;
-    }
-
-    .composer button {
-        width: 44px;
-        min-width: 44px;
-        padding: 0;
-        color: #1c1b18;
-        font-size: 18px;
-        font-weight: 700;
-        line-height: 1;
-    }
-
-    .composer button:hover:not(:disabled) {
-        color: #f8f6ef;
-    }
-
-    .setup-panel {
-        max-height: none;
-        overflow: visible;
-        border-bottom: 1px solid #d7d2c8;
-        padding: 0 12px 12px;
     }
 
     .console-strip {
@@ -3141,24 +1040,6 @@
             grid-template-columns: 1fr;
         }
 
-        .graph-workspace {
-            grid-template-columns: 1fr;
-            grid-template-rows: minmax(420px, 1fr) auto;
-        }
-
-        .graph-map-layout {
-            grid-template-columns: 1fr;
-            grid-template-rows: auto minmax(460px, 1fr);
-        }
-
-        .entity-index {
-            max-height: 240px;
-        }
-
-        .node-card {
-            max-height: 180px;
-        }
-
         .chat-pane {
             border-right: none;
             border-bottom: 1px solid #d7d2c8;
@@ -3179,41 +1060,6 @@
 
         .top-status {
             justify-content: flex-start;
-        }
-
-        .graph-workspace {
-            grid-template-rows: minmax(360px, 1fr) auto;
-            padding: 8px;
-        }
-
-        .graph-canvas {
-            padding: 10px;
-        }
-
-        .graph-map-layout {
-            grid-template-rows: auto minmax(420px, 1fr);
-            min-height: 660px;
-            padding-top: 0;
-        }
-
-        .focus-graph {
-            min-height: 420px;
-        }
-
-        .entity-index {
-            max-height: 220px;
-        }
-
-        .focus-center {
-            width: min(220px, 42%);
-        }
-
-        .focus-column {
-            width: 34%;
-        }
-
-        .node-legend div {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
 </style>

@@ -4,7 +4,7 @@ This folder contains Svelte route files and page entrypoints.
 
 ## Files
 
-- `+page.svelte`: main local ContextOS UI page that probes service status, renders the workspace switcher, opens source setup, coordinates local chat and analysis, and shows Findings / Graph / Activity insight tabs.
+- `+page.svelte`: main local ContextOS UI page that probes service status, renders the workspace switcher, opens source setup, coordinates local chat and analysis, and composes the Findings / Graph / Activity insight tabs from `$lib/components/insights`.
 
 ## Current UI Shape
 
@@ -34,6 +34,8 @@ Controls should use the same restrained mono theme:
 
 - Define page-level data flow and actions.
 - Compose workspace switching, source setup, chat, graph, findings, and activity views.
+- Keep insight tab rendering in `$lib/components/insights` and pure display helpers in `$lib/*ViewModel.ts` so the route remains focused on orchestration.
+- Delegate chat command/query execution to `$lib/chatController.ts` and analysis source execution to `$lib/analysisRunner.ts`; the route should only wire Svelte state/store callbacks.
 - Keep route state transitions understandable and testable.
 
 ## Maintenance Checklist

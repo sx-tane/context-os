@@ -31,7 +31,7 @@
         rows="1"
         class="input"
         on:keydown={handleKeyDown}
-    />
+    ></textarea>
     <button class="send-btn" on:click={submit} {disabled}> ↑ </button>
 </div>
 

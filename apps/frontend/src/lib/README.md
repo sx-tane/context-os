@@ -9,6 +9,11 @@ Shared TypeScript modules for the ContextOS frontend. Everything in this directo
 | [`api.ts`](api.ts)                                       | HTTP and SSE client for the Go API. All network calls go through here.                                                             |
 | [`types.ts`](types.ts)                                   | Canonical frontend type definitions. Split between re-exports of auto-generated API types and hand-maintained frontend-only types. |
 | [`projectStore.ts`](projectStore.ts)                     | Svelte stores for workspace project state, chat history, selected connectors, protected demo/default workspaces, and backend workspace registration. |
+| [`analysisRunner.ts`](analysisRunner.ts)                 | Runs per-source findings analysis, posts progress messages, aggregates successful results, and reports per-source failures.         |
+| [`chatController.ts`](chatController.ts)                 | Classifies chat commands, creates chat messages, runs source queries, and updates route-owned state through callbacks.              |
+| [`demoWorkspace.ts`](demoWorkspace.ts)                   | Local seed data for the protected demo workspace, including demo status, findings, graph data, artifacts, and chat answers.                         |
+| [`findingsViewModel.ts`](findingsViewModel.ts)           | Pure display helpers for findings, chat message lines, artifact labels, source links, preview text, and formatted times.                            |
+| [`graphViewModel.ts`](graphViewModel.ts)                 | Pure graph view helpers for relationship links, entity index sections, selected-entity focus rows, relationship groups, and type colors.            |
 | [`ingestRunner.ts`](ingestRunner.ts)                     | Orchestrates a single connector ingest run, branching between the direct `POST /ingest` path and the Codex SSE streaming path.     |
 | [`reauthRunner.ts`](reauthRunner.ts)                     | Runs a Codex plugin re-auth SSE stream and refreshes Codex status when it finishes.                                                |
 | [`sourceConnectorConfigs.ts`](sourceConnectorConfigs.ts) | Static configuration objects that drive the `SourceConnector` UI for each non-Codex connector (filesystem).                        |
@@ -82,6 +87,36 @@ Central type registry for the frontend.
 ## findingsAggregator.ts
 
 Merges per-source `postFindings` responses into one `FindingsResult` for the homepage. It combines mismatch arrays, sums mismatch/event/entity counts, and builds the chat summary text that distinguishes a successful zero-finding analysis from source failures.
+
+---
+
+## analysisRunner.ts
+
+Owns the homepage analysis execution loop. It runs ready sources one at a time, chooses direct token vs Codex provider, updates progress messages, aggregates successful findings, preserves per-source failures, and reports a clear zero-finding result when analysis completes without mismatch signals.
+
+---
+
+## chatController.ts
+
+Owns homepage chat command routing and source query execution. The route passes callbacks for Svelte state/store updates, while this module handles command classification, chat message construction, demo query answers, backend `postChatQuery`, and source-query error messages.
+
+---
+
+## demoWorkspace.ts
+
+Provides the protected `contextos-demo` workspace records used by the homepage when users want to inspect the intended findings, graph, activity, and chat experience without connecting live sources.
+
+---
+
+## findingsViewModel.ts
+
+Keeps presentation-only formatting outside the route and insight components: severity labels, finding text fallbacks, message line parsing, artifact origin/provider labels, artifact source link extraction, preview truncation, and timestamp formatting.
+
+---
+
+## graphViewModel.ts
+
+Builds the focused graph model consumed by `GraphView.svelte`: explicit or inferred links, entity degrees, selected/linked/top index sections, focus rows, relationship groups, stable type colors, and readable relationship labels.
 
 ---
 

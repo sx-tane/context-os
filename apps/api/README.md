@@ -14,6 +14,7 @@ Go API application surface for ContextOS orchestration endpoints.
 ```mermaid
 flowchart TD
   API[apps/api] --> MAIN[main.go]
+  API --> BOOTSTRAP[bootstrap/]
   API --> HANDLER[handler/]
   API --> REQUEST[request/]
   API --> RESPONSE[response/]
@@ -25,7 +26,8 @@ flowchart TD
 
 ```
 apps/api/
-  main.go          — entry point: addr config, mux, route registration, ListenAndServe only
+  main.go          — entry point: addr config, DB open/migrations, ListenAndServe only
+  bootstrap/       — API composition: handler dependency construction, route list, CORS registration
   handler/
     shared/               — shared ingest plumbing + SSE infrastructure (used by all domain packages)
     health/               — GET /health

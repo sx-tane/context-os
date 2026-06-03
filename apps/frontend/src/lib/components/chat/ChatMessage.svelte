@@ -27,7 +27,7 @@
 
     <div class="bubble">
         {#if message.loading}
-            <span class="loading-dots"><span /><span /><span /></span>
+            <span class="loading-dots"><span></span><span></span><span></span></span>
         {:else}
             <p class="text">{message.text}</p>
 
@@ -42,7 +42,7 @@
                                         class="dot"
                                         class:green={ok}
                                         class:red={!ok}
-                                    />
+                                    ></span>
                                     {name}
                                     <span class="badge"
                                         >{ok ? "ready" : "not configured"}</span
@@ -112,7 +112,7 @@
                                             c.status === "configuring"}
                                         class:red={c.status === "error" ||
                                             c.status === "idle"}
-                                    />
+                                    ></span>
                                     <strong>{c.connector}</strong>
                                     {#if c.uri}<span class="uri">{c.uri}</span
                                         >{/if}

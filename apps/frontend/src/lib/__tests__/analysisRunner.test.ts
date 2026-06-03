@@ -1,0 +1,136 @@
+jest.mock("$lib/api");
+jest.mock("$lib/projectStore", () => ({
+  DEMO_WORKSPACE_PATH: "contextos-demo",
+}));
+
+import {
+  analysisProvider,
+  buildAnalysisProgress,
+  runAnalysis,
+} from "../analysisRunner";
+
+import { postFindings } from "$lib/api";
+import type { ConnectorKnowledge, FindingsResult } from "../types";
+
+const mockPostFindings = postFindings as jest.Mock;
+
+type AnalysisRunnerTestState = {
+  busyCalls: boolean[];
+  lastFindings: FindingsResult | null;
+  replacements: Array<{ text: string }>;
+  addMessage: jest.Mock;
+  replaceMessage: jest.Mock;
+  setBusy: jest.Mock;
+  setLastFindings: jest.Mock;
+  setLastAnalysisAt: jest.Mock;
+  openSources: jest.Mock;
+  refreshWorkspace: jest.Mock<Promise<void>, []>;
+};
+
+describe("analysisProvider", () => {
+  it("uses codex for plugin-backed connectors and token for filesystem", () => {
+    expect(analysisProvider("github")).toBe("codex");
+    expect(analysisProvider("slack")).toBe("codex");
+    expect(analysisProvider("filesystem")).toBe("token");
+  });
+});
+
+describe("buildAnalysisProgress", () => {
+  it("summarizes queued, running, done, and failed source statuses", () => {
+    const message = buildAnalysisProgress([
+      { connector: "github", uri: "repo", status: "done", detail: "2 events, 1 findings" },
+      { connector: "slack", uri: "channel", status: "failed", detail: "unauthorized" },
+      { connector: "jira", uri: "DEMO", status: "running" },
+      { connector: "filesystem", uri: "/tmp", status: "queued" },
+    ]);
+
+    expect(message).toContain("1/4 complete, 1 failed");
+    expect(message).toContain("1. github:repo - done (2 events, 1 findings)");
+    expect(message).toContain("2. slack:channel - failed: unauthorized");
+    expect(message).toContain("3. jira:DEMO - running");
+    expect(message).toContain("4. filesystem:/tmp - queued");
+  });
+});
+
+describe("runAnalysis", () => {
+  it("aggregates successful findings and reports per-source failures", async () => {
+    const originalWindow = (global as unknown as { window?: unknown }).window;
+    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
+      setTimeout,
+      clearTimeout,
+    };
+    mockPostFindings
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          connector: "github",
+          uri: "repo",
+          mismatch_count: 1,
+          event_count: 2,
+          entity_count: 3,
+          mismatches: [{ id: "m1", severity: "high" }],
+          mismatch_ids: ["m1"],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        body: { message: "unauthorized" },
+      });
+    const state = makeState();
+
+    try {
+      await runAnalysis({
+        workspacePath: "workspace",
+        readySources: [
+          { connector: "github", uri: "repo", status: "ready" },
+          { connector: "slack", uri: "channel", status: "ready" },
+        ],
+        addMessage: state.addMessage,
+        replaceMessage: state.replaceMessage,
+        setBusy: state.setBusy,
+        setLastFindings: state.setLastFindings,
+        setLastAnalysisAt: state.setLastAnalysisAt,
+        openSources: state.openSources,
+        refreshWorkspace: state.refreshWorkspace,
+        timeoutMs: 1000,
+      });
+    } finally {
+      (global as unknown as { window?: unknown }).window = originalWindow;
+    }
+
+    expect(mockPostFindings).toHaveBeenCalledTimes(2);
+    expect(state.busyCalls).toEqual([true, false]);
+    expect(state.lastFindings?.mismatch_count).toBe(1);
+    expect(state.replacements.at(-1)?.text).toContain("Failed:");
+    expect(state.replacements.at(-1)?.text).toContain("slack:channel - unauthorized");
+    expect(state.refreshWorkspace).toHaveBeenCalled();
+  });
+});
+
+function makeState(): AnalysisRunnerTestState {
+  const busyCalls: boolean[] = [];
+  let lastFindings: FindingsResult | null = null;
+  const replacements: Array<{ text: string }> = [];
+  const state: AnalysisRunnerTestState = {
+    busyCalls,
+    get lastFindings() {
+      return lastFindings;
+    },
+    set lastFindings(value) {
+      lastFindings = value;
+    },
+    replacements,
+    addMessage: jest.fn(),
+    replaceMessage: jest.fn((_id: string, message: { text: string }) => {
+      replacements.push(message);
+    }),
+    setBusy: jest.fn((value: boolean) => busyCalls.push(value)),
+    setLastFindings: jest.fn((result: FindingsResult | null) => {
+      lastFindings = result;
+    }),
+    setLastAnalysisAt: jest.fn(),
+    openSources: jest.fn(),
+    refreshWorkspace: jest.fn<Promise<void>, []>().mockResolvedValue(),
+  };
+  return state;
+}
