@@ -209,13 +209,18 @@
         };
     }
 
-    function selectedTargets() {
+    function selectedTargets(
+        enabledState = enabled,
+        uriState = uris,
+        selectedState = selectedSources,
+        optionState = sourceOptions,
+    ) {
         const targets: { connector: ConnectorKind; uri: string }[] = [];
         for (const r of REQUIRED) {
-            const manualURI = uris[r.connector].trim();
-            if (!enabled[r.connector] && !manualURI) continue;
-            const selected = selectedSources[r.connector] ?? {};
-            for (const option of sourceOptions[r.connector] ?? []) {
+            const manualURI = uriState[r.connector].trim();
+            if (!enabledState[r.connector] && !manualURI) continue;
+            const selected = selectedState[r.connector] ?? {};
+            for (const option of optionState[r.connector] ?? []) {
                 if (selected[option.uri]) {
                     targets.push({ connector: r.connector, uri: option.uri });
                 }
@@ -245,7 +250,7 @@
             statuses[target.connector] = "running";
             logs[target.connector] =
                 (logs[target.connector] || "") +
-                `Persisting ${target.uri} into the local workspace database...\n`;
+                `Persisting ${config.label} source ${target.uri} into the local workspace database...\n`;
             setConnectorKnowledge(target.connector, target.uri, "ingesting");
 
             try {
@@ -354,7 +359,12 @@
         }
     }
 
-    $: selectedCount = selectedTargets().length;
+    $: selectedCount = selectedTargets(
+        enabled,
+        uris,
+        selectedSources,
+        sourceOptions,
+    ).length;
     $: anyEnabled = selectedCount > 0;
     $: connectedSources = $project.connectors.filter(
         (source) => source.status === "ready" || source.status === "ingesting" || source.status === "error",
@@ -386,12 +396,6 @@
     <div class="ki-panel" class:inline={embedded}>
         <div class="ki-header">
             <h2>Workspace Sources</h2>
-            <p class="subtitle">
-                {$project.name} · {$project.workspacePath}
-            </p>
-            <button class="close-btn" on:click={onClose} aria-label="Close"
-                >Close</button
-            >
         </div>
 
         {#if !codexLoggedIn}
@@ -403,9 +407,11 @@
         {/if}
 
         <section class="workspace-sources" aria-label="Connected sources in this workspace">
-            <div>
+            <div class="workspace-sources-head">
                 <strong>{connectedCount} connected source{connectedCount === 1 ? "" : "s"}</strong>
-                <span>Saved only for {$project.name}</span>
+                <button class="close-btn" on:click={onClose} aria-label="Close"
+                    >Close</button
+                >
             </div>
             {#if connectedSources.length}
                 <div class="saved-source-list">
@@ -633,6 +639,10 @@
         font-family: inherit;
         box-sizing: border-box;
         padding: 0 var(--ki-pad-x) 1rem;
+        scrollbar-width: none;
+    }
+    .ki-panel::-webkit-scrollbar {
+        display: none;
     }
     .ki-panel.inline {
         --ki-pad-x: 16px;
@@ -649,25 +659,13 @@
         top: 0;
         background: inherit;
         padding: 1rem 0 0.75rem;
-        padding-right: calc(6rem + var(--ki-pad-x));
         border-bottom: 1px solid #d7d2c8;
     }
     .ki-header h2 {
-        margin: 0 0 0.25rem;
+        margin: 0;
         font-size: 1.2rem;
     }
-    .subtitle {
-        margin: 0;
-        color: #8a8678;
-        font-size: 0.78rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
     .close-btn {
-        position: absolute;
-        top: 0.9rem;
-        right: var(--ki-pad-x);
         height: 30px;
         border: 0;
         border-bottom: 1px solid #d7d2c8;
@@ -714,9 +712,9 @@
         background: transparent;
     }
 
-    .workspace-sources > div:first-child {
+    .workspace-sources-head {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         justify-content: space-between;
         gap: 0.75rem;
         margin-bottom: 0.55rem;
