@@ -39,6 +39,8 @@ type sourceDiscoveryResponse struct {
 	Sources   []sourceCandidate `json:"sources"`
 }
 
+const sourceDiscoveryTimeout = 5 * time.Minute
+
 // Status handles GET /codex/status.
 // It runs `codex login status` (fast, no network call) and
 // `codex plugin list` to report the installed plugin set.
@@ -344,7 +346,7 @@ func sourceDiscoveryPrompt(connector string) string {
 
 func runCodexJSON(ctx context.Context, prompt string) (string, error) {
 	binary := resolveCodexBin()
-	cmdCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	cmdCtx, cancel := context.WithTimeout(ctx, sourceDiscoveryTimeout)
 	defer cancel()
 
 	out, err := os.CreateTemp("", "contextos-codex-sources-*.json")
@@ -384,7 +386,7 @@ func runCodexJSON(ctx context.Context, prompt string) (string, error) {
 		}
 		<-done
 		log.Printf("codex sources: codex exec timed out after %s", time.Since(started).Round(time.Millisecond))
-		return "", fmt.Errorf("codex discovery timed out")
+		return "", fmt.Errorf("codex discovery timed out after %s", sourceDiscoveryTimeout)
 	}
 
 	content, err := os.ReadFile(outPath)
@@ -411,20 +413,28 @@ func extractJSONObject(text string) string {
 	return trimmed
 }
 
-// resolveCodexBin returns the absolute path to the codex executable,
-// falling back to known nvm installation directories when the binary is not
-// on the process PATH (common in dev containers started by the API server).
+// resolveCodexBin returns the absolute path to the codex executable.
+// CODEX_BIN takes precedence, then PATH, then common user-relative nvm paths.
 func resolveCodexBin() string {
+	if configured := strings.TrimSpace(os.Getenv("CODEX_BIN")); configured != "" {
+		return configured
+	}
 	if p, err := exec.LookPath("codex"); err == nil {
 		return p
 	}
 	home := os.Getenv("HOME")
+	nvmDir := os.Getenv("NVM_DIR")
 	candidates := []string{
-		"/home/codespace/nvm/current/bin/codex",
 		home + "/nvm/current/bin/codex",
+		home + "/.nvm/current/bin/codex",
+		nvmDir + "/current/bin/codex",
+		nvmDir + "/versions/node/current/bin/codex",
 		"/usr/local/share/nvm/current/bin/codex",
 	}
 	for _, c := range candidates {
+		if strings.TrimSpace(c) == "" || strings.HasPrefix(c, "/current/") || strings.HasPrefix(c, "/versions/") {
+			continue
+		}
 		if _, err := os.Stat(c); err == nil {
 			return c
 		}

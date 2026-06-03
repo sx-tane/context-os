@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	"context-os/domain/contracts"
 	"context-os/domain/entities"
@@ -23,6 +24,7 @@ import (
 )
 
 const metadataProductConnector = "product_connector"
+const persistTimeout = 30 * time.Second
 
 // Stores groups the repository interfaces that pipeline.Run uses to persist
 // its output.  All fields are optional — a nil field disables that persistence
@@ -124,26 +126,36 @@ func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequ
 			}
 			ingestEvents = append(ingestEvents, ie)
 		}
-		if n, err := stores.Events.UpsertBatch(ctx, stores.WorkspaceID, ingestEvents); err != nil {
+		persistCtx, cancel := persistenceContext(ctx)
+		if n, err := stores.Events.UpsertBatch(persistCtx, stores.WorkspaceID, ingestEvents); err != nil {
+			cancel()
 			log.Printf("pipeline: persist events: %v", err)
 		} else {
+			cancel()
 			log.Printf("pipeline: persisted %d new events for workspace %s", n, stores.WorkspaceID)
 		}
 	}
 
 	if stores.Entities != nil {
-		if err := stores.Entities.UpsertEntities(ctx, stores.WorkspaceID, result.Entities); err != nil {
+		persistCtx, cancel := persistenceContext(ctx)
+		if err := stores.Entities.UpsertEntities(persistCtx, stores.WorkspaceID, result.Entities); err != nil {
 			log.Printf("pipeline: persist entities: %v", err)
 		}
-		if err := stores.Entities.UpsertRelationships(ctx, stores.WorkspaceID, result.Relationships); err != nil {
+		cancel()
+
+		persistCtx, cancel = persistenceContext(ctx)
+		if err := stores.Entities.UpsertRelationships(persistCtx, stores.WorkspaceID, result.Relationships); err != nil {
 			log.Printf("pipeline: persist relationships: %v", err)
 		}
+		cancel()
 	}
 
 	if stores.Mismatches != nil {
-		if err := stores.Mismatches.UpsertMismatches(ctx, stores.WorkspaceID, result.Mismatches, stores.TraceID); err != nil {
+		persistCtx, cancel := persistenceContext(ctx)
+		if err := stores.Mismatches.UpsertMismatches(persistCtx, stores.WorkspaceID, result.Mismatches, stores.TraceID); err != nil {
 			log.Printf("pipeline: persist mismatches: %v", err)
 		}
+		cancel()
 	}
 
 	// Save a deterministic filesystem snapshot so organizational memory is
@@ -155,6 +167,10 @@ func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequ
 	if _, err := contextGraph.SaveSnapshot("storage/snapshots", snapshotName); err != nil {
 		log.Printf("pipeline: save snapshot: %v", err)
 	}
+}
+
+func persistenceContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), persistTimeout)
 }
 
 func persistedConnector(metadata map[string]string) string {

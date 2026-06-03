@@ -34,8 +34,10 @@ import (
 	slacksource "context-os/internal/source/slack"
 )
 
-// findingsTimeout allows for slow Codex plugin ingestion which can take 60–90 s.
-const findingsTimeout = 120 * time.Second
+// findingsTimeout allows Codex-backed presentation analysis to complete while
+// still bounding user-triggered findings calls.
+const findingsTimeout = 5 * time.Minute
+const presentationWriteTimeout = 30 * time.Second
 
 const metadataProductConnector = "product_connector"
 
@@ -267,7 +269,7 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 
 	// ── record connector sync cursor ───────────────────────────────────────────
 	if workspaceID != "" && h.syncRepo != nil {
-		syncCtx, scancel := context.WithTimeout(r.Context(), 5*time.Second)
+		syncCtx, scancel := presentationWriteContext(r.Context())
 		now := time.Now().UTC()
 		eventCount := result.EventCount
 		if h.events != nil {
@@ -403,11 +405,17 @@ func (h *Handler) logAudit(ctx context.Context, event repository.AuditEvent) {
 	if event.Actor == "" {
 		event.Actor = "api"
 	}
-	if err := h.audit.Log(ctx, event); err != nil {
+	writeCtx, cancel := presentationWriteContext(ctx)
+	defer cancel()
+	if err := h.audit.Log(writeCtx, event); err != nil {
 		// Audit rows are operational history; a failed write should not change
 		// findings semantics or hide the user-facing result.
 		fmt.Printf("presentation: audit %s: %v\n", event.EventType, err)
 	}
+}
+
+func presentationWriteContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), presentationWriteTimeout)
 }
 
 // lastSyncTime returns the most recent LastSyncedAt across all syncs for the given connector,

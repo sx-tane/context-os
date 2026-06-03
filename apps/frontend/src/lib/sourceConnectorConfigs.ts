@@ -6,7 +6,7 @@ export const sourceConnectorConfigs: SourceConnectorConfig[] = [
     title: "Filesystem MCP Connector",
     description:
       "Choose files or a folder from your computer. Server-visible paths stay available for local developer workflows.",
-    defaultUri: "docs/",
+    defaultUri: "",
     uriLabel: "File or folder path",
     uriPlaceholder: "docs/ or README.md",
     submitLabel: "Ingest server path",

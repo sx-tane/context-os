@@ -2,6 +2,7 @@
     import { onDestroy, onMount } from "svelte";
     import type { CodexPlugin, IngestProvider, IngestResult } from "$lib/types";
     import { getJSON } from "$lib/api";
+    import { project } from "$lib/projectStore";
     import { runConnectorIngest } from "$lib/ingestRunner";
     import ConnectorCard from "./ConnectorCard.svelte";
     import CodexBadge from "./CodexBadge.svelte";
@@ -17,7 +18,7 @@
     export let codexPlugins: CodexPlugin[];
     export let refreshCodexStatus: () => Promise<void>;
 
-    let uri = "notion://page/abc12345-1234-1234-1234-abcdefabcdef";
+    let uri = "";
     let token = "";
     let provider: IngestProvider = "codex";
     let loading = false;
@@ -51,6 +52,7 @@
         const runID = ++ingestRunID;
         await runConnectorIngest({
             connector: "notion",
+            workspace_id: $project.workspacePath,
             uri,
             token,
             provider,
@@ -73,9 +75,9 @@
     title="Notion MCP Connector"
     description="Ingest Notion pages and databases through direct API auth or the Notion Codex plugin."
     examples={[
-        "notion://page/abc12345-1234-1234-1234-abcdefabcdef",
-        "notion://database/deadbeef-cafe-babe-1234-000000000001",
-        "https://www.notion.so/My-Page-abc12345123412341234abcdefabcdef",
+        "notion://page/PAGE_ID",
+        "notion://database/DATABASE_ID",
+        "https://www.notion.so/workspace/Page-Title-PAGE_ID",
     ]}
 >
     <ModeToggle
@@ -110,7 +112,7 @@
     <FormField
         label="URI"
         bind:value={uri}
-        placeholder="notion://page/abc12345-1234-1234-1234-abcdefabcdef"
+        placeholder="notion://page/PAGE_ID"
         offset
     />
 

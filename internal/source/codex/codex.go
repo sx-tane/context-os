@@ -18,14 +18,13 @@ import (
 	"context-os/internal/source"
 )
 
-// knownNvmPaths lists common nvm bin directories to check when "codex" is not
-// on the process PATH (common when the binary is installed via nvm and the API
-// server process inherits a stripped environment).
+// knownNvmPaths lists common user-relative nvm bin directories to check when
+// "codex" is not on PATH. CODEX_BIN still takes precedence for custom installs.
 var knownNvmPaths = []string{
-	// dev container default
-	"/home/codespace/nvm/current/bin/codex",
-	// generic nvm layout
 	"${HOME}/nvm/current/bin/codex",
+	"${HOME}/.nvm/current/bin/codex",
+	"${NVM_DIR}/current/bin/codex",
+	"${NVM_DIR}/versions/node/current/bin/codex",
 	"/usr/local/share/nvm/current/bin/codex",
 }
 
@@ -33,13 +32,22 @@ var knownNvmPaths = []string{
 // It first asks exec.LookPath so any PATH entry wins, then falls back to
 // the common nvm installation directories used in dev containers.
 func resolveCodexBinary() string {
+	if configured := strings.TrimSpace(os.Getenv("CODEX_BIN")); configured != "" {
+		return configured
+	}
 	if p, err := exec.LookPath(defaultCommand); err == nil {
 		return p
 	}
 	home := os.Getenv("HOME")
+	nvmDir := os.Getenv("NVM_DIR")
 	candidates := make([]string, 0, len(knownNvmPaths)+1)
 	for _, c := range knownNvmPaths {
-		candidates = append(candidates, strings.ReplaceAll(c, "${HOME}", home))
+		c = strings.ReplaceAll(c, "${HOME}", home)
+		c = strings.ReplaceAll(c, "${NVM_DIR}", nvmDir)
+		if strings.Contains(c, "${") {
+			continue
+		}
+		candidates = append(candidates, c)
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {

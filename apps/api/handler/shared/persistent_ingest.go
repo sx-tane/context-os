@@ -23,7 +23,8 @@ import (
 
 // PersistentIngestTimeout allows Codex-backed source reads to complete while
 // still bounding user-triggered ingest calls.
-const PersistentIngestTimeout = 120 * time.Second
+const PersistentIngestTimeout = 5 * time.Minute
+const persistentWriteTimeout = 30 * time.Second
 
 const metadataProductConnector = "product_connector"
 
@@ -134,6 +135,9 @@ func (s *PersistentIngestService) PersistEvents(
 	capabilities []string,
 	rawEvents []events.Event,
 ) (response.Ingest, error) {
+	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), PersistentIngestTimeout)
+	defer cancel()
+
 	connectorName := normalizedConnectorName(input.Connector, "")
 	req := contracts.SourceRequest{
 		URI:      strings.TrimSpace(input.URI),
@@ -141,18 +145,18 @@ func (s *PersistentIngestService) PersistEvents(
 		Cursor:   strings.TrimSpace(input.Cursor),
 		Metadata: withProductConnector(input.Metadata, connectorName),
 	}
-	workspace, traceID, err := s.prepare(ctx, input.WorkspaceID, connectorName, req.URI, req.Cursor)
+	workspace, traceID, err := s.prepare(processCtx, input.WorkspaceID, connectorName, req.URI, req.Cursor)
 	if err != nil {
 		return response.Ingest{}, err
 	}
 
-	result := pipeline.RunEvents(ctx, rawEvents, req, s.pipelineStores(workspace.ID, traceID))
+	result := pipeline.RunEvents(processCtx, rawEvents, req, s.pipelineStores(workspace.ID, traceID))
 	if len(result.Events) == 0 {
 		err := fmt.Errorf("connector returned no events")
-		s.recordFailure(ctx, workspace.ID, connectorName, req.URI, traceID, err)
+		s.recordFailure(processCtx, workspace.ID, connectorName, req.URI, traceID, err)
 		return response.Ingest{}, err
 	}
-	return s.complete(ctx, workspace.ID, connectorName, req, traceID, capabilities, result), nil
+	return s.complete(processCtx, workspace.ID, connectorName, req, traceID, capabilities, result), nil
 }
 
 func withProductConnector(metadata map[string]string, connectorName string) map[string]string {
@@ -174,7 +178,9 @@ func (s *PersistentIngestService) prepare(ctx context.Context, workspacePath, co
 	if path == "" {
 		return repository.Workspace{}, "", fmt.Errorf("workspace_id is required")
 	}
-	ws, err := s.workspaces.Upsert(ctx, repository.Workspace{Name: path, Path: path})
+	writeCtx, cancel := s.writeContext(ctx)
+	ws, err := s.workspaces.Upsert(writeCtx, repository.Workspace{Name: path, Path: path})
+	cancel()
 	if err != nil {
 		return repository.Workspace{}, "", fmt.Errorf("persistent ingest: upsert workspace: %w", err)
 	}
@@ -189,13 +195,15 @@ func (s *PersistentIngestService) prepare(ctx context.Context, workspacePath, co
 		Payload:     map[string]string{"cursor": cursor},
 	})
 	if s.syncs != nil {
-		_ = s.syncs.Upsert(ctx, repository.ConnectorSync{
+		writeCtx, cancel := s.writeContext(ctx)
+		_ = s.syncs.Upsert(writeCtx, repository.ConnectorSync{
 			WorkspaceID: ws.ID,
 			Connector:   connectorName,
 			SourceURI:   sourceURI,
 			Cursor:      cursor,
 			Status:      "syncing",
 		})
+		cancel()
 	}
 	return ws, traceID, nil
 }
@@ -215,14 +223,17 @@ func (s *PersistentIngestService) pipelineStores(workspaceID, traceID string) *p
 func (s *PersistentIngestService) complete(ctx context.Context, workspaceID, connectorName string, req contracts.SourceRequest, traceID string, capabilities []string, result pipelines.Result) response.Ingest {
 	persistedEventCount := result.EventCount
 	if s.events != nil {
-		if count, err := s.events.Count(ctx, workspaceID, connectorName); err == nil {
+		writeCtx, cancel := s.writeContext(ctx)
+		if count, err := s.events.Count(writeCtx, workspaceID, connectorName); err == nil {
 			persistedEventCount = count
 		}
+		cancel()
 	}
 
 	now := time.Now().UTC()
 	if s.syncs != nil {
-		_ = s.syncs.Upsert(ctx, repository.ConnectorSync{
+		writeCtx, cancel := s.writeContext(ctx)
+		_ = s.syncs.Upsert(writeCtx, repository.ConnectorSync{
 			WorkspaceID:  workspaceID,
 			Connector:    connectorName,
 			SourceURI:    strings.TrimSpace(req.URI),
@@ -231,6 +242,7 @@ func (s *PersistentIngestService) complete(ctx context.Context, workspaceID, con
 			EventCount:   persistedEventCount,
 			Status:       "idle",
 		})
+		cancel()
 	}
 
 	payload := map[string]string{
@@ -291,13 +303,15 @@ func (s *PersistentIngestService) complete(ctx context.Context, workspaceID, con
 
 func (s *PersistentIngestService) recordFailure(ctx context.Context, workspaceID, connectorName, sourceURI, traceID string, err error) {
 	if s.syncs != nil {
-		_ = s.syncs.Upsert(ctx, repository.ConnectorSync{
+		writeCtx, cancel := s.writeContext(ctx)
+		_ = s.syncs.Upsert(writeCtx, repository.ConnectorSync{
 			WorkspaceID: workspaceID,
 			Connector:   connectorName,
 			SourceURI:   sourceURI,
 			Status:      "error",
 			LastError:   err.Error(),
 		})
+		cancel()
 	}
 	s.logAudit(ctx, repository.AuditEvent{
 		WorkspaceID: workspaceID,
@@ -317,9 +331,15 @@ func (s *PersistentIngestService) logAudit(ctx context.Context, event repository
 	if event.Actor == "" {
 		event.Actor = "api"
 	}
-	if err := s.audit.Log(ctx, event); err != nil {
+	writeCtx, cancel := s.writeContext(ctx)
+	defer cancel()
+	if err := s.audit.Log(writeCtx, event); err != nil {
 		log.Printf("persistent ingest: audit %s: %v", event.EventType, err)
 	}
+}
+
+func (s *PersistentIngestService) writeContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), persistentWriteTimeout)
 }
 
 func normalizedConnectorName(preferred, fallback string) string {

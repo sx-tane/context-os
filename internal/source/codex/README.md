@@ -14,7 +14,7 @@ Source connector that delegates ingestion to the [Codex CLI](https://github.com/
 
 | Key             | Direction | Description                                                          |
 | --------------- | --------- | -------------------------------------------------------------------- |
-| `codex_plugin`  | in        | Required. Plugin short name: `github`, `atlassian-rovo`, or `slack`. |
+| `codex_plugin`  | in        | Required. Plugin short name such as `github`, `atlassian-rovo`, `slack`, `google-drive`, `notion`, or `sharepoint`. |
 | `provider`      | out       | Set to `"codex_cli"` on successful ingestion.                        |
 | `codex_prompt`  | out       | The exact prompt sent to Codex (for audit/replay).                   |
 | `codex_command` | out       | The Codex executable path used.                                      |
@@ -27,6 +27,9 @@ Source connector that delegates ingestion to the [Codex CLI](https://github.com/
 | `PluginGitHub`        | `github`         | `github@openai-curated`         | GitHub repos/issues  |
 | `PluginAtlassianRovo` | `atlassian-rovo` | `atlassian-rovo@openai-curated` | Jira issues/projects |
 | `PluginSlack`         | `slack`          | `slack@openai-curated`          | Slack channels/DMs   |
+| `PluginGoogleDrive`   | `google-drive`   | `google-drive@openai-curated`   | Drive folders/docs   |
+| `PluginNotion`        | `notion`         | `notion@openai-curated`         | Notion pages/dbs     |
+| `PluginSharePoint`    | `sharepoint`     | `sharepoint@openai-curated`     | SharePoint/OneDrive  |
 
 ## Prerequisites
 
@@ -39,11 +42,11 @@ codex login                              # local
 codex login --device-auth               # remote / headless
 ```
 
-`start-all.sh` automates steps 1–3. Step 4 must be done by the user once.
+Set `CODEX_BIN=/path/to/codex` when the API process cannot find the CLI on `PATH`.
 
 ## Timeout
 
-The API handler uses a **120-second** context timeout for Codex provider requests (vs 20 s for direct API connectors). The Vite dev proxy is configured with a matching 3-minute socket timeout.
+The API handler uses a **5-minute** context timeout for Codex provider requests (vs 20 s for direct API connectors), so slower plugin-backed reads can complete without leaving requests unbounded.
 
 ## Testing
 

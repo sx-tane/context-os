@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import type { IngestProvider, IngestResult, CodexPlugin } from "$lib/types";
   import { getJSON } from "$lib/api";
+  import { project } from "$lib/projectStore";
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
@@ -19,7 +20,7 @@
   export let refreshCodexStatus: () => Promise<void>;
 
   // Local state
-  let uri = "https://github.com/sx-tane/context-os/issues/1";
+  let uri = "";
   let token = "";
   let provider: IngestProvider = "token";
   let loading = false;
@@ -56,6 +57,7 @@
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector: "github",
+      workspace_id: $project.workspacePath,
       uri,
       token,
       provider,

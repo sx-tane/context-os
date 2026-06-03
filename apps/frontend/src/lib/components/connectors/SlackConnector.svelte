@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import type { IngestProvider, IngestResult, CodexPlugin } from "$lib/types";
   import { getJSON } from "$lib/api";
+  import { project } from "$lib/projectStore";
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
@@ -19,7 +20,7 @@
   export let refreshCodexStatus: () => Promise<void>;
 
   // Local state
-  let uri = "slack://C1234567890";
+  let uri = "";
   let token = "";
   let provider: IngestProvider = "token";
   let loading = false;
@@ -59,6 +60,7 @@
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector: "slack",
+      workspace_id: $project.workspacePath,
       uri,
       token,
       provider,
@@ -78,7 +80,7 @@
 <ConnectorCard
   title="Slack MCP Connector"
   description="Ingest a Slack channel or message."
-  examples={["slack://CHANNEL_ID", "slack://CHANNEL_ID/TIMESTAMP"]}
+  examples={["slack://CHANNEL_ID", "slack://CHANNEL_ID/MESSAGE_TIMESTAMP"]}
 >
   <ModeToggle
     bind:value={provider}
@@ -143,7 +145,7 @@
   <FormField
     label="URI"
     bind:value={uri}
-    placeholder="slack://C1234567890"
+    placeholder="slack://CHANNEL_ID"
     offset
   />
 

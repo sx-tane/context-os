@@ -902,7 +902,7 @@ export interface definitions {
     schema_version?: string;
     /** @example github */
     source?: string;
-    /** @example https://github.com/sx-tane/context-os/issues/1 */
+    /** @example https://github.com/owner/repo/issues/1 */
     source_id?: string;
     /** @example Fix: update connector README */
     subject?: string;
@@ -1012,7 +1012,7 @@ export interface definitions {
     provider?: string;
     /** @example ghp_xxxx */
     token?: string;
-    /** @example https://github.com/sx-tane/context-os/issues/1 */
+    /** @example https://github.com/owner/repo/issues/1 */
     uri?: string;
     /** @example /home/user/myproject */
     workspace_id?: string;
@@ -1052,7 +1052,7 @@ export interface definitions {
     provider?: string;
     /** @example ATATT3xFfGF0xxxx */
     token?: string;
-    /** @example https://mysite.atlassian.net/browse/PROJ-123 */
+    /** @example https://site.atlassian.net/browse/PROJ-123 */
     uri?: string;
     /** @example /home/user/myproject */
     workspace_id?: string;
@@ -1065,7 +1065,7 @@ export interface definitions {
     provider?: string;
     /** @example secret_xxxx */
     token?: string;
-    /** @example notion://page/abc12345-1234-1234-1234-abcdefabcdef */
+    /** @example notion://page/PAGE_ID */
     uri?: string;
     /** @example /home/user/myproject */
     workspace_id?: string;
@@ -1120,7 +1120,7 @@ export interface definitions {
     provider?: string;
     /** @example xoxb-111-222-xxxx */
     token?: string;
-    /** @example slack://C1234567890 */
+    /** @example slack://CHANNEL_ID */
     uri?: string;
     /** @example /home/user/myproject */
     workspace_id?: string;

@@ -24,6 +24,7 @@
         addMessage,
         chatMessages,
         clearChat,
+        DEFAULT_WORKSPACE_PATH,
         getProject,
         hydrateWorkspaces,
         loadWorkspaceStatus,
@@ -42,7 +43,7 @@
     let codexInstalled = false;
     let codexAccount = "";
     let codexPlugins: CodexPlugin[] = [];
-    let workspacePath = "/workspace";
+    let workspacePath = DEFAULT_WORKSPACE_PATH;
     let command = "";
     let busy = false;
     let sourcePanelOpen = false;

@@ -4,7 +4,7 @@ package request
 // GithubIngest is the JSON body accepted by POST /github/ingest.
 type GithubIngest struct {
 	WorkspaceID string `json:"workspace_id" example:"/home/user/myproject"`
-	URI         string `json:"uri"          example:"https://github.com/sx-tane/context-os/issues/1"`
+	URI         string `json:"uri"          example:"https://github.com/owner/repo/issues/1"`
 	Token       string `json:"token"        example:"ghp_xxxx"`
 	Provider    string `json:"provider"     example:"token"`
 }
@@ -12,7 +12,7 @@ type GithubIngest struct {
 // SlackIngest is the JSON body accepted by POST /slack/ingest.
 type SlackIngest struct {
 	WorkspaceID string `json:"workspace_id" example:"/home/user/myproject"`
-	URI         string `json:"uri"          example:"slack://C1234567890"`
+	URI         string `json:"uri"          example:"slack://CHANNEL_ID"`
 	Token       string `json:"token"        example:"xoxb-111-222-xxxx"`
 	Provider    string `json:"provider"     example:"token"`
 }
@@ -20,7 +20,7 @@ type SlackIngest struct {
 // JiraIngest is the JSON body accepted by POST /jira/ingest.
 type JiraIngest struct {
 	WorkspaceID string            `json:"workspace_id" example:"/home/user/myproject"`
-	URI         string            `json:"uri"          example:"https://mysite.atlassian.net/browse/PROJ-123"`
+	URI         string            `json:"uri"          example:"https://site.atlassian.net/browse/PROJ-123"`
 	Content     string            `json:"content"      example:"Optional raw content override"`
 	Cursor      string            `json:"cursor"       example:"eyJsYXN0X2lkIjoiMTIzIn0="`
 	Token       string            `json:"token"        example:"ATATT3xFfGF0xxxx"`
@@ -47,7 +47,7 @@ type GoogleDriveIngest struct {
 // NotionIngest is the JSON body accepted by POST /notion/ingest.
 type NotionIngest struct {
 	WorkspaceID string            `json:"workspace_id" example:"/home/user/myproject"`
-	URI         string            `json:"uri"          example:"notion://page/abc12345-1234-1234-1234-abcdefabcdef"`
+	URI         string            `json:"uri"          example:"notion://page/PAGE_ID"`
 	Content     string            `json:"content"      example:"Optional raw content instead of fetching from Notion"`
 	Token       string            `json:"token"        example:"secret_xxxx"`
 	Provider    string            `json:"provider"     example:"token"`

@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import type { CodexPlugin, IngestProvider, IngestResult } from "$lib/types";
   import { getJSON } from "$lib/api";
+  import { project } from "$lib/projectStore";
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
@@ -60,6 +61,7 @@
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector: "googledrive",
+      workspace_id: $project.workspacePath,
       uri,
       provider,
       signal: ingestController.signal,

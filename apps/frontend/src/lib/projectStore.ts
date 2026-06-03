@@ -14,8 +14,10 @@ const CHAT_KEY_PREFIX = "contextos_chat_";
 const WORKSPACE_LIST_KEY = "contextos_workspaces";
 const ACTIVE_WORKSPACE_KEY = "contextos_workspace_path";
 
-// Default workspace path — replaced by user selection or URL param.
-const DEFAULT_PATH = "/workspace";
+// Default workspace key — replaced by user selection or URL param.
+export const DEFAULT_WORKSPACE_PATH =
+  import.meta.env.VITE_CONTEXTOS_DEFAULT_WORKSPACE?.trim() ||
+  "contextos-default";
 
 function getLocalStorage(): Storage | null {
   if (typeof localStorage === "undefined") return null;
@@ -23,12 +25,12 @@ function getLocalStorage(): Storage | null {
 }
 
 function loadActiveWorkspacePath(): string {
-  return getLocalStorage()?.getItem(ACTIVE_WORKSPACE_KEY) || DEFAULT_PATH;
+  return getLocalStorage()?.getItem(ACTIVE_WORKSPACE_KEY) || DEFAULT_WORKSPACE_PATH;
 }
 
 function cleanWorkspacePath(path?: string): string {
   const cleanPath = path?.trim();
-  return cleanPath || DEFAULT_PATH;
+  return cleanPath || DEFAULT_WORKSPACE_PATH;
 }
 
 function loadProject(path: string): ProjectState {
@@ -92,7 +94,7 @@ function saveMessages(path: string, messages: ChatMessage[]): void {
 }
 
 function loadWorkspacePaths(): string[] {
-  const paths = new Set<string>([DEFAULT_PATH]);
+  const paths = new Set<string>([DEFAULT_WORKSPACE_PATH]);
   try {
     const storage = getLocalStorage();
     if (!storage) return [...paths];
@@ -203,10 +205,10 @@ export function removeWorkspace(workspacePath: string): void {
   _workspaces.update((items) => {
     const next = items.filter((item) => item.workspacePath !== workspacePath);
     saveWorkspacePaths(next.map((item) => item.workspacePath));
-    return next.length > 0 ? next : [loadProject(DEFAULT_PATH)];
+    return next.length > 0 ? next : [loadProject(DEFAULT_WORKSPACE_PATH)];
   });
   if (get(_project).workspacePath === workspacePath) {
-    openProject(get(_workspaces)[0]?.workspacePath ?? DEFAULT_PATH);
+    openProject(get(_workspaces)[0]?.workspacePath ?? DEFAULT_WORKSPACE_PATH);
   }
 }
 

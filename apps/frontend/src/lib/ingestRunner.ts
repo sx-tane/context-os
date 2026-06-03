@@ -3,6 +3,7 @@ import { postIngest, streamCodexIngest } from "$lib/api";
 
 interface IngestRunnerOptions {
   connector: ConnectorKind;
+  workspace_id?: string;
   uri: string;
   token?: string;
   content?: string;
@@ -54,6 +55,7 @@ export async function runConnectorIngest(
       await streamCodexIngest(
         options.connector,
         {
+          workspace_id: options.workspace_id || undefined,
           uri: options.uri,
           token: options.token || undefined,
           provider: "codex",
@@ -76,6 +78,7 @@ export async function runConnectorIngest(
     const res = await postIngest(
       options.connector,
       {
+        workspace_id: options.workspace_id || undefined,
         uri: options.uri,
         token: options.token || undefined,
         content: options.content || undefined,

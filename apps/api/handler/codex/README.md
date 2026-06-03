@@ -22,7 +22,7 @@ device-auth login, and plugin re-authentication flows.
 ## Private helpers
 
 - `sourceDiscoveryTimeout` - bounds Codex source discovery at 5 minutes so slower plugin reads can complete while still surfacing a deterministic timeout.
-- `resolveCodexBin()` — locates the Codex binary, falling back to nvm paths.
+- `resolveCodexBin()` — locates the Codex binary from `CODEX_BIN`, `PATH`, or common user-relative nvm paths.
 - `runCodexInfo(args…)` — runs Codex with a 5-second timeout, captures combined output.
 - `runCodexSSE(ctx, sw, binary, args…)` — streams a Codex sub-command to an `SSEWriter` with a 3-minute timeout.
 - `runCodexSSEEnv(ctx, sw, binary, extraEnv, args…)` — like `runCodexSSE` but merges extra environment variables into the subprocess (used by `PluginReauth` to inject `BROWSER=echo`).

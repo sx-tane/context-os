@@ -179,7 +179,7 @@ func StreamCodexIngest[T CodexStreamRequest](
 		metadata[codexsource.MetadataTokenOverride] = tok
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), PersistentIngestTimeout)
 	defer cancel()
 
 	resultEvents, err := StreamWithHeartbeat(ctx, sw, func() ([]events.Event, error) {

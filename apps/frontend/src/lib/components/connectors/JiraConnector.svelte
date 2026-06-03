@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import type { CodexPlugin, IngestProvider, IngestResult } from "$lib/types";
   import { getJSON } from "$lib/api";
+  import { project } from "$lib/projectStore";
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
@@ -17,7 +18,7 @@
   export let codexPlugins: CodexPlugin[];
   export let refreshCodexStatus: () => Promise<void>;
 
-  let uri = "https://example.atlassian.net/browse/PROJ-123";
+  let uri = "";
   let token = "";
   let email = "";
   let apiBaseURL = "";
@@ -59,6 +60,7 @@
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector: "jira",
+      workspace_id: $project.workspacePath,
       uri,
       token,
       provider,

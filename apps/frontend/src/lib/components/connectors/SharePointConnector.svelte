@@ -2,6 +2,7 @@
     import { onDestroy, onMount } from "svelte";
     import type { CodexPlugin, IngestProvider, IngestResult } from "$lib/types";
     import { getJSON } from "$lib/api";
+    import { project } from "$lib/projectStore";
     import { runConnectorIngest } from "$lib/ingestRunner";
     import ConnectorCard from "./ConnectorCard.svelte";
     import CodexBadge from "./CodexBadge.svelte";
@@ -17,7 +18,7 @@
     export let codexPlugins: CodexPlugin[];
     export let refreshCodexStatus: () => Promise<void>;
 
-    let uri = "sharepoint://sites/contoso.sharepoint.com,abc/items/item001";
+    let uri = "";
     let token = "";
     let tenantID = "";
     let clientID = "";
@@ -61,6 +62,7 @@
         const runID = ++ingestRunID;
         await runConnectorIngest({
             connector: "sharepoint",
+            workspace_id: $project.workspacePath,
             uri,
             token,
             provider,
@@ -86,8 +88,8 @@
     title="SharePoint / OneDrive MCP Connector"
     description="Ingest SharePoint and OneDrive files via Microsoft Graph using a direct access token, client credentials, or the SharePoint Codex plugin."
     examples={[
-        "sharepoint://sites/contoso.sharepoint.com,abc/items/item001",
-        "sharepoint://drives/drive-001/items/item-002",
+        "sharepoint://sites/TENANT.sharepoint.com,SITE_ID/items/ITEM_ID",
+        "sharepoint://drives/DRIVE_ID/items/ITEM_ID",
     ]}
 >
     <ModeToggle
@@ -147,7 +149,7 @@
     <FormField
         label="URI"
         bind:value={uri}
-        placeholder="sharepoint://sites/contoso.sharepoint.com,abc/items/item001"
+        placeholder="sharepoint://sites/TENANT.sharepoint.com,SITE_ID/items/ITEM_ID"
         offset
     />
 

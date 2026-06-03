@@ -7,6 +7,7 @@
     SupportedFormat,
   } from "$lib/types";
   import { postFilesystemUpload } from "$lib/api";
+  import { project } from "$lib/projectStore";
   import { runConnectorIngest } from "$lib/ingestRunner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import ResultPanel from "../feedback/IngestResult.svelte";
@@ -127,6 +128,7 @@
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector,
+      workspace_id: $project.workspacePath,
       uri,
       token,
       content,
