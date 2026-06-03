@@ -266,6 +266,7 @@ func mapChatResult(result internalchat.Result) response.ChatQuery {
 		Provider:           result.Provider,
 		Answer:             result.Answer,
 		Summary:            result.Summary,
+		AnswerSections:     mapAnswerSections(result.AnswerSections),
 		RangeStart:         rangeStart,
 		RangeEnd:           rangeEnd,
 		ArtifactCount:      len(result.Artifacts),
@@ -273,4 +274,24 @@ func mapChatResult(result internalchat.Result) response.ChatQuery {
 		Syncs:              result.Syncs,
 		EvidenceSaveStatus: evidenceStatusSkipped,
 	}
+}
+
+func mapAnswerSections(sections []internalchat.AnswerSection) []response.AnswerSection {
+	out := make([]response.AnswerSection, 0, len(sections))
+	for _, section := range sections {
+		out = append(out, response.AnswerSection{
+			SourceLabel: section.SourceLabel,
+			Connector:   section.Connector,
+			SourceURI:   section.SourceURI,
+			Summary:     section.Summary,
+			Facts:       append([]string(nil), section.Facts...),
+			OpenItems:   append([]string(nil), section.OpenItems...),
+			CodingNotes: append([]string(nil), section.CodingNotes...),
+			Links:       append([]string(nil), section.Links...),
+			Timestamps:  append([]string(nil), section.Timestamps...),
+			Confidence:  section.Confidence,
+			Status:      section.Status,
+		})
+	}
+	return out
 }

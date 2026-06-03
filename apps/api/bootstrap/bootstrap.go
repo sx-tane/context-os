@@ -109,6 +109,7 @@ func Routes(sqlDB *sql.DB) []Route {
 	if handlers.artifacts != nil {
 		routes = append(routes,
 			Route{Pattern: "/artifacts", Handler: http.HandlerFunc(handlers.artifacts.Query), CORS: true},
+			Route{Pattern: "/artifacts/live-evidence/cleanup", Handler: http.HandlerFunc(handlers.artifacts.CleanupLiveEvidence), CORS: true},
 		)
 	}
 	if handlers.chat != nil {
@@ -168,7 +169,8 @@ func newHandlers(sqlDB *sql.DB) handlers {
 
 	return handlers{
 		workspace: handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore).
-			WithAuditRepository(auditStore),
+			WithAuditRepository(auditStore).
+			WithLocalArtifactDirs("storage/parsed", "storage/snapshots"),
 		presentation: presentation.NewHandler(
 			wsStore, evStore, mismatchStore, entityStore, syncStore,
 			presentation.WithParsedWriter(parsedWriter),

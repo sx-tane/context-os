@@ -4,7 +4,10 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,12 +19,14 @@ const workspaceRequestTimeout = 10 * time.Second
 
 // Handler holds the repository dependencies for workspace HTTP handlers.
 type Handler struct {
-	workspaces repository.WorkspaceRepository
-	events     repository.EventRepository
-	entities   repository.EntityRepository
-	mismatches repository.MismatchRepository
-	connSync   repository.SyncRepository
-	audit      repository.AuditRepository
+	workspaces  repository.WorkspaceRepository
+	events      repository.EventRepository
+	entities    repository.EntityRepository
+	mismatches  repository.MismatchRepository
+	connSync    repository.SyncRepository
+	audit       repository.AuditRepository
+	parsedDir   string
+	snapshotDir string
 }
 
 // NewHandler returns a Handler wired to the provided repositories.
@@ -44,6 +49,13 @@ func NewHandler(
 // WithAuditRepository attaches audit row counts to workspace status.
 func (h *Handler) WithAuditRepository(audit repository.AuditRepository) *Handler {
 	h.audit = audit
+	return h
+}
+
+// WithLocalArtifactDirs configures workspace-scoped local JSON cleanup.
+func (h *Handler) WithLocalArtifactDirs(parsedDir, snapshotDir string) *Handler {
+	h.parsedDir = parsedDir
+	h.snapshotDir = snapshotDir
 	return h
 }
 
@@ -140,7 +152,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 // Reset handles POST /workspace/reset.
 //
 // @Summary      Reset workspace memory
-// @Description  Deletes DB-backed local memory for a workspace and recreates an empty workspace row.
+// @Description  Deletes DB-backed local memory and workspace-scoped local JSON artifacts, then recreates an empty workspace row.
 // @Tags         workspace
 // @Accept       json
 // @Produce      json
@@ -182,8 +194,17 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), workspaceRequestTimeout)
 	defer cancel()
 
+	workspace, err := h.workspaces.GetByPath(ctx, path)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
 	if err := resetter.DeleteByPath(ctx, path); err != nil {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	if err := h.deleteLocalWorkspaceArtifacts(workspaceIDForCleanup(path, workspace)); err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "local_cleanup_error", err.Error())
 		return
 	}
 	ws, err := h.workspaces.Upsert(ctx, repository.Workspace{Name: name, Path: path})
@@ -197,7 +218,7 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 // Delete handles DELETE /workspace?path=<path>.
 //
 // @Summary      Delete workspace memory
-// @Description  Deletes a workspace row and all cascade-linked local memory without recreating the workspace.
+// @Description  Deletes a workspace row, cascade-linked DB memory, and workspace-scoped local JSON artifacts without recreating the workspace.
 // @Tags         workspace
 // @Produce      json
 // @Param        path  query     string  true  "Absolute workspace path"
@@ -227,11 +248,20 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), workspaceRequestTimeout)
 	defer cancel()
 
+	workspace, err := h.workspaces.GetByPath(ctx, path)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
 	if err := resetter.DeleteByPath(ctx, path); err != nil {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
 	}
-	workspace, err := h.workspaces.GetByPath(ctx, path)
+	if err := h.deleteLocalWorkspaceArtifacts(workspaceIDForCleanup(path, workspace)); err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "local_cleanup_error", err.Error())
+		return
+	}
+	workspace, err = h.workspaces.GetByPath(ctx, path)
 	if err != nil {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
@@ -241,6 +271,49 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.WriteJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+func (h *Handler) deleteLocalWorkspaceArtifacts(workspaceID string) error {
+	if workspaceID == "" {
+		return nil
+	}
+	if h.parsedDir != "" {
+		if err := os.RemoveAll(filepath.Join(h.parsedDir, workspaceID)); err != nil {
+			return fmt.Errorf("delete parsed workspace artifacts: %w", err)
+		}
+	}
+	if h.snapshotDir == "" {
+		return nil
+	}
+	if err := removeSnapshotFiles(h.snapshotDir, workspaceID+".json"); err != nil {
+		return err
+	}
+	return removeSnapshotFiles(h.snapshotDir, workspaceID+"_*.json")
+}
+
+func removeSnapshotFiles(dir, pattern string) error {
+	matches, err := filepath.Glob(filepath.Join(dir, pattern))
+	if err != nil {
+		return fmt.Errorf("find snapshot artifacts: %w", err)
+	}
+	for _, match := range matches {
+		if err := os.Remove(match); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete snapshot artifact %q: %w", match, err)
+		}
+	}
+	return nil
+}
+
+func workspaceIDForCleanup(path string, workspace *repository.Workspace) string {
+	if workspace != nil && strings.TrimSpace(workspace.ID) != "" {
+		return workspace.ID
+	}
+	id := strings.ReplaceAll(path, "/", "_")
+	id = strings.TrimPrefix(id, "_")
+	if id == "" {
+		return "workspace"
+	}
+	return id
 }
 
 // Status handles GET /workspace/status?path=<path>.

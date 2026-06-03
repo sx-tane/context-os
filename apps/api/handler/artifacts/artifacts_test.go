@@ -59,6 +59,32 @@ func (fakeEventRepo) Count(context.Context, string, string) (int, error) {
 	panic("unexpected call")
 }
 
+type cleanupEventRepo struct {
+	events  []repository.IngestEvent
+	deleted []string
+}
+
+func (c *cleanupEventRepo) UpsertBatch(context.Context, string, []repository.IngestEvent) (int, error) {
+	panic("unexpected call")
+}
+
+func (c *cleanupEventRepo) ListByWorkspace(context.Context, string, string, int) ([]repository.IngestEvent, error) {
+	panic("unexpected call")
+}
+
+func (c *cleanupEventRepo) Query(context.Context, string, repository.EventQuery) ([]repository.IngestEvent, error) {
+	return append([]repository.IngestEvent(nil), c.events...), nil
+}
+
+func (c *cleanupEventRepo) Count(context.Context, string, string) (int, error) {
+	panic("unexpected call")
+}
+
+func (c *cleanupEventRepo) DeleteByIDs(_ context.Context, _ string, ids []string) (int, error) {
+	c.deleted = append([]string(nil), ids...)
+	return len(ids), nil
+}
+
 // TestParseLimit verifies query limits default, clamp, and validate as expected.
 func TestParseLimit(t *testing.T) {
 	t.Parallel()
@@ -237,5 +263,79 @@ func TestBuildEventQueryIgnoresWhitespace(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("buildEventQuery() = %#v, want %#v", got, want)
+	}
+}
+
+// TestNoisyLiveEvidenceIDsMatchesOldNoisyRows verifies cleanup targets old live evidence without matching normal source artifacts.
+func TestNoisyLiveEvidenceIDsMatchesOldNoisyRows(t *testing.T) {
+	t.Parallel()
+
+	events := []repository.IngestEvent{
+		{
+			ID:        "path-fragment",
+			Connector: "googledrive",
+			SourceURI: "drive.google.com/file",
+			Metadata:  map[string]string{"evidence_kind": "live_chat_answer"},
+		},
+		{
+			ID:        "duplicate-full-answer",
+			Connector: "jira",
+			SourceURI: "BKGDEV-8096",
+			Body:      "Full answer saved for every source.",
+			Metadata: map[string]string{
+				"evidence_kind":   "live_chat_answer",
+				"related_sources": "jira:BKGDEV-8096,jira:BKGDEV-8466",
+			},
+		},
+		{
+			ID:        "clean-section",
+			Connector: "googledrive",
+			SourceURI: "https://docs.google.com/spreadsheets/d/abc/edit",
+			Body:      "Source: Google Drive · mapping.xlsx\nSummary: Mapping.",
+			Metadata: map[string]string{
+				"evidence_kind": "live_chat_answer",
+				"source_label":  "Google Drive · mapping.xlsx",
+			},
+		},
+		{
+			ID:        "normal-source",
+			Connector: "github",
+			SourceURI: "sx-tane/context-os",
+			Metadata:  map[string]string{},
+		},
+	}
+
+	got := noisyLiveEvidenceIDs(events)
+
+	want := []string{"path-fragment", "duplicate-full-answer"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("noisyLiveEvidenceIDs() = %#v, want %#v", got, want)
+	}
+}
+
+// TestCleanupLiveEvidenceDeletesSelectedRows verifies the cleanup endpoint deletes only selected noisy live evidence.
+func TestCleanupLiveEvidenceDeletesSelectedRows(t *testing.T) {
+	t.Parallel()
+
+	ws := repository.Workspace{ID: "ws-1", Path: "/workspace"}
+	events := &cleanupEventRepo{events: []repository.IngestEvent{{
+		ID:        "enum",
+		Connector: "googledrive",
+		SourceURI: "enum/value",
+		Metadata:  map[string]string{"evidence_kind": "live_chat_answer"},
+	}}}
+	handler := NewHandler(fakeWorkspaceRepo{
+		getByPath: map[string]*repository.Workspace{"/workspace": &ws},
+	}, events)
+	req := httptest.NewRequest("POST", "/artifacts/live-evidence/cleanup?workspace_id=/workspace", nil)
+	res := httptest.NewRecorder()
+
+	handler.CleanupLiveEvidence(res, req)
+
+	if res.Code != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.Code, res.Body.String())
+	}
+	if !reflect.DeepEqual(events.deleted, []string{"enum"}) {
+		t.Fatalf("deleted = %#v, want enum row", events.deleted)
 	}
 }

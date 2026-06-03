@@ -2,6 +2,21 @@ package response
 
 import "context-os/domain/repository"
 
+// AnswerSection is one structured source card returned by chat queries.
+type AnswerSection struct {
+	SourceLabel string   `json:"source_label"`
+	Connector   string   `json:"connector,omitempty"`
+	SourceURI   string   `json:"source_uri,omitempty"`
+	Summary     string   `json:"summary,omitempty"`
+	Facts       []string `json:"facts,omitempty"`
+	OpenItems   []string `json:"open_items,omitempty"`
+	CodingNotes []string `json:"coding_notes,omitempty"`
+	Links       []string `json:"links,omitempty"`
+	Timestamps  []string `json:"timestamps,omitempty"`
+	Confidence  float64  `json:"confidence,omitempty"`
+	Status      string   `json:"status,omitempty"`
+}
+
 // ChatQuery is the JSON payload returned by POST /chat/query.
 type ChatQuery struct {
 	Intent        string                     `json:"intent"`
@@ -12,6 +27,7 @@ type ChatQuery struct {
 	Provider      string                     `json:"provider"`
 	Answer        string                     `json:"answer"`
 	Summary       string                     `json:"summary"`
+	AnswerSections []AnswerSection          `json:"answer_sections,omitempty"`
 	RangeStart    string                     `json:"range_start,omitempty"`
 	RangeEnd      string                     `json:"range_end,omitempty"`
 	ArtifactCount int                        `json:"artifact_count"`

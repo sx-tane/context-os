@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -125,6 +127,31 @@ func TestDeleteRemovesWorkspaceWithoutRecreatingRow(t *testing.T) {
 	}
 }
 
+// TestDeleteRemovesLocalWorkspaceArtifacts verifies workspace delete removes parsed JSON and graph snapshots.
+func TestDeleteRemovesLocalWorkspaceArtifacts(t *testing.T) {
+	parsedDir, snapshotDir := makeLocalArtifacts(t, "workspace")
+	repo := &resettableWorkspaceRepo{
+		workspaceRepo: workspaceRepo{
+			workspaces: []repository.Workspace{
+				{ID: "workspace", Name: "workspace", Path: "/workspace"},
+			},
+		},
+	}
+	handler := workspacehandler.NewHandler(repo, nil, nil, nil, nil).
+		WithLocalArtifactDirs(parsedDir, snapshotDir)
+
+	req := httptest.NewRequest(http.MethodDelete, "/workspace?path=/workspace", nil)
+	rec := httptest.NewRecorder()
+	handler.Delete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	assertPathMissing(t, filepath.Join(parsedDir, "workspace"))
+	assertPathMissing(t, filepath.Join(snapshotDir, "workspace.json"))
+	assertPathMissing(t, filepath.Join(snapshotDir, "workspace_trace-1.json"))
+}
+
 // TestDeleteMissingWorkspaceSucceeds verifies deleting an unknown workspace path is a successful no-op.
 func TestDeleteMissingWorkspaceSucceeds(t *testing.T) {
 	repo := &resettableWorkspaceRepo{}
@@ -140,6 +167,38 @@ func TestDeleteMissingWorkspaceSucceeds(t *testing.T) {
 	if len(repo.deletedPaths) != 1 || repo.deletedPaths[0] != "/missing" {
 		t.Fatalf("deletedPaths = %v, want [/missing]", repo.deletedPaths)
 	}
+}
+
+// TestResetRemovesLocalWorkspaceArtifacts verifies workspace reset clears DB-backed memory and local JSON before recreating the row.
+func TestResetRemovesLocalWorkspaceArtifacts(t *testing.T) {
+	parsedDir, snapshotDir := makeLocalArtifacts(t, "workspace")
+	repo := &resettableWorkspaceRepo{
+		workspaceRepo: workspaceRepo{
+			workspaces: []repository.Workspace{
+				{ID: "workspace", Name: "workspace", Path: "/workspace"},
+			},
+		},
+	}
+	handler := workspacehandler.NewHandler(repo, nil, nil, nil, nil).
+		WithLocalArtifactDirs(parsedDir, snapshotDir)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/workspace/reset",
+		bytes.NewReader([]byte(`{"path":"/workspace","name":"workspace"}`)),
+	)
+	rec := httptest.NewRecorder()
+	handler.Reset(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if repo.upsertCount != 1 {
+		t.Fatalf("upsertCount = %d, want 1", repo.upsertCount)
+	}
+	assertPathMissing(t, filepath.Join(parsedDir, "workspace"))
+	assertPathMissing(t, filepath.Join(snapshotDir, "workspace.json"))
+	assertPathMissing(t, filepath.Join(snapshotDir, "workspace_trace-1.json"))
 }
 
 // TestSourceRegistersConnectedSource verifies workspace source registration saves a connected sync row without ingest state.
@@ -395,4 +454,38 @@ func objectSlice(t *testing.T, parent map[string]any, key string) []map[string]a
 		objects = append(objects, object)
 	}
 	return objects
+}
+
+// makeLocalArtifacts creates parsed and snapshot JSON files for one workspace.
+func makeLocalArtifacts(t *testing.T, workspaceID string) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	parsedDir := filepath.Join(root, "parsed")
+	snapshotDir := filepath.Join(root, "snapshots")
+	if err := os.MkdirAll(filepath.Join(parsedDir, workspaceID), 0o755); err != nil {
+		t.Fatalf("MkdirAll() parsed error = %v", err)
+	}
+	if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() snapshots error = %v", err)
+	}
+	writeTestFile(t, filepath.Join(parsedDir, workspaceID, "doc.json"))
+	writeTestFile(t, filepath.Join(snapshotDir, workspaceID+".json"))
+	writeTestFile(t, filepath.Join(snapshotDir, workspaceID+"_trace-1.json"))
+	return parsedDir, snapshotDir
+}
+
+// writeTestFile writes a small JSON test artifact.
+func writeTestFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(`{"ok":true}`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+}
+
+// assertPathMissing verifies a local artifact path no longer exists.
+func assertPathMissing(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("Stat(%q) error = %v, want not exist", path, err)
+	}
 }

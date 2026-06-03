@@ -75,7 +75,7 @@ apps/api/
 | GET    | `/workspace`            | Lists registered local workspaces                                                        |
 | POST   | `/workspace/upsert`     | Registers or updates a local workspace path                                              |
 | POST   | `/workspace/source`     | Saves a connected source reference without ingesting external source content             |
-| DELETE | `/workspace?path=...`   | Deletes a workspace row and DB-backed local memory without recreating it                  |
+| DELETE | `/workspace?path=...`   | Deletes a workspace row, DB-backed local memory, parsed JSON, and graph snapshots without recreating it |
 | GET    | `/workspace/status`     | Returns local event/entity/mismatch counts and connector sync state                      |
 | GET    | `/artifacts`            | Queries local ingested artifacts by workspace, connector, source URI, date range, and text |
 | POST   | `/chat/query`           | Natural-language query over live Codex source context first for plugin-backed sources, with concrete live evidence saved asynchronously |

@@ -35,6 +35,7 @@ var (
 type EvidenceSource struct {
 	Connector string
 	SourceURI string
+	Section   response.AnswerSection
 }
 
 // EvidenceSaveInput identifies a live source whose evidence should be persisted locally.
@@ -91,6 +92,8 @@ func (p persistentEvidenceSaver) Save(ctx context.Context, input EvidenceSaveInp
 		sourceInput := input
 		sourceInput.Connector = source.Connector
 		sourceInput.SourceURI = source.SourceURI
+		sourceInput.Summary = sourceSectionSummary(source, input.Summary)
+		sourceInput.Answer = sourceSectionBody(source, input.Answer)
 		rawEvents := []events.Event{liveAnswerEvent(sourceInput, metadata)}
 		persisted, err := service.PersistEvidenceEvents(saveCtx, shared.SourceIngestInput{
 			WorkspaceID: strings.TrimSpace(input.WorkspaceID),
@@ -171,7 +174,6 @@ func evidenceSaveInput(result response.ChatQuery) (EvidenceSaveInput, bool) {
 func liveAnswerEvent(input EvidenceSaveInput, metadata map[string]string) events.Event {
 	sourceURI := strings.TrimSpace(input.SourceURI)
 	connector := strings.ToLower(strings.TrimSpace(input.Connector))
-	title := fmt.Sprintf("Live chat evidence: %s", sourceURI)
 	eventMetadata := shared.CloneStringMap(metadata)
 	eventMetadata[contracts.MetadataSourceURI] = sourceURI
 	eventMetadata[contracts.MetadataConnector] = connector
@@ -179,13 +181,16 @@ func liveAnswerEvent(input EvidenceSaveInput, metadata map[string]string) events
 	eventMetadata["source_uri"] = sourceURI
 	eventMetadata["provider"] = "codex"
 	eventMetadata["evidence_kind"] = "live_chat_answer"
+	if label := strings.TrimSpace(sourceLabelFromInput(input)); label != "" {
+		eventMetadata["source_label"] = label
+	}
 	if summary := strings.TrimSpace(input.Summary); summary != "" {
 		eventMetadata["summary"] = summary
 	}
 	return events.New(
 		events.DocumentIngested,
 		connector,
-		title,
+		liveAnswerTitle(input),
 		strings.TrimSpace(input.Answer),
 		eventMetadata,
 	)
@@ -196,6 +201,14 @@ func extractEvidenceSources(result response.ChatQuery) []EvidenceSource {
 	sourceURI := trimEvidenceSource(result.SourceURI)
 	answer := strings.TrimSpace(result.Answer)
 	builder := evidenceSourceBuilder{}
+	for _, section := range result.AnswerSections {
+		sectionConnector := strings.ToLower(strings.TrimSpace(firstNonEmpty(section.Connector, connector)))
+		sectionSourceURI := trimEvidenceSource(firstNonEmpty(section.SourceURI, sourceURI))
+		builder.addSection(sectionConnector, sectionSourceURI, section)
+	}
+	if len(builder.items) > 0 {
+		return builder.sources()
+	}
 	if sourceURI != "" && !isBroadConnectorScope(connector, sourceURI) {
 		builder.add(connector, sourceURI)
 	}
@@ -248,6 +261,10 @@ type evidenceSourceBuilder struct {
 }
 
 func (b *evidenceSourceBuilder) add(connector, sourceURI string) {
+	b.addSection(connector, sourceURI, response.AnswerSection{})
+}
+
+func (b *evidenceSourceBuilder) addSection(connector, sourceURI string, section response.AnswerSection) {
 	if b.seen == nil {
 		b.seen = map[string]struct{}{}
 	}
@@ -267,7 +284,9 @@ func (b *evidenceSourceBuilder) add(connector, sourceURI string) {
 		return
 	}
 	b.seen[key] = struct{}{}
-	b.items = append(b.items, EvidenceSource{Connector: connector, SourceURI: sourceURI})
+	section.Connector = connector
+	section.SourceURI = sourceURI
+	b.items = append(b.items, EvidenceSource{Connector: connector, SourceURI: sourceURI, Section: section})
 }
 
 func (b *evidenceSourceBuilder) sources() []EvidenceSource {
@@ -279,12 +298,94 @@ func (b *evidenceSourceBuilder) sources() []EvidenceSource {
 func normalizedEvidenceSources(input EvidenceSaveInput) []EvidenceSource {
 	builder := evidenceSourceBuilder{}
 	for _, source := range input.Sources {
-		builder.add(source.Connector, source.SourceURI)
+		builder.addSection(source.Connector, source.SourceURI, source.Section)
 	}
 	if len(builder.items) == 0 {
 		builder.add(input.Connector, input.SourceURI)
 	}
 	return builder.sources()
+}
+
+func sourceSectionSummary(source EvidenceSource, fallback string) string {
+	if summary := strings.TrimSpace(source.Section.Summary); summary != "" {
+		return summary
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func sourceSectionBody(source EvidenceSource, fallback string) string {
+	section := source.Section
+	if isEmptyAnswerSection(section) {
+		return strings.TrimSpace(fallback)
+	}
+	var parts []string
+	if section.SourceLabel != "" {
+		parts = append(parts, "Source: "+section.SourceLabel)
+	}
+	if section.Summary != "" {
+		parts = append(parts, "Summary: "+section.Summary)
+	}
+	appendSectionList := func(label string, values []string) {
+		if len(values) == 0 {
+			return
+		}
+		parts = append(parts, label+":")
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			if value != "" {
+				parts = append(parts, "- "+value)
+			}
+		}
+	}
+	appendSectionList("Facts", section.Facts)
+	appendSectionList("Open items", section.OpenItems)
+	appendSectionList("Coding notes", section.CodingNotes)
+	appendSectionList("Links", section.Links)
+	appendSectionList("Timestamps", section.Timestamps)
+	if section.Status != "" {
+		parts = append(parts, "Status: "+section.Status)
+	}
+	if section.Confidence > 0 {
+		parts = append(parts, fmt.Sprintf("Confidence: %.2f", section.Confidence))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func liveAnswerTitle(input EvidenceSaveInput) string {
+	if label := strings.TrimSpace(sourceLabelFromInput(input)); label != "" {
+		return fmt.Sprintf("Live chat evidence: %s", label)
+	}
+	return fmt.Sprintf("Live chat evidence: %s", strings.TrimSpace(input.SourceURI))
+}
+
+func sourceLabelFromInput(input EvidenceSaveInput) string {
+	for _, source := range input.Sources {
+		if strings.EqualFold(source.Connector, input.Connector) && strings.TrimSpace(source.SourceURI) == strings.TrimSpace(input.SourceURI) {
+			return source.Section.SourceLabel
+		}
+	}
+	return ""
+}
+
+func isEmptyAnswerSection(section response.AnswerSection) bool {
+	return strings.TrimSpace(section.SourceLabel) == "" &&
+		strings.TrimSpace(section.Summary) == "" &&
+		len(section.Facts) == 0 &&
+		len(section.OpenItems) == 0 &&
+		len(section.CodingNotes) == 0 &&
+		len(section.Links) == 0 &&
+		len(section.Timestamps) == 0 &&
+		strings.TrimSpace(section.Status) == "" &&
+		section.Confidence == 0
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func connectorForURL(raw string) string {

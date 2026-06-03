@@ -12,6 +12,8 @@ import (
 	"context-os/domain/entities"
 	"context-os/domain/repository"
 	"context-os/domain/types"
+
+	"github.com/lib/pq"
 )
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
@@ -251,6 +253,22 @@ func (s *EventStore) Query(ctx context.Context, workspaceID string, eventQuery r
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// DeleteByIDs removes workspace-scoped ingest events by ID and returns the deleted row count.
+func (s *EventStore) DeleteByIDs(ctx context.Context, workspaceID string, ids []string) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result, err := s.db.ExecContext(ctx, `
+		DELETE FROM ingest_events
+		WHERE workspace_id = $1 AND id = ANY($2)
+	`, workspaceID, pq.Array(ids))
+	if err != nil {
+		return 0, fmt.Errorf("store: delete events by id: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
 }
 
 // Count returns the total number of events for a workspace and optional connector.

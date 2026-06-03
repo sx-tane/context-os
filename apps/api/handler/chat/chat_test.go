@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"context-os/apps/api/response"
 	"context-os/domain/entities"
 	"context-os/domain/repository"
 	"context-os/domain/types"
@@ -171,6 +172,76 @@ func TestEvidenceSaveInputExtractsConcreteSourcesFromBroadLiveAnswer(t *testing.
 		if !want[key] {
 			t.Fatalf("unexpected source %q from %#v", key, input.Sources)
 		}
+	}
+}
+
+// TestEvidenceSaveInputUsesStructuredSectionsBeforeRegex verifies source sections drive evidence persistence ahead of prose extraction.
+func TestEvidenceSaveInputUsesStructuredSectionsBeforeRegex(t *testing.T) {
+	input, ok := evidenceSaveInput(mapChatResult(internalchat.Result{
+		WorkspaceID:   "ws1",
+		WorkspacePath: "/workspace",
+		Connector:     "googledrive",
+		SourceURI:     "googledrive",
+		Provider:      "codex",
+		Answer:        "Mentions enum/value and https://docs.google.com/spreadsheets/d/noisy/edit in prose.",
+		Summary:       "Structured answer",
+		AnswerSections: []internalchat.AnswerSection{{
+			SourceLabel: "Google Drive · BKGDEV-8096_帳票項目のマッピング確認.xlsx",
+			Connector:   "googledrive",
+			SourceURI:   "https://docs.google.com/spreadsheets/d/abc/edit",
+			Summary:     "Mapping confirmation is pending.",
+			Facts:       []string{"Column A maps to field_a."},
+		}},
+	}))
+	if !ok {
+		t.Fatalf("evidenceSaveInput() ok = false, want true")
+	}
+	if len(input.Sources) != 1 {
+		t.Fatalf("Sources length = %d, want 1: %#v", len(input.Sources), input.Sources)
+	}
+	source := input.Sources[0]
+	if source.SourceURI != "https://docs.google.com/spreadsheets/d/abc/edit" {
+		t.Fatalf("SourceURI = %q, want structured section URI", source.SourceURI)
+	}
+	if source.Section.SourceLabel != "Google Drive · BKGDEV-8096_帳票項目のマッピング確認.xlsx" {
+		t.Fatalf("SourceLabel = %q, want structured label", source.Section.SourceLabel)
+	}
+}
+
+// TestLiveAnswerEventUsesSectionBody verifies structured source sections save a focused Activity body.
+func TestLiveAnswerEventUsesSectionBody(t *testing.T) {
+	input := EvidenceSaveInput{
+		Connector: "googledrive",
+		SourceURI: "https://docs.google.com/spreadsheets/d/abc/edit",
+		Answer:    "Full answer with unrelated source.",
+		Summary:   "Full summary",
+		Sources: []EvidenceSource{{
+			Connector: "googledrive",
+			SourceURI: "https://docs.google.com/spreadsheets/d/abc/edit",
+			Section: response.AnswerSection{
+				SourceLabel: "Google Drive · mapping.xlsx",
+				Summary:     "Mapping confirmation is pending.",
+				Facts:       []string{"Column A maps to field_a."},
+			},
+		}},
+	}
+	source := input.Sources[0]
+	input.Answer = sourceSectionBody(source, input.Answer)
+	input.Summary = sourceSectionSummary(source, input.Summary)
+
+	event := liveAnswerEvent(input, map[string]string{metadataChatEvidence: "true"})
+
+	if event.Subject != "Live chat evidence: Google Drive · mapping.xlsx" {
+		t.Fatalf("Subject = %q, want source label title", event.Subject)
+	}
+	if !strings.Contains(event.Content, "Source: Google Drive · mapping.xlsx") {
+		t.Fatalf("Content = %q, want section source", event.Content)
+	}
+	if strings.Contains(event.Content, "unrelated source") {
+		t.Fatalf("Content = %q, want focused section body", event.Content)
+	}
+	if event.Metadata["source_label"] != "Google Drive · mapping.xlsx" {
+		t.Fatalf("Metadata[source_label] = %q, want source label", event.Metadata["source_label"])
 	}
 }
 

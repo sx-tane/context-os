@@ -59,10 +59,26 @@ type Result struct {
 	Provider      string
 	Answer        string
 	Summary       string
+	AnswerSections []AnswerSection
 	Since         *time.Time
 	Until         *time.Time
 	Artifacts     []repository.IngestEvent
 	Syncs         []repository.ConnectorSync
+}
+
+// AnswerSection is one structured source-backed section in a chat answer.
+type AnswerSection struct {
+	SourceLabel string
+	Connector   string
+	SourceURI   string
+	Summary     string
+	Facts       []string
+	OpenItems   []string
+	CodingNotes []string
+	Links       []string
+	Timestamps  []string
+	Confidence  float64
+	Status      string
 }
 
 // LiveQuery is one optional live source question routed through Codex-backed connectors.
@@ -169,7 +185,7 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 		if err == nil && strings.TrimSpace(answer) != "" {
 			emitProgress(query.Progress, "• Live Codex answer received.")
 			result.Provider = "codex"
-			result.Answer = strings.TrimSpace(answer)
+			result.Answer, result.AnswerSections = parseLiveAnswer(strings.TrimSpace(answer), result.Connector, result.SourceURI)
 			result.Summary = result.Answer
 			return result, nil
 		}

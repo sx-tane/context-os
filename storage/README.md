@@ -52,6 +52,7 @@ storage/snapshots = debug/regression output
 ## Retention Notes
 
 - Keep generated files reproducible where possible.
+- Workspace reset/delete removes workspace-scoped parsed JSON and graph snapshots after DB memory is cleared.
 - Do not store secrets or private credentials in tracked files.
 - Prefer deterministic filenames for benchmark and regression comparison.
 
