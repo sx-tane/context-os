@@ -3,6 +3,8 @@ package chat
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"context-os/apps/api/handler/shared"
@@ -19,7 +21,21 @@ const (
 	evidenceStatusError   = "error"
 
 	metadataChatEvidence = "chat_live_evidence"
+	maxEvidenceSources   = 12
 )
+
+var (
+	urlPattern          = regexp.MustCompile(`https?://[^\s<>"']+`)
+	jiraKeyPattern      = regexp.MustCompile(`\b[A-Z][A-Z0-9]+-\d+\b`)
+	slackChannelPattern = regexp.MustCompile(`(^|[\s(])#[A-Za-z0-9_.-]+\b`)
+	gitHubRepoPattern   = regexp.MustCompile(`\b[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/(?:pull|issues)/\d+)?\b`)
+)
+
+// EvidenceSource is one concrete live source found in a Codex answer.
+type EvidenceSource struct {
+	Connector string
+	SourceURI string
+}
 
 // EvidenceSaveInput identifies a live source whose evidence should be persisted locally.
 type EvidenceSaveInput struct {
@@ -28,11 +44,15 @@ type EvidenceSaveInput struct {
 	SourceURI   string
 	Answer      string
 	Summary     string
+	Sources     []EvidenceSource
 }
 
 // EvidenceSaveResult summarizes a completed evidence persistence attempt.
 type EvidenceSaveResult struct {
-	EventCount int
+	EventCount        int
+	GraphUpdated      bool
+	EntityCount       int
+	RelationshipCount int
 }
 
 // EvidenceSaver persists live answer evidence discovered during chat.
@@ -47,13 +67,9 @@ func (p persistentEvidenceSaver) Save(ctx context.Context, input EvidenceSaveInp
 	if service == nil {
 		return EvidenceSaveResult{}, fmt.Errorf("persistent ingest is not configured")
 	}
-	plugin := codexPluginForConnector(input.Connector)
-	if plugin == "" {
-		return EvidenceSaveResult{}, fmt.Errorf("unsupported evidence connector %q", input.Connector)
-	}
-	uri := strings.TrimSpace(input.SourceURI)
-	if uri == "" {
-		return EvidenceSaveResult{}, fmt.Errorf("source_uri is required")
+	sources := normalizedEvidenceSources(input)
+	if len(sources) == 0 {
+		return EvidenceSaveResult{}, fmt.Errorf("concrete source_uri is required")
 	}
 
 	if progress != nil {
@@ -61,24 +77,40 @@ func (p persistentEvidenceSaver) Save(ctx context.Context, input EvidenceSaveInp
 	}
 	saveCtx, cancel := context.WithTimeout(ctx, shared.PersistentIngestTimeout)
 	defer cancel()
-	metadata := map[string]string{
-		codexsource.MetadataPlugin: plugin,
-		metadataChatEvidence:       "true",
-	}
-	rawEvents := []events.Event{liveAnswerEvent(input, metadata)}
-	persisted, err := service.PersistEvidenceEvents(saveCtx, shared.SourceIngestInput{
-		WorkspaceID: strings.TrimSpace(input.WorkspaceID),
-		Connector:   strings.TrimSpace(input.Connector),
-		URI:         uri,
-		Metadata:    metadata,
-	}, shared.CapabilityStrings(codexCapabilities()), rawEvents)
-	if err != nil {
-		return EvidenceSaveResult{}, err
+	result := EvidenceSaveResult{}
+	for _, source := range sources {
+		plugin := codexPluginForConnector(source.Connector)
+		if plugin == "" {
+			return EvidenceSaveResult{}, fmt.Errorf("unsupported evidence connector %q", source.Connector)
+		}
+		metadata := map[string]string{
+			codexsource.MetadataPlugin: plugin,
+			metadataChatEvidence:       "true",
+			"related_sources":          relatedSourcesMetadata(sources),
+		}
+		sourceInput := input
+		sourceInput.Connector = source.Connector
+		sourceInput.SourceURI = source.SourceURI
+		rawEvents := []events.Event{liveAnswerEvent(sourceInput, metadata)}
+		persisted, err := service.PersistEvidenceEvents(saveCtx, shared.SourceIngestInput{
+			WorkspaceID: strings.TrimSpace(input.WorkspaceID),
+			Connector:   source.Connector,
+			URI:         source.SourceURI,
+			Metadata:    metadata,
+		}, shared.CapabilityStrings(codexCapabilities()), rawEvents)
+		if err != nil {
+			return EvidenceSaveResult{}, err
+		}
+		result.EventCount += persisted.EventCount
+		result.EntityCount += persisted.EntityCount
+		result.RelationshipCount += persisted.RelationshipCount
+		result.GraphUpdated = result.GraphUpdated || persisted.EntityCount > 0 || persisted.RelationshipCount > 0
 	}
 	if progress != nil {
-		progress(fmt.Sprintf("• Saved %d live answer evidence event(s) to Local DB.", persisted.EventCount))
+		progress(fmt.Sprintf("• Saved %d live answer evidence artifact(s) to Local DB.", result.EventCount))
+		progress(fmt.Sprintf("• Graph updated from %d saved live answer artifact(s).", result.EventCount))
 	}
-	return EvidenceSaveResult{EventCount: persisted.EventCount}, nil
+	return result, nil
 }
 
 func codexCapabilities() []contracts.Capability {
@@ -116,13 +148,14 @@ func evidenceSaveInput(result response.ChatQuery) (EvidenceSaveInput, bool) {
 	connector := strings.ToLower(strings.TrimSpace(result.Connector))
 	sourceURI := strings.TrimSpace(result.SourceURI)
 	answer := strings.TrimSpace(result.Answer)
-	if connector == "" || sourceURI == "" || answer == "" {
-		return EvidenceSaveInput{}, false
-	}
-	if connector == sourceURI {
+	if connector == "" || answer == "" {
 		return EvidenceSaveInput{}, false
 	}
 	if codexPluginForConnector(connector) == "" {
+		return EvidenceSaveInput{}, false
+	}
+	sources := extractEvidenceSources(result)
+	if len(sources) == 0 {
 		return EvidenceSaveInput{}, false
 	}
 	return EvidenceSaveInput{
@@ -131,6 +164,7 @@ func evidenceSaveInput(result response.ChatQuery) (EvidenceSaveInput, bool) {
 		SourceURI:   sourceURI,
 		Answer:      answer,
 		Summary:     strings.TrimSpace(result.Summary),
+		Sources:     sources,
 	}, true
 }
 
@@ -140,6 +174,7 @@ func liveAnswerEvent(input EvidenceSaveInput, metadata map[string]string) events
 	title := fmt.Sprintf("Live chat evidence: %s", sourceURI)
 	eventMetadata := shared.CloneStringMap(metadata)
 	eventMetadata[contracts.MetadataSourceURI] = sourceURI
+	eventMetadata[contracts.MetadataConnector] = connector
 	eventMetadata[events.MetadataSourceID] = sourceURI
 	eventMetadata["source_uri"] = sourceURI
 	eventMetadata["provider"] = "codex"
@@ -154,4 +189,141 @@ func liveAnswerEvent(input EvidenceSaveInput, metadata map[string]string) events
 		strings.TrimSpace(input.Answer),
 		eventMetadata,
 	)
+}
+
+func extractEvidenceSources(result response.ChatQuery) []EvidenceSource {
+	connector := strings.ToLower(strings.TrimSpace(result.Connector))
+	sourceURI := trimEvidenceSource(result.SourceURI)
+	answer := strings.TrimSpace(result.Answer)
+	builder := evidenceSourceBuilder{}
+	if sourceURI != "" && !isBroadConnectorScope(connector, sourceURI) {
+		builder.add(connector, sourceURI)
+	}
+	for _, match := range urlPattern.FindAllString(answer, -1) {
+		uri := trimEvidenceSource(match)
+		if sourceConnector := connectorForURL(uri); sourceConnector != "" {
+			builder.add(sourceConnector, uri)
+		}
+	}
+	urlRanges := urlPattern.FindAllStringIndex(answer, -1)
+	for _, loc := range jiraKeyPattern.FindAllStringIndex(answer, -1) {
+		if rangeContains(urlRanges, loc[0], loc[1]) {
+			continue
+		}
+		builder.add("jira", answer[loc[0]:loc[1]])
+	}
+	if strings.Contains(strings.ToLower(answer), "slack") {
+		for _, match := range slackChannelPattern.FindAllStringSubmatch(answer, -1) {
+			if len(match) > 0 {
+				builder.add("slack", strings.TrimSpace(match[0]))
+			}
+		}
+	}
+	if strings.Contains(strings.ToLower(answer), "github") {
+		for _, match := range gitHubRepoPattern.FindAllString(answer, -1) {
+			if strings.Contains(match, "://") {
+				continue
+			}
+			builder.add("github", match)
+		}
+	}
+	return builder.sources()
+}
+
+func rangeContains(ranges [][]int, start, end int) bool {
+	for _, item := range ranges {
+		if len(item) != 2 {
+			continue
+		}
+		if start >= item[0] && end <= item[1] {
+			return true
+		}
+	}
+	return false
+}
+
+type evidenceSourceBuilder struct {
+	items []EvidenceSource
+	seen  map[string]struct{}
+}
+
+func (b *evidenceSourceBuilder) add(connector, sourceURI string) {
+	if b.seen == nil {
+		b.seen = map[string]struct{}{}
+	}
+	connector = strings.ToLower(strings.TrimSpace(connector))
+	sourceURI = trimEvidenceSource(sourceURI)
+	if connector == "" || sourceURI == "" || isBroadConnectorScope(connector, sourceURI) {
+		return
+	}
+	if codexPluginForConnector(connector) == "" {
+		return
+	}
+	key := connector + "\x00" + sourceURI
+	if _, ok := b.seen[key]; ok {
+		return
+	}
+	if len(b.items) >= maxEvidenceSources {
+		return
+	}
+	b.seen[key] = struct{}{}
+	b.items = append(b.items, EvidenceSource{Connector: connector, SourceURI: sourceURI})
+}
+
+func (b *evidenceSourceBuilder) sources() []EvidenceSource {
+	out := make([]EvidenceSource, len(b.items))
+	copy(out, b.items)
+	return out
+}
+
+func normalizedEvidenceSources(input EvidenceSaveInput) []EvidenceSource {
+	builder := evidenceSourceBuilder{}
+	for _, source := range input.Sources {
+		builder.add(source.Connector, source.SourceURI)
+	}
+	if len(builder.items) == 0 {
+		builder.add(input.Connector, input.SourceURI)
+	}
+	return builder.sources()
+}
+
+func connectorForURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Host)
+	path := strings.ToLower(parsed.Path)
+	switch {
+	case strings.Contains(host, "docs.google.com"), strings.Contains(host, "drive.google.com"):
+		return "googledrive"
+	case strings.Contains(host, "atlassian.net") || strings.Contains(path, "/browse/"):
+		return "jira"
+	case strings.Contains(host, "slack.com"):
+		return "slack"
+	case strings.Contains(host, "github.com"), strings.Contains(host, "api.github.com"):
+		return "github"
+	case strings.Contains(host, "notion.so"), strings.Contains(host, "notion.site"):
+		return "notion"
+	case strings.Contains(host, "sharepoint.com"), strings.Contains(host, "onedrive.live.com"):
+		return "sharepoint"
+	default:
+		return ""
+	}
+}
+
+func trimEvidenceSource(value string) string {
+	return strings.Trim(strings.TrimSpace(value), ".,;:!?\"'`)]}>")
+}
+
+func isBroadConnectorScope(connector, sourceURI string) bool {
+	return strings.EqualFold(strings.TrimSpace(connector), strings.TrimSpace(sourceURI))
+}
+
+func relatedSourcesMetadata(sources []EvidenceSource) string {
+	parts := make([]string, 0, len(sources))
+	for _, source := range sources {
+		parts = append(parts, source.Connector+":"+source.SourceURI)
+	}
+	return strings.Join(parts, ",")
 }

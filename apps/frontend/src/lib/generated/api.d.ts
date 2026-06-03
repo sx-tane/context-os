@@ -1285,6 +1285,12 @@ export interface definitions {
     connector?: string;
     /** @description EvidenceEventCount is the number of local events produced by the evidence save. */
     evidence_event_count?: number;
+    /** @description EvidenceGraphEntityCount is the number of entities derived from newly saved live evidence. */
+    evidence_graph_entity_count?: number;
+    /** @description EvidenceGraphRelationshipCount is the number of relationships derived from newly saved live evidence. */
+    evidence_graph_relationship_count?: number;
+    /** @description EvidenceGraphStatus describes whether saved live evidence updated the graph. */
+    evidence_graph_status?: string;
     /** @description EvidenceSaveError is set when evidence persistence failed without discarding the live answer. */
     evidence_save_error?: string;
     /** @description EvidenceSaveStatus describes whether a live Codex answer also persisted local evidence. */

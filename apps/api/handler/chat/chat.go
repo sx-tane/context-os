@@ -206,6 +206,13 @@ func (h *Handler) saveEvidence(ctx context.Context, result response.ChatQuery, p
 	}
 	result.EvidenceSaveStatus = evidenceStatusSaved
 	result.EvidenceEventCount = saved.EventCount
+	if saved.GraphUpdated {
+		result.EvidenceGraphStatus = "updated"
+	} else {
+		result.EvidenceGraphStatus = "unchanged"
+	}
+	result.EvidenceGraphEntityCount = saved.EntityCount
+	result.EvidenceGraphRelationshipCount = saved.RelationshipCount
 	return result
 }
 

@@ -59,7 +59,7 @@ func TestStreamQueryEmitsAnswerBeforeEvidenceResult(t *testing.T) {
 		&fakeEventRepository{},
 		&fakeSyncRepository{},
 		&fakeLiveAnswerer{answer: "Live repo answer."},
-	)).WithEvidenceSaver(&fakeEvidenceSaver{eventCount: 2})
+	)).WithEvidenceSaver(&fakeEvidenceSaver{eventCount: 2, graphUpdated: true})
 
 	req := httptest.NewRequest(http.MethodPost, "/chat/query/stream", strings.NewReader(`{"workspace_id":"/workspace","message":"check sx-tane/context-os"}`))
 	res := httptest.NewRecorder()
@@ -89,6 +89,9 @@ func TestStreamQueryEmitsAnswerBeforeEvidenceResult(t *testing.T) {
 	}
 	if !strings.Contains(body, `"evidence_event_count":2`) {
 		t.Fatalf("stream missing evidence event count: %s", body)
+	}
+	if !strings.Contains(body, `"evidence_graph_status":"updated"`) {
+		t.Fatalf("stream missing graph update status: %s", body)
 	}
 }
 
@@ -140,10 +143,80 @@ func TestStreamQuerySkipsConnectorOnlyEvidenceSave(t *testing.T) {
 	}
 }
 
+// TestEvidenceSaveInputExtractsConcreteSourcesFromBroadLiveAnswer verifies broad connector routes persist concrete provenance found in the answer.
+func TestEvidenceSaveInputExtractsConcreteSourcesFromBroadLiveAnswer(t *testing.T) {
+	input, ok := evidenceSaveInput(mapChatResult(internalchat.Result{
+		WorkspaceID:   "ws1",
+		WorkspacePath: "/workspace",
+		Connector:     "googledrive",
+		SourceURI:     "googledrive",
+		Provider:      "codex",
+		Answer:        "Spreadsheet: https://docs.google.com/spreadsheets/d/abc/edit. Jira: BKGDEV-8096 and https://acme.atlassian.net/browse/BKGDEV-8466. Slack: #proj-report.",
+		Summary:       "Concrete sources",
+	}))
+	if !ok {
+		t.Fatalf("evidenceSaveInput() ok = false, want true")
+	}
+	want := map[string]bool{
+		"googledrive:https://docs.google.com/spreadsheets/d/abc/edit": true,
+		"jira:BKGDEV-8096": true,
+		"jira:https://acme.atlassian.net/browse/BKGDEV-8466": true,
+		"slack:#proj-report": true,
+	}
+	if len(input.Sources) != len(want) {
+		t.Fatalf("Sources length = %d, want %d: %#v", len(input.Sources), len(want), input.Sources)
+	}
+	for _, source := range input.Sources {
+		key := source.Connector + ":" + source.SourceURI
+		if !want[key] {
+			t.Fatalf("unexpected source %q from %#v", key, input.Sources)
+		}
+	}
+}
+
+// TestEvidenceSaveInputSkipsConnectorOnlyAnswerWithoutConcreteSource verifies broad live answers stay read-only without concrete provenance.
+func TestEvidenceSaveInputSkipsConnectorOnlyAnswerWithoutConcreteSource(t *testing.T) {
+	_, ok := evidenceSaveInput(mapChatResult(internalchat.Result{
+		WorkspaceID:   "ws1",
+		WorkspacePath: "/workspace",
+		Connector:     "googledrive",
+		SourceURI:     "googledrive",
+		Provider:      "codex",
+		Answer:        "There are several recent Drive files, but no visible URLs or concrete source references.",
+		Summary:       "Broad answer",
+	}))
+	if ok {
+		t.Fatalf("evidenceSaveInput() ok = true, want false")
+	}
+}
+
+// TestStreamQueryDoesNotRunLiveLookupAfterEvidenceSave verifies graph/evidence persistence does not trigger another live answer.
+func TestStreamQueryDoesNotRunLiveLookupAfterEvidenceSave(t *testing.T) {
+	live := &fakeLiveAnswerer{answer: "Live repo answer."}
+	handler := NewHandler(internalchat.NewServiceWithLiveAnswerer(
+		fakeWorkspaces(),
+		&fakeEventRepository{},
+		&fakeSyncRepository{},
+		live,
+	)).WithEvidenceSaver(&fakeEvidenceSaver{eventCount: 1, graphUpdated: true})
+
+	req := httptest.NewRequest(http.MethodPost, "/chat/query/stream", strings.NewReader(`{"workspace_id":"/workspace","message":"check sx-tane/context-os"}`))
+	res := httptest.NewRecorder()
+	handler.StreamQuery(res, req)
+
+	if live.calls != 1 {
+		t.Fatalf("live calls = %d, want 1", live.calls)
+	}
+	if !strings.Contains(res.Body.String(), `"evidence_save_status":"saved"`) {
+		t.Fatalf("stream missing saved status: %s", res.Body.String())
+	}
+}
+
 type fakeEvidenceSaver struct {
-	eventCount int
-	done       chan EvidenceSaveInput
-	failOnCall bool
+	eventCount   int
+	graphUpdated bool
+	done         chan EvidenceSaveInput
+	failOnCall   bool
 }
 
 func (f *fakeEvidenceSaver) Save(ctx context.Context, input EvidenceSaveInput, progress func(string)) (EvidenceSaveResult, error) {
@@ -156,14 +229,16 @@ func (f *fakeEvidenceSaver) Save(ctx context.Context, input EvidenceSaveInput, p
 	if f.done != nil {
 		f.done <- input
 	}
-	return EvidenceSaveResult{EventCount: f.eventCount}, nil
+	return EvidenceSaveResult{EventCount: f.eventCount, GraphUpdated: f.graphUpdated, EntityCount: 3, RelationshipCount: 2}, nil
 }
 
 type fakeLiveAnswerer struct {
 	answer string
+	calls  int
 }
 
 func (f *fakeLiveAnswerer) Answer(ctx context.Context, query internalchat.LiveQuery) (string, error) {
+	f.calls++
 	return f.answer, nil
 }
 

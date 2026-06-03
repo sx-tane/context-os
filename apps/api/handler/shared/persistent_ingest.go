@@ -160,7 +160,8 @@ func (s *PersistentIngestService) PersistEvents(
 }
 
 // PersistEvidenceEvents stores already-answered live chat evidence as local
-// artifacts without running graph, identity, or findings derivation.
+// Activity artifacts and derives graph state from those same events without
+// running reasoning Findings or re-reading the live connector.
 func (s *PersistentIngestService) PersistEvidenceEvents(
 	ctx context.Context,
 	input SourceIngestInput,
@@ -195,7 +196,8 @@ func (s *PersistentIngestService) PersistEvidenceEvents(
 			return response.Ingest{}, err
 		}
 	}
-	return s.completeEvidence(processCtx, workspace.ID, connectorName, req, traceID, capabilities, rawEvents), nil
+	result := pipeline.RunEventsGraphOnly(processCtx, rawEvents, req, graphOnlyStores(s.pipelineStores(workspace.ID, traceID)))
+	return s.completeEvidence(processCtx, workspace.ID, connectorName, req, traceID, capabilities, result), nil
 }
 
 func withProductConnector(metadata map[string]string, connectorName string) map[string]string {
@@ -340,8 +342,21 @@ func (s *PersistentIngestService) complete(ctx context.Context, workspaceID, con
 	return ingest
 }
 
-func (s *PersistentIngestService) completeEvidence(ctx context.Context, workspaceID, connectorName string, req contracts.SourceRequest, traceID string, capabilities []string, rawEvents []events.Event) response.Ingest {
-	persistedEventCount := len(rawEvents)
+func graphOnlyStores(stores *pipeline.Stores) *pipeline.Stores {
+	if stores == nil {
+		return nil
+	}
+	return &pipeline.Stores{
+		WorkspaceID:     stores.WorkspaceID,
+		TraceID:         stores.TraceID,
+		Entities:        stores.Entities,
+		ParsedWriter:    stores.ParsedWriter,
+		SemanticMatcher: stores.SemanticMatcher,
+	}
+}
+
+func (s *PersistentIngestService) completeEvidence(ctx context.Context, workspaceID, connectorName string, req contracts.SourceRequest, traceID string, capabilities []string, result pipelines.Result) response.Ingest {
+	persistedEventCount := result.EventCount
 	if s.events != nil {
 		writeCtx, cancel := s.writeContext(ctx)
 		if count, err := s.events.Count(writeCtx, workspaceID, connectorName); err == nil {
@@ -373,16 +388,31 @@ func (s *PersistentIngestService) completeEvidence(ctx context.Context, workspac
 		SourceURI:   strings.TrimSpace(req.URI),
 		TraceID:     traceID,
 		Payload: map[string]string{
-			"event_count":           fmt.Sprintf("%d", len(rawEvents)),
+			"event_count":           fmt.Sprintf("%d", result.EventCount),
 			"persisted_event_count": fmt.Sprintf("%d", persistedEventCount),
 			"evidence_kind":         "live_chat_answer",
 		},
 	})
+	s.logAudit(ctx, repository.AuditEvent{
+		WorkspaceID: workspaceID,
+		EventType:   "graph.updated",
+		Actor:       "api",
+		Connector:   connectorName,
+		SourceURI:   strings.TrimSpace(req.URI),
+		TraceID:     traceID,
+		Payload: map[string]string{
+			"entity_count":       fmt.Sprintf("%d", len(result.Entities)),
+			"relationship_count": fmt.Sprintf("%d", len(result.Relationships)),
+			"evidence_kind":      "live_chat_answer",
+		},
+	})
 
-	ingest := NewIngestResponse(connectorName, capabilities, rawEvents)
+	ingest := NewIngestResponse(connectorName, capabilities, result.Events)
 	ingest.PersistenceMode = "database"
 	ingest.WorkspaceID = workspaceID
 	ingest.PersistedEventCount = persistedEventCount
+	ingest.EntityCount = len(result.Entities)
+	ingest.RelationshipCount = len(result.Relationships)
 	return ingest
 }
 

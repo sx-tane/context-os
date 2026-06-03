@@ -2702,6 +2702,18 @@ const docTemplate = `{
                     "description": "EvidenceEventCount is the number of local events produced by the evidence save.",
                     "type": "integer"
                 },
+                "evidence_graph_entity_count": {
+                    "description": "EvidenceGraphEntityCount is the number of entities derived from newly saved live evidence.",
+                    "type": "integer"
+                },
+                "evidence_graph_relationship_count": {
+                    "description": "EvidenceGraphRelationshipCount is the number of relationships derived from newly saved live evidence.",
+                    "type": "integer"
+                },
+                "evidence_graph_status": {
+                    "description": "EvidenceGraphStatus describes whether saved live evidence updated the graph.",
+                    "type": "string"
+                },
                 "evidence_save_error": {
                     "description": "EvidenceSaveError is set when evidence persistence failed without discarding the live answer.",
                     "type": "string"

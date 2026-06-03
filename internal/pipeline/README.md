@@ -8,6 +8,7 @@ This folder contains orchestration code that wires stage implementations into ex
 - Carry trace identifiers and stage outputs end-to-end.
 - Keep orchestration deterministic and observable.
 - Persist events, entities, relationships, mismatches, and filesystem snapshots when repository stores are provided.
+- Support a graph-only run for already-returned live chat evidence so Activity and Graph can update without running Findings.
 
 ## Persistence
 
@@ -15,6 +16,8 @@ Pipeline persistence uses a detached 30 second timeout for each repository write
 
 Event persistence reports the number of written event rows, including both new
 rows and duplicate rows updated during idempotent replays.
+
+`RunEvents` executes the full post-ingest flow through reasoning. `RunEventsGraphOnly` executes normalization, classification, extraction, identity, relationship, and graph persistence for events that were already returned by a live connector answer, but skips reasoning/mismatch persistence. This keeps live chat evidence saves from auto-running Findings while still updating the persisted graph.
 
 ## Maintenance Checklist
 

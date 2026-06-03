@@ -11,7 +11,7 @@ This folder defines HTTP response payload contracts returned by API handlers.
 ## Current Files
 
 - `error.go`: shared error response envelope.
-- `chat.go`: chat query response payload, including `provider` (`local` or `codex`) so clients can tell whether an answer came from persisted artifacts or live Codex source context, plus `evidence_save_status`, `evidence_event_count`, and `evidence_save_error` so clients can show whether the concrete live answer saved into the Local DB.
+- `chat.go`: chat query response payload, including `provider` (`local` or `codex`) so clients can tell whether an answer came from persisted artifacts or live Codex source context, plus `evidence_save_status`, `evidence_event_count`, `evidence_save_error`, and evidence graph status/count fields so clients can show whether concrete live answers saved into the Local DB and updated Graph.
 - `ingest.go`: ingest response payload contract.
 
 ## Maintenance Checklist

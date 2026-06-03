@@ -64,6 +64,18 @@ func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.S
 // read by a connector. This keeps streaming ingest persistence on the same path
 // as synchronous ingest without rerunning the source connector.
 func RunEvents(ctx context.Context, rawEvents []events.Event, req contracts.SourceRequest, stores *Stores) pipelines.Result {
+	return runEvents(ctx, rawEvents, req, stores, true)
+}
+
+// RunEventsGraphOnly executes normalization, classification, extraction,
+// identity, relationship, and graph persistence for events already returned by a
+// connector. It intentionally skips reasoning so live chat evidence can update
+// Activity and Graph without auto-producing Findings.
+func RunEventsGraphOnly(ctx context.Context, rawEvents []events.Event, req contracts.SourceRequest, stores *Stores) pipelines.Result {
+	return runEvents(ctx, rawEvents, req, stores, false)
+}
+
+func runEvents(ctx context.Context, rawEvents []events.Event, req contracts.SourceRequest, stores *Stores, includeReasoning bool) pipelines.Result {
 	var semanticMatcher identity.Matcher
 	if stores != nil {
 		semanticMatcher = stores.SemanticMatcher // nil is safe: ResolveWithMatcher falls back to LocalMatcher
@@ -94,7 +106,9 @@ func RunEvents(ctx context.Context, rawEvents []events.Event, req contracts.Sour
 		Events:        rawEvents,
 		Entities:      contextGraph.AllEntities(),
 		Relationships: contextGraph.AllRelationships(),
-		Mismatches:    reasoning.DetectMismatches(contextGraph),
+	}
+	if includeReasoning {
+		result.Mismatches = reasoning.DetectMismatches(contextGraph)
 	}
 
 	if stores != nil && stores.WorkspaceID != "" {

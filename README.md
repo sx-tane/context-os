@@ -45,6 +45,34 @@ Chat has two visible phases:
 
 Examples of concrete live sources include `BKGDEV-8466`, a Jira browse URL, `owner/repo`, a Slack channel, or a document URL. Broad scopes such as just `jira` or `github` stay read-only.
 
+## How ContextOS Works Now
+
+```mermaid
+flowchart LR
+  Setup[Source setup] -->|save connector scope| Registry[Workspace source registry]
+  Chat[Chat prompt] --> Live[Live Codex tool lookup]
+  Live -->|answer with concrete provenance| LocalDB[(Local DB)]
+  LocalDB --> Activity[Activity updates]
+  LocalDB --> Graph[Graph updates]
+  LocalDB -. manual run .-> Findings[Findings analysis]
+  Live -. no concrete provenance .-> ReadOnly[Read-only answer]
+```
+
+- Source setup saves connector scope so chat knows which live tool to use.
+- Chat queries live tools first for plugin-backed sources.
+- Concrete live answers save into the Local DB when the answer exposes specific provenance such as document URLs, Jira keys, Slack references, GitHub URLs, Notion URLs, or SharePoint/OneDrive URLs.
+- Activity updates automatically after concrete live evidence is saved.
+- Graph updates automatically from the saved live answer evidence.
+- Findings are manual analysis outputs and update only when analysis/findings is run.
+- Broad connector lookups remain read-only unless concrete sources are detected in the live answer.
+
+## Known Gaps
+
+- Broad prompts can still be read-only if no concrete provenance appears in the answer.
+- Multi-source saves depend on visible answer provenance.
+- Connector permissions such as Rovo 403 still limit live reads.
+- Graph quality depends on extraction from saved answer text.
+
 ## Quick Start
 
 ```bash

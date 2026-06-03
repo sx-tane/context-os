@@ -23,4 +23,10 @@ type ChatQuery struct {
 	EvidenceEventCount int `json:"evidence_event_count,omitempty"`
 	// EvidenceSaveError is set when evidence persistence failed without discarding the live answer.
 	EvidenceSaveError string `json:"evidence_save_error,omitempty"`
+	// EvidenceGraphStatus describes whether saved live evidence updated the graph.
+	EvidenceGraphStatus string `json:"evidence_graph_status,omitempty"`
+	// EvidenceGraphEntityCount is the number of entities derived from newly saved live evidence.
+	EvidenceGraphEntityCount int `json:"evidence_graph_entity_count,omitempty"`
+	// EvidenceGraphRelationshipCount is the number of relationships derived from newly saved live evidence.
+	EvidenceGraphRelationshipCount int `json:"evidence_graph_relationship_count,omitempty"`
 }
