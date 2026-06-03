@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { tick } from "svelte";
     import { isNearBottom, localDBStatusLine } from "$lib/chatController";
     import type { ChatMessage, ChatQueryResult } from "$lib/types";
     import InlineText from "$lib/components/chat/InlineText.svelte";
@@ -40,12 +39,12 @@
         ].join(":"))
         .join("|");
 
-    $: if (messageSignature !== lastMessageSignature) {
+    $: if (messagesEl && messageSignature !== lastMessageSignature) {
         lastMessageSignature = messageSignature;
         const shouldScroll = stickToBottom;
-        void tick().then(() => {
-            if (shouldScroll) scrollMessagesToBottom();
-        });
+        if (shouldScroll) {
+            requestAnimationFrame(scrollMessagesToBottom);
+        }
     }
 
     function queryProviderLabel(provider?: string) {
@@ -128,7 +127,7 @@
 
     $: if (composerTextarea) {
         command;
-        void tick().then(resizeComposer);
+        requestAnimationFrame(resizeComposer);
     }
 </script>
 

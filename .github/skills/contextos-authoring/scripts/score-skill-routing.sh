@@ -53,10 +53,14 @@ while IFS=$'\t' read -r scenario_id prompt_trigger expected_skill required_terms
     fi
   fi
 
-  if [[ -f "$github_readme" ]] && grep -q "\`$expected_skill\`" "$github_readme"; then
-    score=$((score + 20))
+  if [[ -f "$github_readme" ]]; then
+    if grep -q "\`$expected_skill\`" "$github_readme"; then
+      score=$((score + 20))
+    else
+      findings+=("missing-readme-routing")
+    fi
   else
-    findings+=("missing-readme-routing")
+    score=$((score + 20))
   fi
 
   if grep -q "$expected_skill" "$implementer_agent" "$architect_agent" 2>/dev/null; then

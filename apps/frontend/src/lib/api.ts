@@ -17,6 +17,12 @@ import type {
   WorkspaceSyncState,
   WorkspaceStatus,
 } from "$lib/types";
+import {
+  logAPIRequestDone,
+  logAPIRequestError,
+  logAPIRequestStart,
+  prepareAPIRequest,
+} from "$lib/logger";
 
 export const API_URL = "/api";
 
@@ -50,10 +56,38 @@ interface SSEMessage {
   data: string;
 }
 
+export async function apiFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const started = performance.now();
+  const request = prepareAPIRequest(input, init);
+  logAPIRequestStart(request.description);
+  try {
+    const res = await fetch(input, request.init);
+    logAPIRequestDone(
+      request.description,
+      res.status,
+      Math.round(performance.now() - started),
+    );
+    return res;
+  } catch (error) {
+    logAPIRequestError(
+      request.description,
+      Math.round(performance.now() - started),
+      error,
+    );
+    throw error;
+  }
+}
+
 export async function probeService(url: string): Promise<ServiceStatus> {
   try {
-    const res = await fetch(`${url}/health`, {
-      signal: AbortSignal.timeout(3000),
+    const controller = new AbortController();
+    const res = await withTimeout(apiFetch(`${url}/health`, {
+      signal: controller.signal,
+    }), 3000, () => {
+      controller.abort();
     });
     return res.ok ? "ok" : "unreachable";
   } catch {
@@ -61,9 +95,28 @@ export async function probeService(url: string): Promise<ServiceStatus> {
   }
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+  onTimeout?: () => void,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(`request timed out after ${milliseconds}ms`));
+    }, milliseconds);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function getJSON<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API_URL}${path}`);
+    const res = await apiFetch(`${API_URL}${path}`);
     if (!res.ok) return null;
     return (await readJSON(res)) as T;
   } catch {
@@ -79,7 +132,7 @@ export async function postIngest(
   | { ok: true; status: number; body: IngestResult }
   | { ok: false; status: number; body: ApiErrorBody }
 > {
-  const res = await fetch(`${API_URL}/${connector}/ingest`, {
+  const res = await apiFetch(`${API_URL}/${connector}/ingest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -109,7 +162,7 @@ export async function postFindings(
 > {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/presentation/findings`, {
+    res = await apiFetch(`${API_URL}/presentation/findings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -155,7 +208,7 @@ export async function postFilesystemUpload(
   | { ok: true; status: number; body: IngestResult }
   | { ok: false; status: number; body: ApiErrorBody }
 > {
-  const res = await fetch(`${API_URL}/filesystem/upload`, {
+  const res = await apiFetch(`${API_URL}/filesystem/upload`, {
     method: "POST",
     body,
     signal: options.signal,
@@ -181,7 +234,7 @@ export async function streamCodexIngest(
   handlers: StreamHandlers,
   options: RequestOptions = {},
 ): Promise<void> {
-  const res = await fetch(`${API_URL}/${connector}/ingest/stream`, {
+  const res = await apiFetch(`${API_URL}/${connector}/ingest/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -209,7 +262,7 @@ export async function streamCodexReauth(
   onLog: (line: string) => void,
   options: RequestOptions = {},
 ): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_URL}/codex/plugin-reauth?plugin=${encodeURIComponent(plugin)}`,
     {
       method: "POST",
@@ -224,7 +277,7 @@ export async function streamCodexLogin(
   onLog: (line: string) => void,
   options: RequestOptions = {},
 ): Promise<void> {
-  const res = await fetch(`${API_URL}/codex/login`, {
+  const res = await apiFetch(`${API_URL}/codex/login`, {
     method: "POST",
     signal: options.signal,
   });
@@ -236,7 +289,7 @@ export async function getCodexSources(
   connector: CodexConnectorKind,
 ): Promise<CodexSourceList | null> {
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_URL}/codex/sources?connector=${encodeURIComponent(connector)}`,
     );
     if (!res.ok) return null;
@@ -260,7 +313,7 @@ async function readLogStream(
 /** Fetch all registered workspaces. Returns an empty list on error. */
 export async function getWorkspaces(): Promise<WorkspaceRecord[]> {
   try {
-    const res = await fetch(`${API_URL}/workspace`);
+    const res = await apiFetch(`${API_URL}/workspace`);
     if (!res.ok) return [];
     return normalizeWorkspaceList(await readJSON(res));
   } catch {
@@ -274,7 +327,7 @@ export async function upsertWorkspace(
   name: string,
 ): Promise<WorkspaceRecord | null> {
   try {
-    const res = await fetch(`${API_URL}/workspace/upsert`, {
+    const res = await apiFetch(`${API_URL}/workspace/upsert`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path, name }),
@@ -296,7 +349,7 @@ export async function resetWorkspace(
   if (trimmedName) body.name = trimmedName;
 
   try {
-    const res = await fetch(`${API_URL}/workspace/reset`, {
+    const res = await apiFetch(`${API_URL}/workspace/reset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -317,7 +370,7 @@ export async function postWorkspaceSource(
 > {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/workspace/source`, {
+    res = await apiFetch(`${API_URL}/workspace/source`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -354,7 +407,7 @@ export async function postWorkspaceSource(
 
 export async function deleteWorkspace(path: string): Promise<DeleteWorkspaceResult> {
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_URL}/workspace?path=${encodeURIComponent(path)}`,
       { method: "DELETE" },
     );
@@ -379,7 +432,7 @@ export async function getWorkspaceStatus(
   path: string,
 ): Promise<WorkspaceStatus | null> {
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_URL}/workspace/status?path=${encodeURIComponent(path)}`,
     );
     if (!res.ok) return null;
@@ -511,7 +564,7 @@ export async function getArtifacts(params: {
     if (params.since) query.set("since", params.since);
     if (params.until) query.set("until", params.until);
     if (params.limit) query.set("limit", String(params.limit));
-    const res = await fetch(`${API_URL}/artifacts?${query.toString()}`);
+    const res = await apiFetch(`${API_URL}/artifacts?${query.toString()}`);
     if (!res.ok) return null;
     return (await readJSON(res)) as unknown as ArtifactList;
   } catch {
@@ -529,7 +582,7 @@ export async function postChatQuery(
 > {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/chat/query`, {
+    res = await apiFetch(`${API_URL}/chat/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -567,7 +620,7 @@ export async function streamChatQuery(
   handlers: ChatStreamHandlers,
   options: RequestOptions = {},
 ): Promise<void> {
-  const res = await fetch(`${API_URL}/chat/query/stream`, {
+  const res = await apiFetch(`${API_URL}/chat/query/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -601,7 +654,7 @@ export async function getGraphData(
   try {
     const params = new URLSearchParams({ workspace_id: workspacePath });
     if (entityType) params.set("entity_type", entityType);
-    const res = await fetch(`${API_URL}/graph?${params.toString()}`);
+    const res = await apiFetch(`${API_URL}/graph?${params.toString()}`);
     if (!res.ok) return null;
     return (await readJSON(res)) as unknown as GraphData;
   } catch {

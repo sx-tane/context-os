@@ -1,0 +1,241 @@
+package artifacts
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"testing"
+	"time"
+
+	"context-os/domain/repository"
+)
+
+type fakeWorkspaceRepo struct {
+	workspaces []repository.Workspace
+	getByPath  map[string]*repository.Workspace
+	listErr    error
+	getErr     error
+}
+
+func (f fakeWorkspaceRepo) Upsert(context.Context, repository.Workspace) (repository.Workspace, error) {
+	panic("unexpected call")
+}
+
+func (f fakeWorkspaceRepo) GetByPath(_ context.Context, path string) (*repository.Workspace, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	if workspace, ok := f.getByPath[path]; ok {
+		return workspace, nil
+	}
+	return nil, nil
+}
+
+func (f fakeWorkspaceRepo) List(context.Context) ([]repository.Workspace, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return append([]repository.Workspace(nil), f.workspaces...), nil
+}
+
+type fakeEventRepo struct{}
+
+func (fakeEventRepo) UpsertBatch(context.Context, string, []repository.IngestEvent) (int, error) {
+	panic("unexpected call")
+}
+
+func (fakeEventRepo) ListByWorkspace(context.Context, string, string, int) ([]repository.IngestEvent, error) {
+	panic("unexpected call")
+}
+
+func (fakeEventRepo) Query(context.Context, string, repository.EventQuery) ([]repository.IngestEvent, error) {
+	panic("unexpected call")
+}
+
+func (fakeEventRepo) Count(context.Context, string, string) (int, error) {
+	panic("unexpected call")
+}
+
+// TestParseLimit verifies query limits default, clamp, and validate as expected.
+func TestParseLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		raw     string
+		want    int
+		wantErr string
+	}{
+		{name: "empty uses default", raw: "", want: 20},
+		{name: "lower bound", raw: "1", want: 1},
+		{name: "upper clamp", raw: "120", want: 100},
+		{name: "invalid", raw: "nope", wantErr: "limit must be an integer"},
+		{name: "zero", raw: "0", wantErr: "limit must be greater than zero"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := parseLimit(tt.raw)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("parseLimit(%q) error = nil, want %q", tt.raw, tt.wantErr)
+				}
+				if err.Error() != tt.wantErr {
+					t.Errorf("parseLimit(%q) error = %q, want %q", tt.raw, err.Error(), tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseLimit(%q) error = %v", tt.raw, err)
+			}
+			if got != tt.want {
+				t.Errorf("parseLimit(%q) = %d, want %d", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseOptionalTime verifies the first non-empty RFC3339 value is parsed and normalized to UTC.
+func TestParseOptionalTime(t *testing.T) {
+	t.Parallel()
+
+	ts := "2025-01-02T03:04:05+09:00"
+	got, err := parseOptionalTime("", "  ", ts)
+	if err != nil {
+		t.Fatalf("parseOptionalTime() error = %v", err)
+	}
+	if got == nil {
+		t.Fatalf("parseOptionalTime() = nil, want timestamp")
+	}
+	want := time.Date(2025, 1, 1, 18, 4, 5, 0, time.UTC)
+	if !got.Equal(want) {
+		t.Errorf("parseOptionalTime() = %v, want %v", got, want)
+	}
+}
+
+// TestBuildEventQuery verifies request query parameters are normalized into an event query.
+func TestBuildEventQuery(t *testing.T) {
+	t.Parallel()
+
+	query := url.Values{}
+	query.Set("connector", "GitHub")
+	query.Set("source_uri", "/src")
+	query.Set("q", "  foo  ")
+	query.Set("limit", "42")
+	query.Set("since", "2025-01-01T00:00:00Z")
+	query.Set("until", "2025-01-02T00:00:00Z")
+	req := httptest.NewRequest("GET", "/artifacts?"+query.Encode(), nil)
+	got, err := buildEventQuery(req)
+	if err != nil {
+		t.Fatalf("buildEventQuery() error = %v", err)
+	}
+
+	wantSince, _ := time.Parse(time.RFC3339, "2025-01-01T00:00:00Z")
+	wantUntil, _ := time.Parse(time.RFC3339, "2025-01-02T00:00:00Z")
+	want := repository.EventQuery{
+		Connector: "github",
+		SourceURI: "/src",
+		Text:      "foo",
+		Since:     &wantSince,
+		Until:     &wantUntil,
+		Limit:     42,
+	}
+
+	if got.Connector != want.Connector || got.SourceURI != want.SourceURI || got.Text != want.Text || got.Limit != want.Limit {
+		t.Errorf("buildEventQuery() = %#v, want %#v", got, want)
+	}
+	if got.Since == nil || !got.Since.Equal(*want.Since) {
+		t.Errorf("buildEventQuery() Since = %v, want %v", got.Since, want.Since)
+	}
+	if got.Until == nil || !got.Until.Equal(*want.Until) {
+		t.Errorf("buildEventQuery() Until = %v, want %v", got.Until, want.Until)
+	}
+}
+
+// TestResolveWorkspace verifies workspaces are resolved by path or by fallback list lookup.
+func TestResolveWorkspace(t *testing.T) {
+	t.Parallel()
+
+	ws := repository.Workspace{ID: "ws-1", Path: "/tmp/context-os"}
+	tests := []struct {
+		name       string
+		repo       fakeWorkspaceRepo
+		ref        string
+		wantID     string
+		wantErrIs  error
+	}{
+		{
+			name: "get by path",
+			repo: fakeWorkspaceRepo{
+				getByPath: map[string]*repository.Workspace{"/tmp/context-os": &ws},
+			},
+			ref:    "/tmp/context-os",
+			wantID: "ws-1",
+		},
+		{
+			name: "fallback list lookup",
+			repo: fakeWorkspaceRepo{
+				workspaces: []repository.Workspace{ws},
+			},
+			ref:    "ws-1",
+			wantID: "ws-1",
+		},
+		{
+			name:      "not found",
+			repo:      fakeWorkspaceRepo{},
+			ref:       "missing",
+			wantErrIs: sql.ErrNoRows,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := &Handler{workspaces: tt.repo, events: fakeEventRepo{}}
+			got, err := h.resolveWorkspace(context.Background(), tt.ref)
+			if tt.wantErrIs != nil {
+				if !errors.Is(err, tt.wantErrIs) {
+					t.Fatalf("resolveWorkspace() error = %v, want %v", err, tt.wantErrIs)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveWorkspace() error = %v", err)
+			}
+			if got.ID != tt.wantID {
+				t.Errorf("resolveWorkspace() ID = %q, want %q", got.ID, tt.wantID)
+			}
+		})
+	}
+}
+
+// TestBuildEventQueryIgnoresWhitespace verifies the parser trims whitespace-heavy input values.
+func TestBuildEventQueryIgnoresWhitespace(t *testing.T) {
+	t.Parallel()
+
+	query := url.Values{}
+	query.Set("connector", "  slack  ")
+	query.Set("source_uri", "  /rooms/123  ")
+	query.Set("q", "  hello world  ")
+	req := httptest.NewRequest("GET", "/artifacts?"+query.Encode(), nil)
+	got, err := buildEventQuery(req)
+	if err != nil {
+		t.Fatalf("buildEventQuery() error = %v", err)
+	}
+	want := repository.EventQuery{
+		Connector: "slack",
+		SourceURI: "/rooms/123",
+		Text:      "hello world",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("buildEventQuery() = %#v, want %#v", got, want)
+	}
+}

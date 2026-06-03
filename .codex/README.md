@@ -35,7 +35,7 @@ flowchart TD
 
 When updating `.github` customization, update the matching `.codex` mirror in the same change. When updating Codex-only behavior, update `AGENTS.md` and this document if routing or folder structure changes.
 
-README coverage excludes `.codex/skills` because skill internals use `SKILL.md`, `assets/`, and `references/` instead of per-folder README files. The structural skill scorer also skips the `.github/README.md` map check when that file is absent, which lets repos without a GitHub README avoid a false failure. Keep the exclusion mirrored in `.github/skills/contextos-authoring/references/readme-coverage-exclusions.txt`.
+README coverage excludes `.codex/skills` because skill internals use `SKILL.md`, `assets/`, and `references/` instead of per-folder README files. The structural and routing scorers both skip `.github/README.md` map checks when that file is absent, which lets repos without a GitHub README avoid false failures. Keep the exclusion mirrored in `.github/skills/contextos-authoring/references/readme-coverage-exclusions.txt`.
 
 ## Skills
 

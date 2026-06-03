@@ -3,6 +3,7 @@ declare global {
 
 	interface ImportMetaEnv {
 		readonly VITE_CONTEXTOS_DEFAULT_WORKSPACE?: string;
+		readonly VITE_CONTEXTOS_DEBUG_LOGS?: string;
 	}
 
 	interface ImportMeta {

@@ -127,6 +127,7 @@ func RegisterRoutes(mux *http.ServeMux, routes []Route) {
 		if r.CORS {
 			handler = middleware.WithCORS(handler)
 		}
+		handler = middleware.WithRequestLogging(r.Pattern, handler)
 		mux.Handle(r.Pattern, handler)
 	}
 }

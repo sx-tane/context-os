@@ -6,13 +6,26 @@ import type {
   KnowledgeStatus,
   ProjectState,
   WorkspaceRecord,
+  WorkspaceStatus,
 } from "$lib/types";
-import { getWorkspaces, upsertWorkspace, getWorkspaceStatus } from "$lib/api";
+import {
+  getWorkspaces,
+  upsertWorkspace,
+  getWorkspaceStatus,
+} from "$lib/api";
 
 const STORAGE_KEY_PREFIX = "contextos_project_";
 const CHAT_KEY_PREFIX = "contextos_chat_";
 const WORKSPACE_LIST_KEY = "contextos_workspaces";
 const ACTIVE_WORKSPACE_KEY = "contextos_workspace_path";
+const MAX_CHAT_MESSAGES = 200;
+const MAX_STREAM_LINES = 80;
+const MAX_MESSAGE_TEXT_LENGTH = 30000;
+const MAX_STREAM_TEXT_LENGTH = 4000;
+const MAX_CARD_ARTIFACTS = 20;
+const MAX_ARTIFACT_TEXT_LENGTH = 5000;
+const MAX_WORKSPACES = 100;
+const MAX_CONNECTORS = 100;
 
 // Default workspace key — replaced by user selection or URL param.
 export const DEFAULT_WORKSPACE_PATH =
@@ -34,6 +47,25 @@ function cleanWorkspacePath(path?: string): string {
   return cleanPath || DEFAULT_WORKSPACE_PATH;
 }
 
+function trimText(text: string | undefined, maxLength: number): string {
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}\n\n[trimmed ${text.length - maxLength} characters from cached local state]`;
+}
+
+function normalizeProject(raw: ProjectState, fallbackPath: string): ProjectState {
+  const workspacePath = cleanWorkspacePath(raw.workspacePath || fallbackPath);
+  return {
+    ...raw,
+    workspacePath,
+    name: raw.name || workspacePath.split("/").filter(Boolean).pop() || "project",
+    createdAt: raw.createdAt || new Date().toISOString(),
+    connectors: Array.isArray(raw.connectors)
+      ? raw.connectors.slice(0, MAX_CONNECTORS)
+      : [],
+  };
+}
+
 function loadProject(path: string): ProjectState {
   const cleanPath = cleanWorkspacePath(path);
   if (cleanPath === DEMO_WORKSPACE_PATH) return demoProject();
@@ -41,7 +73,12 @@ function loadProject(path: string): ProjectState {
     const storage = getLocalStorage();
     if (!storage) return defaultProject(cleanPath);
     const raw = storage.getItem(STORAGE_KEY_PREFIX + cleanPath);
-    if (raw) return JSON.parse(raw) as ProjectState;
+    if (raw) {
+      return normalizeProject(
+        JSON.parse(raw) as ProjectState,
+        cleanPath,
+      );
+    }
   } catch {
     // ignore parse errors
   }
@@ -94,13 +131,63 @@ function saveProject(state: ProjectState): void {
   try {
     const storage = getLocalStorage();
     if (!storage) return;
+    const safeState = normalizeProject(state, state.workspacePath);
     storage.setItem(
-      STORAGE_KEY_PREFIX + state.workspacePath,
-      JSON.stringify(state),
+      STORAGE_KEY_PREFIX + safeState.workspacePath,
+      JSON.stringify(safeState),
     );
   } catch {
     // ignore storage errors (e.g. incognito quotas)
   }
+}
+
+function normalizeMessages(raw: unknown): ChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(-MAX_CHAT_MESSAGES)
+    .map((message) => {
+      const item = message as ChatMessage;
+      const card = item.card?.chatResult
+        ? {
+            ...item.card,
+            chatResult: {
+              ...item.card.chatResult,
+              answer: trimText(item.card.chatResult.answer, MAX_MESSAGE_TEXT_LENGTH),
+              summary: trimText(item.card.chatResult.summary, MAX_STREAM_TEXT_LENGTH),
+              artifacts: Array.isArray(item.card.chatResult.artifacts)
+                ? item.card.chatResult.artifacts
+                    .slice(0, MAX_CARD_ARTIFACTS)
+                    .map((artifact) => ({
+                      ...artifact,
+                      title: trimText(artifact.title, MAX_ARTIFACT_TEXT_LENGTH),
+                      body: trimText(artifact.body, MAX_ARTIFACT_TEXT_LENGTH),
+                      preview: trimText(artifact.preview, MAX_ARTIFACT_TEXT_LENGTH),
+                    }))
+                : [],
+            },
+          }
+        : item.card;
+      const stream = item.stream
+        ? {
+            ...item.stream,
+            latestLine: trimText(item.stream.latestLine, MAX_STREAM_TEXT_LENGTH),
+            summary: item.stream.summary
+              ? trimText(item.stream.summary, MAX_STREAM_TEXT_LENGTH)
+              : undefined,
+            lines: Array.isArray(item.stream.lines)
+              ? item.stream.lines
+                  .slice(-MAX_STREAM_LINES)
+                  .map((line) => trimText(line, MAX_STREAM_TEXT_LENGTH))
+              : [],
+          }
+        : undefined;
+      return {
+        ...item,
+        text: trimText(item.text, MAX_MESSAGE_TEXT_LENGTH),
+        card,
+        stream,
+      };
+    });
 }
 
 function loadMessages(path: string): ChatMessage[] {
@@ -108,7 +195,15 @@ function loadMessages(path: string): ChatMessage[] {
     const storage = getLocalStorage();
     if (!storage) return [];
     const raw = storage.getItem(CHAT_KEY_PREFIX + path);
-    if (raw) return JSON.parse(raw) as ChatMessage[];
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      const messages = normalizeMessages(parsed);
+      const originalCount = Array.isArray(parsed) ? parsed.length : 0;
+      if (originalCount !== messages.length || JSON.stringify(messages) !== raw) {
+        storage.setItem(CHAT_KEY_PREFIX + path, JSON.stringify(messages));
+      }
+      return messages;
+    }
   } catch {
     // ignore parse errors
   }
@@ -119,8 +214,8 @@ function saveMessages(path: string, messages: ChatMessage[]): void {
   try {
     const storage = getLocalStorage();
     if (!storage) return;
-    // Keep last 200 messages to avoid storage bloat.
-    const trimmed = messages.slice(-200);
+    // Keep cached chat bounded so stale browser state cannot block page render.
+    const trimmed = normalizeMessages(messages);
     storage.setItem(CHAT_KEY_PREFIX + path, JSON.stringify(trimmed));
   } catch {
     // ignore
@@ -148,14 +243,17 @@ function loadWorkspacePaths(): string[] {
   } catch {
     // ignore storage errors
   }
-  return [...paths];
+  return [...paths].slice(0, MAX_WORKSPACES);
 }
 
 function saveWorkspacePaths(paths: string[]): void {
   try {
     const storage = getLocalStorage();
     if (!storage) return;
-    storage.setItem(WORKSPACE_LIST_KEY, JSON.stringify([...new Set(paths)]));
+    storage.setItem(
+      WORKSPACE_LIST_KEY,
+      JSON.stringify([...new Set(paths)].slice(0, MAX_WORKSPACES)),
+    );
   } catch {
     // ignore storage errors
   }
@@ -191,9 +289,13 @@ const initialPath = loadActiveWorkspacePath();
 const _project = writable<ProjectState>(loadProject(initialPath));
 const _messages = writable<ChatMessage[]>(loadMessages(initialPath));
 const _workspaces = writable<ProjectState[]>(loadWorkspaceList());
+let lastSavedProjectJSON = "";
 
 // Sync writes to localStorage.
 _project.subscribe((p) => {
+  const nextJSON = JSON.stringify(p);
+  if (nextJSON === lastSavedProjectJSON) return;
+  lastSavedProjectJSON = nextJSON;
   saveProject(p);
   rememberWorkspace(p);
 });
@@ -397,11 +499,12 @@ export function getProject(): ProjectState {
  * Fetch workspace status from the API and update connector event counts in the store.
  * Silently no-ops when the API is unreachable.
  */
-export async function loadWorkspaceStatus(workspacePath: string): Promise<void> {
+export async function loadWorkspaceStatus(workspacePath: string): Promise<WorkspaceStatus | null> {
   try {
     const status = await getWorkspaceStatus(workspacePath);
-    if (!status?.syncs) return;
+    if (!status?.syncs) return status;
     _project.update((p) => {
+      let changed = false;
       const updated = p.connectors.map((ck) => {
         const sync = status.syncs?.find(
           (s) =>
@@ -410,7 +513,7 @@ export async function loadWorkspaceStatus(workspacePath: string): Promise<void> 
             (s.status === "connected" || (s.event_count ?? 0) > 0),
         );
         if (sync) {
-          return {
+          const next = {
             ...ck,
             status: "ready" as KnowledgeStatus,
             eventCount:
@@ -419,8 +522,15 @@ export async function loadWorkspaceStatus(workspacePath: string): Promise<void> 
                 : sync.event_count ?? ck.eventCount,
             error: undefined,
           };
+          changed =
+            changed ||
+            next.status !== ck.status ||
+            next.eventCount !== ck.eventCount ||
+            next.error !== ck.error;
+          return next;
         }
         if (ck.status === "ready") {
+          changed = true;
           return {
             ...ck,
             status: "configuring" as KnowledgeStatus,
@@ -430,10 +540,12 @@ export async function loadWorkspaceStatus(workspacePath: string): Promise<void> 
         }
         return ck;
       });
+      if (!changed) return p;
       return { ...p, connectors: updated };
     });
+    return status;
   } catch {
-    // ignore when backend is offline
+    return null;
   }
 }
 

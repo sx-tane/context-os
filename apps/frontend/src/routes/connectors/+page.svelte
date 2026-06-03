@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import type { ServiceStatus, CodexPlugin } from "$lib/types";
-    import { API_URL, probeService, streamCodexLogin } from "$lib/api";
+    import { API_URL, apiFetch, probeService, streamCodexLogin } from "$lib/api";
     import { sourceConnectorConfigs } from "$lib/sourceConnectorConfigs";
     import StatusSection from "$lib/components/feedback/StatusSection.svelte";
     import GitHubConnector from "$lib/components/connectors/GitHubConnector.svelte";
@@ -18,11 +18,7 @@
     let workerStatus: ServiceStatus = "checking";
 
     onMount(async () => {
-        [apiStatus, workerStatus] = await Promise.all([
-            probeService(API_URL),
-            probeService(WORKER_URL),
-        ]);
-        await checkCodexStatus();
+        await refreshSystemStatus();
     });
 
     let codexInstalled = false;
@@ -33,9 +29,32 @@
     let codexLoginLog = "";
     let codexLoginRunning = false;
 
+    async function refreshSystemStatus() {
+        const apiProbe = probeService(API_URL).then((status) => {
+            apiStatus = status;
+            return status;
+        });
+        const workerProbe = probeService(WORKER_URL).then((status) => {
+            workerStatus = status;
+            return status;
+        });
+
+        const currentAPIStatus = await apiProbe;
+        if (currentAPIStatus === "ok") {
+            await checkCodexStatus();
+        } else {
+            setCodexUnavailable();
+        }
+        await workerProbe.catch(() => {
+            workerStatus = "unreachable";
+        });
+    }
+
     async function checkCodexStatus() {
         try {
-            const res = await fetch(`${API_URL}/codex/status`);
+            const res = await apiFetch(`${API_URL}/codex/status`, {
+                signal: AbortSignal.timeout(5000),
+            });
             if (res.ok) {
                 const body = await res.json();
                 codexInstalled = body?.installed === true;
@@ -43,10 +62,20 @@
                 codexLoggedIn = body?.logged_in === true;
                 codexAccount = body?.account ?? "";
                 codexPlugins = body?.plugins ?? [];
+            } else {
+                setCodexUnavailable();
             }
         } catch {
-            // ignore
+            setCodexUnavailable();
         }
+    }
+
+    function setCodexUnavailable() {
+        codexInstalled = false;
+        codexVersion = "";
+        codexLoggedIn = false;
+        codexAccount = "";
+        codexPlugins = [];
     }
 
     async function runCodexLogin() {

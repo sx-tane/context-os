@@ -77,7 +77,7 @@ flowchart LR
 
 ```bash
 ./scripts/setup-local.sh
-./scripts/start-all.sh
+./scripts/start-local.sh
 ```
 
 Open:
@@ -85,6 +85,7 @@ Open:
 - frontend: http://localhost:5173
 - API health: http://localhost:8080/health
 - Swagger: http://localhost:8080/swagger/
+- Rendered docs HTML: `apps/api/docs/api.html`
 
 Useful checks:
 

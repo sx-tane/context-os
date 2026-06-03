@@ -3,6 +3,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DOCKER_CONFIG_DIR="$(mktemp -d)"
+
+cleanup() {
+  rm -rf "$DOCKER_CONFIG_DIR"
+}
+
+trap cleanup EXIT
+
+export DOCKER_CONFIG="$DOCKER_CONFIG_DIR"
 
 cd "$ROOT_DIR"
 

@@ -2854,8 +2854,7 @@ const docTemplate = `{
                 "confidence": {
                     "type": "object",
                     "additionalProperties": {
-                        "type": "number",
-                        "format": "float64"
+                        "type": "number"
                     }
                 },
                 "evidence": {

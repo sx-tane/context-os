@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy, onMount } from "svelte";
+    import { onMount } from "svelte";
     import type {
         Artifact,
         ChatQueryResult,
@@ -12,6 +12,7 @@
     } from "$lib/types";
     import {
         API_URL,
+        apiFetch,
         deleteWorkspace,
         getArtifacts,
         getGraphData,
@@ -82,8 +83,7 @@
     let paneSplit = 52;
     let mainGrid: HTMLElement | null = null;
     let resizingPanes = false;
-    let currentTime = new Date();
-    let clockTimer: ReturnType<typeof setInterval> | null = null;
+    let workspaceRefreshRunID = 0;
 
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
@@ -114,40 +114,43 @@
         workspacePath === DEFAULT_WORKSPACE_PATH ||
         workspacePath === DEMO_WORKSPACE_PATH;
 
-    onMount(async () => {
-        clockTimer = setInterval(() => {
-            currentTime = new Date();
-        }, 1000);
+    onMount(() => {
         const savedPath = localStorage.getItem("contextos_workspace_path");
         workspacePath = savedPath || getProject().workspacePath;
         openProject(workspacePath);
-        await Promise.all([
-            refreshSystemStatus(),
-            hydrateWorkspaces(),
-            refreshWorkspace(),
-        ]);
-    });
-
-    onDestroy(() => {
-        if (clockTimer) clearInterval(clockTimer);
+        void refreshSystemStatus();
+        void hydrateWorkspaces();
+        void refreshWorkspace();
     });
 
     async function refreshSystemStatus() {
-        [apiStatus, workerStatus] = await Promise.all([
-            probeService(API_URL),
-            probeService("/worker"),
-        ]);
-        await checkCodexStatus();
+        const apiProbe = probeService(API_URL).then((status) => {
+            apiStatus = status;
+            return status;
+        });
+        const workerProbe = probeService("/worker").then((status) => {
+            workerStatus = status;
+            return status;
+        });
+
+        const currentAPIStatus = await apiProbe;
+        if (currentAPIStatus === "ok") {
+            await checkCodexStatus();
+        } else {
+            setCodexUnavailable();
+        }
+        await workerProbe.catch(() => {
+            workerStatus = "unreachable";
+        });
     }
 
     async function checkCodexStatus() {
         try {
-            const res = await fetch(`${API_URL}/codex/status`);
+            const res = await apiFetch(`${API_URL}/codex/status`, {
+                signal: AbortSignal.timeout(5000),
+            });
             if (!res.ok) {
-                codexInstalled = false;
-                codexLoggedIn = false;
-                codexAccount = "";
-                codexPlugins = [];
+                setCodexUnavailable();
                 return;
             }
             const body = await res.json();
@@ -156,14 +159,19 @@
             codexAccount = body?.account ?? "";
             codexPlugins = body?.plugins ?? [];
         } catch {
-            codexInstalled = false;
-            codexLoggedIn = false;
-            codexAccount = "";
-            codexPlugins = [];
+            setCodexUnavailable();
         }
     }
 
+    function setCodexUnavailable() {
+        codexInstalled = false;
+        codexLoggedIn = false;
+        codexAccount = "";
+        codexPlugins = [];
+    }
+
     async function refreshWorkspace() {
+        const runID = ++workspaceRefreshRunID;
         if (workspacePath === DEMO_WORKSPACE_PATH) {
             workspaceStatus = demoWorkspaceStatus();
             graphData = demoGraphData();
@@ -172,13 +180,29 @@
             lastAnalysisAt = "2026-01-01T09:30:00.000Z";
             return;
         }
-        await loadWorkspaceStatus(workspacePath);
-        workspaceStatus = await getWorkspaceStatus(workspacePath);
-        graphData = await getGraphData(workspacePath);
-        const artifacts = await getArtifacts({
-            workspace_id: workspacePath,
-            limit: 12,
-        });
+        const status = await loadWorkspaceStatus(workspacePath);
+        if (runID !== workspaceRefreshRunID) return;
+        workspaceStatus = status;
+
+        const confirmedSources = getProject().connectors.filter(
+            (source) => source.status === "ready",
+        );
+        if (confirmedSources.length === 0) {
+            graphData = null;
+            selectedEntity = null;
+            activityArtifacts = [];
+            return;
+        }
+
+        const [nextGraphData, artifacts] = await Promise.all([
+            getGraphData(workspacePath),
+            getArtifacts({
+                workspace_id: workspacePath,
+                limit: 12,
+            }),
+        ]);
+        if (runID !== workspaceRefreshRunID) return;
+        graphData = nextGraphData;
         activityArtifacts = artifacts?.artifacts ?? [];
     }
 
@@ -584,7 +608,11 @@
                         {hasSources}
                     />
                 {:else if activeInsightTab === "graph"}
-                    <GraphView {graphData} bind:selectedEntity {hasSources} />
+                    <GraphView
+                        {graphData}
+                        bind:selectedEntity
+                        {hasSources}
+                    />
                 {:else}
                     <ActivityView {recentArtifacts} />
                 {/if}
@@ -594,7 +622,7 @@
 
     <footer class="console-strip">
         <strong>{topContext}</strong>
-        <span>{currentTime.toLocaleTimeString()} | {statusLine}</span>
+        <span>{statusLine}</span>
         <span
             >{graphData?.entity_count ?? graphData?.count ?? 0} graph nodes | {graphData?.relationship_count ??
                 graphLinks.length} links | {mismatchCount} findings</span

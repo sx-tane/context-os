@@ -1,4 +1,5 @@
 import {
+  apiFetch,
   probeService,
   getJSON,
   postIngest,
@@ -55,6 +56,56 @@ const fetchMock = jest.fn<
 
 beforeEach(() => {
   fetchMock.mockReset();
+  delete (globalThis as { localStorage?: Storage }).localStorage;
+  jest.restoreAllMocks();
+});
+
+function enableDebugStorage(): void {
+  (globalThis as { localStorage?: Pick<Storage, "getItem"> }).localStorage = {
+    getItem: jest.fn((key: string) =>
+      key === "contextos_debug_api" ? "1" : null,
+    ),
+  };
+}
+
+// ---- apiFetch ----
+
+describe("apiFetch", () => {
+  it("adds a ContextOS request ID header", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await apiFetch("/api/health");
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toEqual(
+      expect.objectContaining({
+        "X-ContextOS-Request-ID": expect.stringMatching(/^web-/),
+      }),
+    );
+  });
+
+  it("does not log by default", async () => {
+    const debug = jest.spyOn(console, "debug").mockImplementation(() => {});
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+
+    await apiFetch("/api/health");
+
+    expect(debug).not.toHaveBeenCalled();
+  });
+
+  it("logs when browser debug storage is enabled", async () => {
+    enableDebugStorage();
+    const debug = jest.spyOn(console, "debug").mockImplementation(() => {});
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+
+    await apiFetch("/api/health");
+
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining("[api] -> GET /api/health id=web-"),
+    );
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining("[api] <- 200 GET /api/health id=web-"),
+    );
+  });
 });
 
 // ---- probeService ----
@@ -246,7 +297,10 @@ describe("getCodexSources", () => {
   it("fetches connector source list through /api/codex/sources", async () => {
     fetchMock.mockResolvedValue(makeResponse({ sources: [] }, true, 200));
     await getCodexSources("jira");
-    expect(fetchMock).toHaveBeenCalledWith("/api/codex/sources?connector=jira");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/codex/sources?connector=jira",
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
   });
 
   it("returns null when source discovery fails", async () => {
@@ -274,7 +328,10 @@ describe("getWorkspaces", () => {
   it("fetches /api/workspace", async () => {
     fetchMock.mockResolvedValue(makeResponse({ workspaces: [] }, true, 200));
     await getWorkspaces();
-    expect(fetchMock).toHaveBeenCalledWith("/api/workspace");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace",
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
   });
 
   it("returns an empty list when fetch throws", async () => {
@@ -384,7 +441,7 @@ describe("postWorkspaceSource", () => {
       "/api/workspace/source",
       expect.objectContaining({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           workspace_id: "/proj",
           connector: "jira",
@@ -445,7 +502,7 @@ describe("postChatQuery", () => {
       "/api/chat/query",
       expect.objectContaining({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
         body: JSON.stringify({ workspace_id: "ws1", message: "today jira tickets", limit: 20 }),
       }),
     );
@@ -512,7 +569,7 @@ describe("streamChatQuery", () => {
       "/api/chat/query/stream",
       expect.objectContaining({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           workspace_id: "ws1",
           message: "help me check sx-tane/context-os",
@@ -615,7 +672,7 @@ describe("deleteWorkspace", () => {
     await deleteWorkspace("/my/project");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/workspace?path=%2Fmy%2Fproject",
-      { method: "DELETE" },
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 

@@ -130,6 +130,11 @@ This reads `apps/api/docs/swagger.json` and writes `src/lib/generated/api.d.ts`.
 swag init  →  apps/api/docs/swagger.json  →  bun run codegen  →  src/lib/generated/api.d.ts
 ```
 
+The Vite dev server disables HMR for this local workspace UI so the browser page
+does not re-run while files are edited. Refresh the page manually after frontend
+changes. The watcher also ignores generated API types, SvelteKit cache files,
+coverage output, and API docs to keep idle CPU lower in WSL.
+
 Frontend-specific types that have no swagger equivalent (`IngestRequest`, `SourceConnectorConfig`, `ConnectorKind`, etc.) remain in `src/lib/types.ts` and are maintained manually.
 
 ## Testing

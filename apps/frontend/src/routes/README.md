@@ -17,7 +17,8 @@ Controls should use the same restrained mono theme:
 - The demo workspace uses local seed data for sources, findings, graph, activity, and chat/source queries so users can inspect the intended experience without ingesting live sources or requiring a backend demo workspace row.
 - Source, Clear, Send, Run Analysis, and workspace action buttons use the same underline button treatment and change color on hover.
 - The topbar uses the same 16px horizontal inset as the main content panes so workspace controls, source setup, and status read as part of one layout.
-- The footer console strip shows a live local clock, service status, graph links, and finding count; keep its timer route-owned and cleaned up on destroy.
+- The footer console strip shows service status, graph links, and finding count. Keep idle route state static so the main page does not re-render every second while no analysis or ingest is running.
+- Workspace refreshes reuse the status response already loaded into the project store, ignore stale overlapping refreshes, and skip graph/artifact requests until the workspace has at least one ready source.
 - The chat and insight panes can be resized from the center divider on desktop; the layout returns to one column below the compact breakpoint.
 - The embedded source setup panel expands within the right pane without a nested visible scrollbar.
 - Findings / Graph / Activity uses the segmented tab style already defined in the route.

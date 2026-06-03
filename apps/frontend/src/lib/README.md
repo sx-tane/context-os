@@ -7,6 +7,7 @@ Shared TypeScript modules for the ContextOS frontend. Everything in this directo
 | File                                                     | Purpose                                                                                                                            |
 | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | [`api.ts`](api.ts)                                       | HTTP and SSE client for the Go API. All network calls go through here.                                                             |
+| [`logger.ts`](logger.ts)                                 | Quiet-by-default browser request logger and request ID helper used by API calls.                                                   |
 | [`types.ts`](types.ts)                                   | Canonical frontend type definitions. Split between re-exports of auto-generated API types and hand-maintained frontend-only types. |
 | [`projectStore.ts`](projectStore.ts)                     | Svelte stores for workspace project state, chat history, selected connectors, protected demo/default workspaces, and backend workspace registration. |
 | [`analysisRunner.ts`](analysisRunner.ts)                 | Runs per-source findings analysis, posts progress messages, aggregates successful results, and reports per-source failures.         |
@@ -29,6 +30,7 @@ Single source of truth for all communication with the Go API (`/api`).
 | Symbol                                               | What it does                                                                                                                                     |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
 | `API_URL`                                            | Base path constant (`/api`).                                                                                                                     |
+| `apiFetch(input, init)`                              | Shared fetch wrapper that adds `X-ContextOS-Request-ID`; optional timing logs are handled by `logger.ts`. |
 | `probeService(url)`                                  | `GET /health` with a 3 s timeout; returns `"ok"` or `"unreachable"`.                                                                             |
 | `getJSON<T>(path)`                                   | Generic `GET` that deserialises JSON or returns `null` on any error.                                                                             |
 | `postIngest(connector, body, opts)`                  | `POST /<connector>/ingest` with a JSON body; returns `{ ok: true, body: IngestResult }` or `{ ok: false, body: ApiErrorBody }`. |
@@ -48,6 +50,12 @@ Single source of truth for all communication with the Go API (`/api`).
 | `streamCodexLogin(onLog, opts)`                      | Opens an SSE stream to `POST /codex/login`; forwards each log line to `onLog`.                                                                   |
 
 All streaming functions use a shared `readEventStream` helper that parses SSE blocks (`event: …\ndata: …\n\n`) from the response body reader.
+
+---
+
+## logger.ts
+
+Centralizes frontend request correlation. API calls receive an `X-ContextOS-Request-ID` header even when logging is disabled. Browser console request logs are quiet by default; enable them with `localStorage.contextos_debug_api = "1"` or `VITE_CONTEXTOS_DEBUG_LOGS=1`.
 
 ---
 
@@ -130,6 +138,8 @@ Builds the focused graph model consumed by `GraphView.svelte`: explicit or infer
 ## projectStore.ts
 
 Maintains local workspace state in browser storage and registers user-created workspaces with the backend. The store keeps `status="connected"` sync rows ready without assigning ingest event counts, because those rows represent live external references rather than persisted artifacts. The store always exposes the default workspace and a protected `contextos-demo` workspace; neither protected workspace is marked removed or deleted from local storage. The demo workspace is local-only and is not registered with the backend when opened.
+
+Cached project and chat data is bounded on both load and save: old browser state is trimmed to 200 chat messages, 80 stream lines per message, 20 cached evidence artifacts per chat card, 100 workspaces, and 100 connectors per workspace.
 
 ---
 
