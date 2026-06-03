@@ -14,6 +14,7 @@ Controls should use the same restrained mono theme:
 
 - Workspace select and new workspace input use underline-style fields, not boxed cards.
 - Workspace `Remove` opens a confirmation dialog before destructive cleanup. The default and demo workspaces cannot be removed. Confirming removal calls `DELETE /workspace?path=...` first; only a successful backend delete clears local project/chat/source state, closes setup state, clears graph/activity state, and moves to the next saved workspace. If the API delete fails, the workspace remains visible and the route reports the backend failure in chat.
+- Source setup `Reset all data` calls `/workspace/reset` for every known workspace, clears local project/chat storage, then emits a reset lifecycle event. The route must immediately clear `lastFindings`, analysis timestamp, graph data, selected entity, activity artifacts, latest chat result, and workspace status before refreshing from the empty backend state.
 - The demo workspace uses local seed data for sources, findings, graph, activity, and chat/source queries so users can inspect the intended experience without ingesting live sources or requiring a backend demo workspace row.
 - Source, Clear, Send, Run Analysis, and workspace action buttons use the same underline button treatment and change color on hover.
 - The topbar uses the same 16px horizontal inset as the main content panes so workspace controls, source setup, and status read as part of one layout.

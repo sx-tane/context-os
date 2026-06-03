@@ -24,6 +24,7 @@ Svelte components for knowledge and connector setup surfaces.
 - External sources use connected-source language and show `connected` rather than ingest event counts until explicit analysis or ingest creates local artifacts.
 - Filesystem remains the setup path that ingests local content into ContextOS storage immediately. Its row exposes browser file and folder upload controls first, with server-path ingest collapsed under a fallback details panel.
 - `Reset all data` uses the shared destructive confirmation modal so it matches workspace removal instead of using a browser-native confirmation popup.
+- After reset, `KnowledgeInstall.svelte` emits `reset` instead of the normal setup `done` event. The route must clear derived analysis state immediately: `lastFindings`, graph data, selected graph entity, activity artifacts, latest chat result, and analysis timestamp.
 
 ## Maintenance Notes
 

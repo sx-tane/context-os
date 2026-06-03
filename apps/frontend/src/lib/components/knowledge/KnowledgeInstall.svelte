@@ -34,7 +34,7 @@
     /** Called when user dismisses the panel. */
     export let onClose: () => void = () => {};
 
-    const dispatch = createEventDispatcher<{ done: void }>();
+    const dispatch = createEventDispatcher<{ done: void; reset: void }>();
     let resetConfirmOpen = false;
 
     // Required connectors for v1 knowledge.
@@ -516,7 +516,7 @@
             filesystemFiles = [];
             allDone = false;
             resetConfirmOpen = false;
-            dispatch("done");
+            dispatch("reset");
         } finally {
             resettingAll = false;
         }

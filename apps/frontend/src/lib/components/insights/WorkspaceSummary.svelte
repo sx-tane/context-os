@@ -13,6 +13,7 @@
     export let sourcePanelOpen = false;
     export let onClose: () => void = () => {};
     export let onDone: () => void = () => {};
+    export let onReset: () => void = () => {};
 
     $: sourceGroups = groupSources(readySources);
 
@@ -51,6 +52,7 @@
             {codexPlugins}
             {onClose}
             on:done={onDone}
+            on:reset={onReset}
         />
     </section>
 {:else if readySources.length > 0}

@@ -375,6 +375,24 @@
         addMessage(assistantMsg("Source setup updated."));
     }
 
+    async function handleKnowledgeReset() {
+        sourcePanelOpen = false;
+        lastChatResult = null;
+        lastFindings = null;
+        lastAnalysisAt = "";
+        graphData = null;
+        selectedEntity = null;
+        activityArtifacts = [];
+        workspaceStatus = null;
+        activeInsightTab = "findings";
+        await Promise.all([refreshWorkspace(), refreshSystemStatus()]);
+        addMessage(
+            assistantMsg(
+                "All workspace data reset. Analysis results, graph data, activity, saved sources, chat history, and local workspace memory were cleared.",
+            ),
+        );
+    }
+
     function switchInsightTab(tab: "findings" | "graph" | "activity") {
         activeInsightTab = tab;
         sourcePanelOpen = false;
@@ -566,6 +584,7 @@
                 {sourcePanelOpen}
                 onClose={() => (sourcePanelOpen = false)}
                 onDone={handleKnowledgeDone}
+                onReset={handleKnowledgeReset}
             />
 
             <section class="insight-card">

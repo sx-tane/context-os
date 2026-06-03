@@ -15,4 +15,6 @@ Homepage right-pane components for workspace context and insight tabs.
 
 `+page.svelte` owns API calls, workspace switching, analysis/chat orchestration, and selected tab state. These components receive already-loaded data and call pure helpers from `$lib/findingsViewModel.ts` and `$lib/graphViewModel.ts` for display shaping.
 
+`WorkspaceSummary.svelte` forwards `KnowledgeInstall.svelte` lifecycle events. Normal source setup uses `done`; destructive reset-all uses `reset` so the route can clear stale findings, graph, activity, selected entity, chat result, and analysis timestamp before refreshing workspace status.
+
 Keep graph behavior focused on the selected entity and its direct links. Do not draw every relationship at once in this surface.
