@@ -4,7 +4,12 @@
      * Shows readiness per connector, streams ingest progress, marks knowledge ready.
      */
     import { createEventDispatcher } from "svelte";
-    import type { CodexPlugin, CodexSourceOption, ConnectorKind } from "$lib/types";
+    import type {
+        CodexPlugin,
+        CodexSourceOption,
+        ConnectorKind,
+        ConnectorKnowledge,
+    } from "$lib/types";
     import {
         getCodexSources,
         getWorkspaceStatus,
@@ -313,12 +318,21 @@
                 $project.workspacePath,
                 ...workspaces.map((workspace) => workspace.path),
             ]);
+            const failed = [] as string[];
             for (const path of paths) {
                 const name =
                     workspaces.find((workspace) => workspace.path === path)?.name ??
                     path.split("/").filter(Boolean).pop() ??
                     "workspace";
-                await resetWorkspace(path, name);
+                const status = await resetWorkspace(path, name);
+                if (!status) {
+                    failed.push(path);
+                }
+            }
+            if (failed.length) {
+                console.warn(
+                    `Failed to reset DB state for: ${failed.join(", ")}. Local state was still cleared.`,
+                );
             }
             clearAllLocalWorkspaceState([...paths]);
             for (const r of REQUIRED) {
@@ -342,12 +356,29 @@
 
     $: selectedCount = selectedTargets().length;
     $: anyEnabled = selectedCount > 0;
+    $: connectedSources = $project.connectors.filter(
+        (source) => source.status === "ready" || source.status === "ingesting" || source.status === "error",
+    );
+    $: connectedCount = connectedSources.filter((source) => source.status === "ready").length;
 
     function statusIcon(s: "idle" | "running" | "done" | "error") {
         if (s === "done") return "ready";
         if (s === "running") return "running";
         if (s === "error") return "error";
         return "";
+    }
+
+    function connectorName(connector: ConnectorKind) {
+        return REQUIRED.find((item) => item.connector === connector)?.label ?? connector;
+    }
+
+    function sourceStatusLabel(source: ConnectorKnowledge) {
+        if (source.status === "ready") {
+            return `${source.eventCount ?? 0} event${source.eventCount === 1 ? "" : "s"}`;
+        }
+        if (source.status === "ingesting") return "ingesting";
+        if (source.status === "error") return source.error ? `error: ${source.error}` : "error";
+        return source.status;
     }
 </script>
 
@@ -370,6 +401,26 @@
                 > in your terminal, then reload this page to unlock all connectors.
             </div>
         {/if}
+
+        <section class="workspace-sources" aria-label="Connected sources in this workspace">
+            <div>
+                <strong>{connectedCount} connected source{connectedCount === 1 ? "" : "s"}</strong>
+                <span>Saved only for {$project.name}</span>
+            </div>
+            {#if connectedSources.length}
+                <div class="saved-source-list">
+                    {#each connectedSources as source (`${source.connector}:${source.uri}`)}
+                        <div class="saved-source" class:error={source.status === "error"} class:ingesting={source.status === "ingesting"}>
+                            <span>{connectorName(source.connector)}</span>
+                            <strong>{source.uri}</strong>
+                            <small>{sourceStatusLabel(source)}</small>
+                        </div>
+                    {/each}
+                </div>
+            {:else}
+                <p>No sources saved in this workspace yet.</p>
+            {/if}
+        </section>
 
         <div class="connectors-list">
             {#each REQUIRED as r}
@@ -522,8 +573,11 @@
                     on:click={installAll}
                     disabled={installing || !anyEnabled}
                 >
-                    {installing ? "Saving..." : `Save ${selectedCount} selected source${selectedCount === 1 ? "" : "s"}`}
+                    {installing ? "Saving..." : selectedCount > 0 ? `Save ${selectedCount} selected source${selectedCount === 1 ? "" : "s"}` : "Select a source to save"}
                 </button>
+                <span class="footer-note">
+                    {connectedCount} already connected in this workspace.
+                </span>
                 <button class="btn secondary" on:click={onClose}
                     >Skip for now</button
                 >
@@ -653,6 +707,83 @@
         border-radius: 3px;
     }
 
+    .workspace-sources {
+        margin: 0 calc(-1 * var(--ki-pad-x));
+        padding: 0.8rem var(--ki-pad-x);
+        border-bottom: 1px solid #d7d2c8;
+        background: transparent;
+    }
+
+    .workspace-sources > div:first-child {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.55rem;
+    }
+
+    .workspace-sources strong {
+        color: #1c1b18;
+        font-size: 0.86rem;
+    }
+
+    .workspace-sources span,
+    .workspace-sources p {
+        color: #8a8678;
+        font-size: 0.74rem;
+    }
+
+    .workspace-sources p {
+        margin: 0;
+    }
+
+    .saved-source-list {
+        display: grid;
+        gap: 0.4rem;
+    }
+
+    .saved-source {
+        display: grid;
+        grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.65rem;
+        min-height: 30px;
+        border-bottom: 1px solid #e6e0d4;
+        background: transparent;
+    }
+
+    .saved-source span {
+        color: #625f55;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+    }
+
+    .saved-source strong {
+        overflow: hidden;
+        color: #1c1b18;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .saved-source small {
+        color: #2d6a4f;
+        font-size: 0.7rem;
+        white-space: nowrap;
+    }
+
+    .saved-source.ingesting small {
+        color: #8a6a20;
+    }
+
+    .saved-source.error small {
+        color: #991b1b;
+        max-width: 12rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .connectors-list {
         margin: 0 calc(-1 * var(--ki-pad-x));
         padding: 0;
@@ -670,17 +801,16 @@
         border-radius: 0;
         padding: 0.85rem var(--ki-pad-x);
         cursor: pointer;
-        transition: background 0.15s;
         position: relative;
         background: transparent;
         font-family: inherit;
         box-sizing: border-box;
     }
     .connector-card:hover:not(.disabled) {
-        background: rgba(255, 253, 247, 0.55);
+        background: transparent;
     }
     .connector-card.checked {
-        background: rgba(255, 253, 247, 0.72);
+        background: transparent;
     }
     .connector-card.disabled {
         opacity: 0.5;
@@ -744,7 +874,8 @@
         font-size: 0.68rem;
         padding: 2px 6px;
         border-radius: 0;
-        border-left: 2px solid currentColor;
+        border: 0;
+        border-bottom: 1px solid currentColor;
         font-weight: 700;
         letter-spacing: 0.02em;
         text-transform: lowercase;
@@ -752,15 +883,15 @@
         line-height: 1.25;
     }
     .pill.ok {
-        background: rgba(209, 250, 229, 0.42);
+        background: transparent;
         color: #065f46;
     }
     .pill.error {
-        background: rgba(254, 226, 226, 0.52);
+        background: transparent;
         color: #991b1b;
     }
     .pill.neutral {
-        background: rgba(229, 225, 216, 0.68);
+        background: transparent;
         color: #625f55;
     }
 
@@ -774,9 +905,10 @@
         gap: 0.35rem;
         max-height: 12rem;
         overflow: auto;
-        border-left: 2px solid #d7d2c8;
+        border-left: 0;
+        border-top: 1px solid #d7d2c8;
         background: transparent;
-        padding: 0.3rem 0 0.3rem 0.7rem;
+        padding: 0.45rem 0 0.3rem;
     }
 
     .source-option {
@@ -784,8 +916,9 @@
         align-items: center;
         gap: 0.5rem;
         border-radius: 0;
-        padding: 0.35rem 0.5rem 0.35rem 0;
+        padding: 0.35rem 0;
         cursor: pointer;
+        background: transparent;
     }
 
     .source-option:hover {
@@ -895,6 +1028,11 @@
         color: #065f46;
         font-size: 0.875rem;
         flex: 1;
+    }
+
+    .footer-note {
+        color: #8a8678;
+        font-size: 0.74rem;
     }
 
     .btn {

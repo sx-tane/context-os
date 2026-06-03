@@ -11,6 +11,7 @@ This folder defines HTTP response payload contracts returned by API handlers.
 ## Current Files
 
 - `error.go`: shared error response envelope.
+- `chat.go`: chat query response payload, including `provider` (`local` or `codex`) so clients can tell whether an answer came from persisted artifacts or live Codex source context.
 - `ingest.go`: ingest response payload contract.
 
 ## Maintenance Checklist

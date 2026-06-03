@@ -169,6 +169,42 @@ func TestQueryDoesNotPresentRepositoryArtifactAsLatestCommit(t *testing.T) {
 	}
 }
 
+// TestQueryUsesLiveAnswererForGitHubCommitQuestions verifies commit questions can use a live Codex-backed source answer.
+func TestQueryUsesLiveAnswererForGitHubCommitQuestions(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-tourii",
+		WorkspaceID: "ws1",
+		Connector:   "github",
+		SourceURI:   "sx-tane/tourii-backend",
+		Title:       "sx-tane/tourii-backend",
+		Body:        "Repository summary.",
+		Metadata:    map[string]string{"object_type": "repository"},
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/tourii-backend", Status: "ready"},
+	}}
+	live := &fakeLiveAnswerer{answer: "Latest commit is abc123 by sx-tane."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "what is the latest commit for tourii-backend",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if result.Answer != "Latest commit is abc123 by sx-tane." {
+		t.Fatalf("Answer = %q, want live answer", result.Answer)
+	}
+	if live.query.SourceURI != "sx-tane/tourii-backend" {
+		t.Fatalf("live SourceURI = %q, want sx-tane/tourii-backend", live.query.SourceURI)
+	}
+}
+
 // TestQueryNoArtifactsDoesNotFallbackToFindings verifies source questions with no local data stay source-scoped.
 func TestQueryNoArtifactsDoesNotFallbackToFindings(t *testing.T) {
 	events := &fakeEventRepository{}
@@ -319,7 +355,18 @@ func (f *fakeSyncRepository) ListByWorkspace(ctx context.Context, workspaceID st
 var _ repository.WorkspaceRepository = (*fakeWorkspaceRepository)(nil)
 var _ repository.EventRepository = (*fakeEventRepository)(nil)
 var _ repository.SyncRepository = (*fakeSyncRepository)(nil)
+var _ internalchat.LiveAnswerer = (*fakeLiveAnswerer)(nil)
 var _ repository.EntityRepository = (*unusedEntityRepository)(nil)
+
+type fakeLiveAnswerer struct {
+	answer string
+	query  internalchat.LiveQuery
+}
+
+func (f *fakeLiveAnswerer) Answer(ctx context.Context, query internalchat.LiveQuery) (string, error) {
+	f.query = query
+	return f.answer, nil
+}
 
 type unusedEntityRepository struct{}
 

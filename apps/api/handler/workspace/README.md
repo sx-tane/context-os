@@ -21,5 +21,6 @@ HTTP handlers for registering, resetting, deleting, listing, and inspecting loca
 
 - Keep workspace operations bounded by `workspaceRequestTimeout`.
 - Use `repository.WorkspaceResetter` only for reset-capable stores.
+- `DELETE /workspace` verifies the workspace row is gone before returning success; the frontend should not clear local state when this endpoint fails.
 - Keep detailed status counts best-effort so missing optional repositories do not hide the core workspace status.
 - Update `apps/api/README.md` when endpoint paths, request fields, or response fields change.

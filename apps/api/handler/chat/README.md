@@ -6,7 +6,7 @@ HTTP handler for local workspace chat queries.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/chat/query` | Answers local source, status, and findings-intent questions from persisted ContextOS data. |
+| POST | `/chat/query` | Answers source, status, and findings-intent questions from persisted ContextOS data, with optional Codex-backed live lookup for configured source-specific questions. |
 
 ## Files
 
@@ -14,7 +14,7 @@ HTTP handler for local workspace chat queries.
 
 ## Behavior
 
-The handler uses `http.MaxBytesReader` for bounded JSON input, runs with a 15 second request timeout, and delegates all intent classification and repository reads to `internal/chat.Service`.
+The handler uses `http.MaxBytesReader` for bounded JSON input, runs with a 150 second request timeout so Codex-backed live lookups can complete, and delegates intent classification, repository reads, and optional Codex live lookup decisions to `internal/chat.Service`.
 
 ## Maintenance Notes
 

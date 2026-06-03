@@ -13,7 +13,6 @@ const STORAGE_KEY_PREFIX = "contextos_project_";
 const CHAT_KEY_PREFIX = "contextos_chat_";
 const WORKSPACE_LIST_KEY = "contextos_workspaces";
 const ACTIVE_WORKSPACE_KEY = "contextos_workspace_path";
-const REMOVED_WORKSPACES_KEY = "contextos_removed_workspaces";
 
 // Default workspace key — replaced by user selection or URL param.
 export const DEFAULT_WORKSPACE_PATH =
@@ -130,62 +129,26 @@ function saveMessages(path: string, messages: ChatMessage[]): void {
 
 function loadWorkspacePaths(): string[] {
   const paths = new Set<string>([DEMO_WORKSPACE_PATH, DEFAULT_WORKSPACE_PATH]);
-  const removedPaths = loadRemovedWorkspacePaths();
   try {
     const storage = getLocalStorage();
     if (!storage) return [...paths];
     const raw = storage.getItem(WORKSPACE_LIST_KEY);
     if (raw) {
       for (const path of JSON.parse(raw) as string[]) {
-        if (path && !removedPaths.has(path)) paths.add(path);
+        if (path) paths.add(path);
       }
     }
     for (let i = 0; i < storage.length; i += 1) {
       const key = storage.key(i) ?? "";
       if (key.startsWith(STORAGE_KEY_PREFIX)) {
         const path = key.slice(STORAGE_KEY_PREFIX.length);
-        if (!removedPaths.has(path)) paths.add(path);
+        paths.add(path);
       }
     }
   } catch {
     // ignore storage errors
   }
   return [...paths];
-}
-
-function loadRemovedWorkspacePaths(): Set<string> {
-  try {
-    const storage = getLocalStorage();
-    if (!storage) return new Set();
-    const raw = storage.getItem(REMOVED_WORKSPACES_KEY);
-    if (!raw) return new Set();
-    return new Set((JSON.parse(raw) as string[]).filter(Boolean));
-  } catch {
-    return new Set();
-  }
-}
-
-function saveRemovedWorkspacePaths(paths: Set<string>): void {
-  try {
-    const storage = getLocalStorage();
-    if (!storage) return;
-    storage.setItem(REMOVED_WORKSPACES_KEY, JSON.stringify([...paths]));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function markWorkspaceRemoved(path: string): void {
-  if (!path || path === DEFAULT_WORKSPACE_PATH || path === DEMO_WORKSPACE_PATH) return;
-  const removed = loadRemovedWorkspacePaths();
-  removed.add(path);
-  saveRemovedWorkspacePaths(removed);
-}
-
-function unmarkWorkspaceRemoved(path: string): void {
-  const removed = loadRemovedWorkspacePaths();
-  if (!removed.delete(path)) return;
-  saveRemovedWorkspacePaths(removed);
 }
 
 function saveWorkspacePaths(paths: string[]): void {
@@ -243,7 +206,6 @@ export const workspaces = { subscribe: _workspaces.subscribe };
 /** Switch to a different workspace path, loading persisted state. */
 export function openProject(workspacePath: string): void {
   const cleanPath = cleanWorkspacePath(workspacePath);
-  unmarkWorkspaceRemoved(cleanPath);
   const p = loadProject(cleanPath);
   const m = loadMessages(cleanPath);
   getLocalStorage()?.setItem(ACTIVE_WORKSPACE_KEY, cleanPath);
@@ -267,7 +229,6 @@ export function renameProject(name: string): void {
 export function addWorkspace(workspacePath: string, name?: string): void {
   const cleanPath = workspacePath.trim();
   if (!cleanPath) return;
-  unmarkWorkspaceRemoved(cleanPath);
   const projectState = loadProject(cleanPath);
   const next = { ...projectState, name: name?.trim() || projectState.name };
   saveProject(next);
@@ -279,7 +240,6 @@ export function addWorkspace(workspacePath: string, name?: string): void {
 export function removeWorkspace(workspacePath: string): void {
   if (workspacePath === DEFAULT_WORKSPACE_PATH || workspacePath === DEMO_WORKSPACE_PATH) return;
   const storage = getLocalStorage();
-  markWorkspaceRemoved(workspacePath);
   storage?.removeItem(STORAGE_KEY_PREFIX + workspacePath);
   storage?.removeItem(CHAT_KEY_PREFIX + workspacePath);
   _workspaces.update((items) => {
@@ -296,12 +256,10 @@ export function removeWorkspace(workspacePath: string): void {
 export async function hydrateWorkspaces(): Promise<void> {
   const records = await getWorkspaces();
   if (records.length === 0) return;
-  const removedPaths = loadRemovedWorkspacePaths();
   _workspaces.update((items) => {
     const byPath = new Map(items.map((item) => [item.workspacePath, item]));
     for (const record of records) {
       const workspace = projectFromWorkspaceRecord(record);
-      if (removedPaths.has(workspace.workspacePath)) continue;
       byPath.set(workspace.workspacePath, workspace);
     }
     const next = [...byPath.values()];
@@ -361,34 +319,73 @@ export function clearKnowledgeState(): void {
   });
 }
 
-/** Clear locally remembered source and chat state for all known workspaces. */
-export function clearAllLocalWorkspaceState(paths: string[] = []): void {
-  const allPaths = new Set([...loadWorkspacePaths(), ...paths.map(cleanWorkspacePath)]);
+/** Build an empty local project projection for a workspace path. */
+function clearedProjectState(path: string): ProjectState {
+  const cleanPath = cleanWorkspacePath(path);
+  const base = loadProject(cleanPath);
+  return {
+    ...base,
+    workspacePath: cleanPath,
+    connectors: [],
+    knowledgeInstalledAt: undefined,
+  };
+}
+
+/**
+ * Clear local source/chat/project artifacts for a single workspace path.
+ *
+ * Removes persisted local project/chat keys and resets in-memory state for matching
+ * active workspace. Keeps workspace registry entries unless explicitly removed by caller.
+ */
+function clearLocalWorkspaceState(path: string): void {
+  const cleanPath = cleanWorkspacePath(path);
+  const activePath = get(_project).workspacePath;
   try {
     const storage = getLocalStorage();
     if (storage) {
-      for (const path of allPaths) {
-        const projectState = loadProject(path);
-        saveProject({
-          ...projectState,
-          connectors: [],
-          knowledgeInstalledAt: undefined,
-        });
-        storage.removeItem(CHAT_KEY_PREFIX + path);
-      }
+      storage.removeItem(STORAGE_KEY_PREFIX + cleanPath);
+      storage.removeItem(CHAT_KEY_PREFIX + cleanPath);
     }
   } catch {
     // ignore storage errors
   }
-  const activePath = get(_project).workspacePath;
-  const active = loadProject(activePath);
-  _project.set({
-    ...active,
-    connectors: [],
-    knowledgeInstalledAt: undefined,
+
+  _workspaces.update((items) => {
+    const next = items.slice();
+    const matchIndex = next.findIndex(
+      (item) => item.workspacePath === cleanPath,
+    );
+    if (matchIndex >= 0) {
+      next[matchIndex] = clearedProjectState(cleanPath);
+    } else {
+      next.unshift(clearedProjectState(cleanPath));
+    }
+    saveWorkspacePaths(next.map((item) => item.workspacePath));
+    return next;
   });
-  _messages.set([]);
-  _workspaces.set([...allPaths].map((path) => loadProject(path)));
+
+  if (activePath === cleanPath) {
+    _project.set(clearedProjectState(cleanPath));
+  }
+  if (activePath === cleanPath) {
+    _messages.set([]);
+  }
+}
+
+/** Clear locally remembered source and chat state for all known workspaces. */
+export function clearAllLocalWorkspaceState(paths: string[] = []): void {
+  const allPaths = new Set([...loadWorkspacePaths(), ...paths.map(cleanWorkspacePath)]);
+  for (const path of allPaths) {
+    clearLocalWorkspaceState(path);
+  }
+
+  // Keep any active workspace metadata clean even when not in any known list.
+  const activePath = get(_project).workspacePath;
+  const active = clearedProjectState(activePath);
+  if (!allPaths.has(activePath)) {
+    _project.set(active);
+    _messages.set([]);
+  }
 }
 
 /** Return a snapshot of the current project state. */

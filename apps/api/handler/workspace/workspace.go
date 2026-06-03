@@ -231,6 +231,15 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
 	}
+	workspace, err := h.workspaces.GetByPath(ctx, path)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	if workspace != nil {
+		response.WriteError(w, http.StatusInternalServerError, "delete_incomplete", "workspace row still exists after delete")
+		return
+	}
 	response.WriteJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 

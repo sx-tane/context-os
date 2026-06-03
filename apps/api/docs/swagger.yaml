@@ -416,6 +416,8 @@ definitions:
         type: string
       intent:
         type: string
+      provider:
+        type: string
       range_end:
         type: string
       range_start:
@@ -774,10 +776,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Answers local source, status, and findings-intent questions without
-        falling back to mismatch analysis.
+      description: Answers source, status, and findings-intent questions from local
+        artifacts, with optional Codex live lookup for configured source-specific
+        questions.
       parameters:
-      - description: Local chat query
+      - description: Chat query
         in: body
         name: body
         required: true
@@ -814,7 +817,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Query local workspace context
+      summary: Query workspace context
       tags:
       - chat
   /codex/login:
@@ -1804,43 +1807,24 @@ paths:
       tags:
       - slack
   /workspace:
-    get:
-      description: Returns all registered ContextOS workspaces.
+    delete:
+      description: Deletes a workspace row and all cascade-linked local memory without
+        recreating the workspace.
+      parameters:
+      - description: Absolute workspace path
+        in: query
+        name: path
+        required: true
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "405":
-          description: Method Not Allowed
           schema:
             additionalProperties:
-              type: string
+              type: boolean
             type: object
-      summary: List workspaces
-      tags:
-      - workspace
-    post:
-      consumes:
-      - application/json
-      description: Creates or updates a workspace record by its path.
-      parameters:
-      - description: Workspace upsert request
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/workspace.upsertRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/repository.Workspace'
         "400":
           description: Bad Request
           schema:
@@ -1859,7 +1843,32 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Register or update a workspace
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete workspace memory
+      tags:
+      - workspace
+    get:
+      description: Returns all registered ContextOS workspaces.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List workspaces
       tags:
       - workspace
   /workspace/reset:
@@ -1945,6 +1954,46 @@ paths:
               type: string
             type: object
       summary: Workspace status
+      tags:
+      - workspace
+  /workspace/upsert:
+    post:
+      consumes:
+      - application/json
+      description: Creates or updates a workspace record by its path.
+      parameters:
+      - description: Workspace upsert request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/workspace.upsertRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repository.Workspace'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register or update a workspace
       tags:
       - workspace
 swagger: "2.0"

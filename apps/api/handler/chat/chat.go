@@ -13,7 +13,7 @@ import (
 	internalchat "context-os/internal/chat"
 )
 
-const chatRequestTimeout = 15 * time.Second
+const chatRequestTimeout = 150 * time.Second
 
 // Handler holds the service dependency for local chat handlers.
 type Handler struct {
@@ -27,12 +27,12 @@ func NewHandler(service *internalchat.Service) *Handler {
 
 // Query handles POST /chat/query.
 //
-// @Summary      Query local workspace context
-// @Description  Answers local source, status, and findings-intent questions without falling back to mismatch analysis.
+// @Summary      Query workspace context
+// @Description  Answers source, status, and findings-intent questions from local artifacts, with optional Codex live lookup for configured source-specific questions.
 // @Tags         chat
 // @Accept       json
 // @Produce      json
-// @Param        body  body      request.ChatQuery  true  "Local chat query"
+// @Param        body  body      request.ChatQuery  true  "Chat query"
 // @Success      200   {object}  response.ChatQuery
 // @Failure      400   {object}  map[string]string
 // @Failure      404   {object}  map[string]string
@@ -103,6 +103,7 @@ func mapChatResult(result internalchat.Result) response.ChatQuery {
 		WorkspacePath: result.WorkspacePath,
 		Connector:     result.Connector,
 		SourceURI:     result.SourceURI,
+		Provider:      result.Provider,
 		Answer:        result.Answer,
 		Summary:       result.Summary,
 		RangeStart:    rangeStart,

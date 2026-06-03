@@ -286,6 +286,7 @@ export interface ChatQueryResult {
   workspace_path: string;
   connector?: string;
   source_uri?: string;
+  provider: "local" | "codex" | string;
   answer: string;
   summary: string;
   range_start?: string;

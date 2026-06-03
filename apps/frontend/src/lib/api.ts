@@ -280,13 +280,17 @@ export async function upsertWorkspace(
 
 export async function resetWorkspace(
   path: string,
-  name: string,
+  name?: string,
 ): Promise<WorkspaceStatus | null> {
+  const body: { path: string; name?: string } = { path };
+  const trimmedName = name?.trim();
+  if (trimmedName) body.name = trimmedName;
+
   try {
     const res = await fetch(`${API_URL}/workspace/reset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path, name }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) return null;
     return normalizeWorkspaceStatus(await readJSON(res));
@@ -470,12 +474,26 @@ export async function postChatQuery(
   | { ok: true; status: number; body: ChatQueryResult }
   | { ok: false; status: number; body: ApiErrorBody }
 > {
-  const res = await fetch(`${API_URL}/chat/query`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: options.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/chat/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message:
+          "API is unreachable. Start the API with scripts/start-all.sh or check the frontend /api proxy.",
+      },
+    };
+  }
   const responseBody = await readJSON(res);
   if (res.ok) {
     return {

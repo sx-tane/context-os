@@ -96,10 +96,10 @@ type WorkspaceRepository interface {
 	List(ctx context.Context) ([]Workspace, error)
 }
 
-// WorkspaceResetter clears a workspace and all cascade-linked memory rows.
+// WorkspaceResetter clears a workspace and all workspace-scoped memory rows.
 type WorkspaceResetter interface {
-	// DeleteByPath deletes a workspace by path. Linked rows are removed through
-	// database cascade rules. It is a no-op when the workspace does not exist.
+	// DeleteByPath deletes a workspace by path and removes linked memory rows.
+	// It is a no-op when the workspace does not exist.
 	DeleteByPath(ctx context.Context, path string) error
 }
 

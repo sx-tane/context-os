@@ -30,7 +30,7 @@ var (
 	// ErrMessageRequired is returned when a chat query omits the user message.
 	ErrMessageRequired = errors.New("message is required")
 
-	sourcePattern     = regexp.MustCompile(`(?i)(#[A-Za-z0-9_.-]+|[a-z]+://[^\s,]+|https?://[^\s,]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)`)
+	sourcePattern      = regexp.MustCompile(`(?i)(#[A-Za-z0-9_.-]+|[a-z]+://[^\s,]+|https?://[^\s,]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)`)
 	sourceTokenPattern = regexp.MustCompile(`[^a-z0-9_.-]+`)
 )
 
@@ -53,6 +53,7 @@ type Result struct {
 	WorkspacePath string
 	Connector     string
 	SourceURI     string
+	Provider      string
 	Answer        string
 	Summary       string
 	Since         *time.Time
@@ -61,16 +62,34 @@ type Result struct {
 	Syncs         []repository.ConnectorSync
 }
 
+// LiveQuery is one optional live source question routed through Codex-backed connectors.
+type LiveQuery struct {
+	Connector string
+	SourceURI string
+	Message   string
+}
+
+// LiveAnswerer answers a source question from a live connector account.
+type LiveAnswerer interface {
+	Answer(ctx context.Context, query LiveQuery) (string, error)
+}
+
 // Service routes local chat queries to workspace repositories.
 type Service struct {
 	workspaces repository.WorkspaceRepository
 	events     repository.EventRepository
 	syncs      repository.SyncRepository
+	live       LiveAnswerer
 }
 
 // NewService returns a Service backed by the provided repositories.
 func NewService(workspaces repository.WorkspaceRepository, events repository.EventRepository, syncs repository.SyncRepository) *Service {
 	return &Service{workspaces: workspaces, events: events, syncs: syncs}
+}
+
+// NewServiceWithLiveAnswerer returns a Service that can optionally ask live Codex-backed sources.
+func NewServiceWithLiveAnswerer(workspaces repository.WorkspaceRepository, events repository.EventRepository, syncs repository.SyncRepository, live LiveAnswerer) *Service {
+	return &Service{workspaces: workspaces, events: events, syncs: syncs, live: live}
 }
 
 // Query answers a user message using local workspace data only.
@@ -101,6 +120,7 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 		WorkspacePath: workspace.Path,
 		Connector:     connector,
 		SourceURI:     sourceURI,
+		Provider:      "local",
 		Since:         since,
 		Until:         until,
 		Syncs:         syncs,
@@ -141,15 +161,45 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 	}
 	result.Artifacts = artifacts
 	result.Answer, result.Summary = buildArtifactAnswer(result, limit)
+	if s.shouldAskLive(result, message) {
+		answer, err := s.live.Answer(ctx, LiveQuery{
+			Connector: result.Connector,
+			SourceURI: result.SourceURI,
+			Message:   message,
+		})
+		if err == nil && strings.TrimSpace(answer) != "" {
+			result.Provider = "codex"
+			result.Answer = strings.TrimSpace(answer)
+			result.Summary = result.Answer
+			return result, nil
+		}
+		result.Answer = result.Answer + "\n\nLive Codex lookup did not complete, so this answer is based on local artifacts only."
+		result.Summary = result.Answer
+		return result, nil
+	}
 	if isCommitQuestion(message) && result.Connector == "github" && !hasCommitArtifact(result.Artifacts) {
 		scope := result.SourceURI
 		if scope == "" {
 			scope = "that GitHub source"
 		}
-		result.Answer = fmt.Sprintf("I do not have local commit artifacts for %s yet. The current GitHub data is repository, issue, or pull request level, so I can only summarize what has been ingested.\n\n%s", scope, result.Answer)
+		result.Answer = fmt.Sprintf("I do not have local commit artifacts for %s yet. Connect Codex-backed GitHub chat or ingest commit data to answer this directly.\n\n%s", scope, result.Answer)
 		result.Summary = result.Answer
 	}
 	return result, nil
+}
+
+func (s *Service) shouldAskLive(result Result, message string) bool {
+	if s.live == nil {
+		return false
+	}
+	if result.SourceURI == "" || !supportsLiveConnector(result.Connector) {
+		return false
+	}
+	if isCommitQuestion(message) {
+		return !hasCommitArtifact(result.Artifacts)
+	}
+	lower := strings.ToLower(message)
+	return hasAny(lower, "more information", "more info", "details", "detail", "latest", "current", "recent", "summarize", "summary")
 }
 
 func (s *Service) resolveWorkspace(ctx context.Context, query Query) (repository.Workspace, error) {

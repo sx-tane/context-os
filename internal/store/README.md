@@ -25,6 +25,13 @@ Entity and relationship confidence is merged upward (`GREATEST`).
 API with workspace-scoped nodes and persisted edges. Relationship reads can be
 limited to a caller-provided entity ID set when the graph response is filtered.
 
+## Workspace Delete
+
+`WorkspaceStore.DeleteByPath` deletes audit log, connector sync, mismatch,
+relationship, entity, ingest event, and workspace rows in one transaction. The
+delete is explicit instead of relying only on foreign-key cascade behavior so
+Remove cannot degrade into frontend-only hiding.
+
 ## Usage
 
 ```go

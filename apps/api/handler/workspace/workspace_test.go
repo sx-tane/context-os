@@ -213,6 +213,7 @@ func (r *resettableWorkspaceRepo) Upsert(_ context.Context, workspace repository
 
 func (r *resettableWorkspaceRepo) DeleteByPath(_ context.Context, path string) error {
 	r.deletedPaths = append(r.deletedPaths, path)
+	r.workspaces = r.workspaces[:0]
 	return nil
 }
 

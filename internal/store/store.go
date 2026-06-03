@@ -88,13 +88,44 @@ func (s *WorkspaceStore) List(ctx context.Context) ([]repository.Workspace, erro
 	return out, rows.Err()
 }
 
-// DeleteByPath deletes a workspace by path. Dependent workspace memory rows are
-// removed by ON DELETE CASCADE constraints.
+// DeleteByPath deletes a workspace by path and removes all workspace-scoped memory rows.
 func (s *WorkspaceStore) DeleteByPath(ctx context.Context, path string) error {
-	if _, err := s.db.ExecContext(ctx, `
-		DELETE FROM workspaces WHERE path = $1
-	`, path); err != nil {
-		return fmt.Errorf("store: delete workspace by path: %w", err)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: begin delete workspace by path: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var workspaceID string
+	if err := tx.QueryRowContext(ctx, `
+		SELECT id FROM workspaces WHERE path = $1
+	`, path).Scan(&workspaceID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("store: find workspace by path for delete: %w", err)
+	}
+
+	for _, table := range []string{
+		"audit_log",
+		"connector_syncs",
+		"mismatches",
+		"relationships",
+		"entities",
+		"ingest_events",
+	} {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE workspace_id = $1", table), workspaceID); err != nil {
+			return fmt.Errorf("store: delete %s for workspace: %w", table, err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM workspaces WHERE id = $1
+	`, workspaceID); err != nil {
+		return fmt.Errorf("store: delete workspace row by path: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: commit delete workspace by path: %w", err)
 	}
 	return nil
 }

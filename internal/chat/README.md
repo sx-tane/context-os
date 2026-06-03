@@ -1,6 +1,6 @@
 # Internal Chat
 
-Deterministic local chat service for answering workspace-scoped questions from persisted ContextOS repositories.
+Chat service for answering workspace-scoped questions from persisted ContextOS repositories and optional Codex-backed live source context.
 
 ## Files
 
@@ -11,9 +11,9 @@ Deterministic local chat service for answering workspace-scoped questions from p
 
 ## Behavior
 
-The service supports artifact, status, findings, and unsupported intents. It does not call external models or live connectors; answers are built from repository data already stored for the workspace.
+The service supports artifact, status, findings, and unsupported intents. It always resolves workspace scope and queries persisted artifacts first. When a configured source is backed by a Codex plugin and the local artifacts are not enough for source-specific detail, the service can call a `LiveAnswerer` to ask the connected Codex account.
 
-GitHub source questions infer the configured repository source from sync state when the user names only a repo slug such as `tourii-backend`. This keeps answers scoped to the requested repo instead of falling back to every GitHub artifact in the workspace. Latest-commit questions still require local commit artifacts; when only repository, issue, or pull request artifacts exist, the service says that commit data is not available locally instead of presenting a repository artifact as a commit.
+GitHub source questions infer the configured repository source from sync state when the user names only a repo slug such as `tourii-backend`. This keeps answers scoped to the requested repo instead of falling back to every GitHub artifact in the workspace. Latest-commit questions use local commit artifacts when present; otherwise, configured GitHub sources are eligible for live Codex lookup.
 
 ```mermaid
 flowchart TD
@@ -21,9 +21,12 @@ flowchart TD
   W --> S[List sync state]
   S --> I[Classify intent]
   I -->|artifacts| A[Query events]
+  A --> L{Needs live source detail?}
+  L -->|yes| C[Ask Codex LiveAnswerer]
+  L -->|no| R[Local answer]
+  C --> R
   I -->|status| T[Summarize syncs]
   I -->|findings| F[Point to findings workflow]
-  A --> R[Local answer]
   T --> R
   F --> R
 ```

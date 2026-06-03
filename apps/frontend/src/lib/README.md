@@ -34,7 +34,7 @@ Single source of truth for all communication with the Go API (`/api`).
 | `deleteWorkspace(path)`                              | Calls `DELETE /workspace?path=...` and returns structured `{ ok, status, message? }` details so the route can remove local state while reporting backend/API failures. |
 | `getWorkspaceStatus(path)`                           | Fetches workspace event/entity/mismatch counts and connector sync state.                                                                          |
 | `getArtifacts(params)`                               | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit.                            |
-| `postChatQuery(body, opts)`                          | Sends deterministic local chat questions to `POST /chat/query`; source questions return artifact-backed answers instead of presentation findings.  |
+| `postChatQuery(body, opts)`                          | Sends chat questions to `POST /chat/query`; source questions use local artifacts first and may return Codex-backed live answers for configured sources. Network failures return a structured `api_unreachable` error instead of throwing raw `Failed to fetch`. |
 | `streamCodexIngest(connector, body, handlers, opts)` | Opens an SSE stream to `POST /<connector>/ingest` for Codex-backed connectors; dispatches `onLog`, `onStatus`, `onResult`, and `onError` events. |
 | `streamCodexReauth(plugin, onLog, opts)`             | Opens an SSE stream to `POST /codex/plugin-reauth?plugin=…`; forwards each log line to `onLog`.                                                  |
 | `streamCodexLogin(onLog, opts)`                      | Opens an SSE stream to `POST /codex/login`; forwards each log line to `onLog`.                                                                   |
@@ -72,8 +72,8 @@ Central type registry for the frontend.
 | `SourceConnectorConfig`     | Full static config that drives a `SourceConnector` card.                              |
 | `WorkspaceList`             | API response for registered local workspaces.                                        |
 | `ArtifactList`              | API response for local ingested source artifacts.                                    |
-| `ChatQueryRequest`          | Request body for deterministic local chat queries.                                   |
-| `ChatQueryResult`           | Local chat answer with intent, answer text, artifact evidence, range, and sync state. |
+| `ChatQueryRequest`          | Request body for source chat queries.                                                |
+| `ChatQueryResult`           | Chat answer with intent, provider, answer text, artifact evidence, range, and sync state. |
 | `GraphRelationship`         | Persisted graph edge exposed by `/graph`, including source and evidence identifiers. |
 | `GraphData`                 | Graph response with flattened entities, relationships, and summary stats.            |
 

@@ -74,7 +74,7 @@ apps/api/
 | DELETE | `/workspace?path=...`   | Deletes a workspace row and DB-backed local memory without recreating it                  |
 | GET    | `/workspace/status`     | Returns local event/entity/mismatch counts and connector sync state                      |
 | GET    | `/artifacts`            | Queries local ingested artifacts by workspace, connector, source URI, date range, and text |
-| POST   | `/chat/query`           | Deterministic local natural-language query over workspace artifacts, sync state, and status |
+| POST   | `/chat/query`           | Natural-language query over workspace artifacts, sync state, status, and optional Codex-backed live source context |
 | GET    | `/github/status`        | Checks `GITHUB_TOKEN` and returns account identity                                       |
 | GET    | `/googledrive/status`   | Checks Google Drive OAuth/service-account/folder setup                                   |
 | POST   | `/googledrive/ingest`   | Ingest Docs, Sheets, and Slides from a Drive folder                                      |
@@ -101,7 +101,7 @@ apps/api/
 | POST   | `/codex/plugin-reauth`  | Re-add plugin with `BROWSER=echo`; OAuth URL printed in SSE log (UI not wired — use CLI) |
 | GET    | `/swagger/`             | Interactive Swagger UI (served from generated docs)                                      |
 
-`/artifacts` is DB-backed and does not call live connectors. It requires a workspace scope and accepts optional `connector`, `source_uri`, `q`, `since`, `until`, and `limit` query parameters. `/chat/query` is also local-only: source questions such as "today Slack messages", "recent Jira tickets", or "latest Drive docs" route to artifact queries instead of presentation findings.
+`/artifacts` is DB-backed and does not call live connectors. It requires a workspace scope and accepts optional `connector`, `source_uri`, `q`, `since`, `until`, and `limit` query parameters. `/chat/query` first uses workspace artifacts and sync state; for configured Codex-backed sources it can ask the connected Codex plugin for source-specific details when local artifacts are not enough, such as latest commit or current repository questions.
 
 Workspace endpoints return explicit API response objects with snake_case JSON fields such as `path`, `created_at`, `event_count`, and `source_uri`; handlers do not expose raw repository structs.
 

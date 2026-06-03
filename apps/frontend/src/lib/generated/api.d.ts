@@ -50,11 +50,11 @@ export interface paths {
     };
   };
   "/chat/query": {
-    /** Answers local source, status, and findings-intent questions without falling back to mismatch analysis. */
+    /** Answers source, status, and findings-intent questions from local artifacts, with optional Codex live lookup for configured source-specific questions. */
     post: {
       parameters: {
         body: {
-          /** Local chat query */
+          /** Chat query */
           body: definitions["request.ChatQuery"];
         };
       };
@@ -797,18 +797,18 @@ export interface paths {
         };
       };
     };
-    /** Creates or updates a workspace record by its path. */
-    post: {
+    /** Deletes a workspace row and all cascade-linked local memory without recreating the workspace. */
+    delete: {
       parameters: {
-        body: {
-          /** Workspace upsert request */
-          body: definitions["workspace.upsertRequest"];
+        query: {
+          /** Absolute workspace path */
+          path: string;
         };
       };
       responses: {
         /** OK */
         200: {
-          schema: definitions["repository.Workspace"];
+          schema: { [key: string]: boolean };
         };
         /** Bad Request */
         400: {
@@ -820,6 +820,10 @@ export interface paths {
         };
         /** Internal Server Error */
         500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
           schema: { [key: string]: string };
         };
       };
@@ -874,6 +878,35 @@ export interface paths {
         };
         /** Not Found */
         404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/workspace/upsert": {
+    /** Creates or updates a workspace record by its path. */
+    post: {
+      parameters: {
+        body: {
+          /** Workspace upsert request */
+          body: definitions["workspace.upsertRequest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["repository.Workspace"];
+        };
+        /** Bad Request */
+        400: {
           schema: { [key: string]: string };
         };
         /** Method Not Allowed */
@@ -1154,6 +1187,7 @@ export interface definitions {
     artifacts?: definitions["response.Artifact"][];
     connector?: string;
     intent?: string;
+    provider?: string;
     range_end?: string;
     range_start?: string;
     source_uri?: string;

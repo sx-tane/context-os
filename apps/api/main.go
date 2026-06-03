@@ -103,7 +103,7 @@ func main() {
 		))
 		graphHandler = handlergraph.NewHandler(wsStore, entityStore)
 		artifactsHandler = handlerartifacts.NewHandler(wsStore, evStore)
-		chatHandler = handlerchat.NewHandler(internalchat.NewService(wsStore, evStore, syncStore))
+		chatHandler = handlerchat.NewHandler(internalchat.NewServiceWithLiveAnswerer(wsStore, evStore, syncStore, internalchat.NewCodexAnswerer()))
 
 		// Start background incremental sync worker.
 		syncWorker := internalsync.NewWorker(wsStore, syncStore, evStore)

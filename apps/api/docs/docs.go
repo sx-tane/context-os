@@ -118,7 +118,7 @@ const docTemplate = `{
         },
         "/chat/query": {
             "post": {
-                "description": "Answers local source, status, and findings-intent questions without falling back to mismatch analysis.",
+                "description": "Answers source, status, and findings-intent questions from local artifacts, with optional Codex live lookup for configured source-specific questions.",
                 "consumes": [
                     "application/json"
                 ],
@@ -128,10 +128,10 @@ const docTemplate = `{
                 "tags": [
                     "chat"
                 ],
-                "summary": "Query local workspace context",
+                "summary": "Query workspace context",
                 "parameters": [
                     {
-                        "description": "Local chat query",
+                        "description": "Chat query",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1667,34 +1667,32 @@ const docTemplate = `{
                     }
                 }
             },
-            "post": {
-                "description": "Creates or updates a workspace record by its path.",
-                "consumes": [
-                    "application/json"
-                ],
+            "delete": {
+                "description": "Deletes a workspace row and all cascade-linked local memory without recreating the workspace.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "workspace"
                 ],
-                "summary": "Register or update a workspace",
+                "summary": "Delete workspace memory",
                 "parameters": [
                     {
-                        "description": "Workspace upsert request",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/workspace.upsertRequest"
-                        }
+                        "type": "string",
+                        "description": "Absolute workspace path",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/repository.Workspace"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
                         }
                     },
                     "400": {
@@ -1717,6 +1715,15 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1826,6 +1833,67 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workspace/upsert": {
+            "post": {
+                "description": "Creates or updates a workspace record by its path.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Register or update a workspace",
+                "parameters": [
+                    {
+                        "description": "Workspace upsert request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/workspace.upsertRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/repository.Workspace"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2419,6 +2487,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "intent": {
+                    "type": "string"
+                },
+                "provider": {
                     "type": "string"
                 },
                 "range_end": {

@@ -12,6 +12,7 @@ import {
   upsertWorkspace,
   deleteWorkspace,
   getWorkspaceStatus,
+  resetWorkspace,
 } from "../api";
 
 // makeResponse builds a minimal fetch Response mock for readJSON (calls res.text()).
@@ -300,6 +301,33 @@ describe("getArtifacts", () => {
   });
 });
 
+// ---- resetWorkspace ----
+
+describe("resetWorkspace", () => {
+  it("returns WorkspaceStatus when response is 2xx", async () => {
+    const body = { workspace_count: 0, event_count: 0 };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    expect(await resetWorkspace("/proj")).toEqual(body);
+  });
+
+  it("sends POST /api/workspace/reset with path and name", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ workspace_count: 0, event_count: 0 }, true, 200));
+    await resetWorkspace("/my/project", " My Project ");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace/reset",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ path: "/my/project", name: "My Project" }),
+      }),
+    );
+  });
+
+  it("returns null when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    expect(await resetWorkspace("/proj")).toBeNull();
+  });
+});
+
 // ---- postChatQuery ----
 
 describe("postChatQuery", () => {
@@ -328,6 +356,25 @@ describe("postChatQuery", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspace_id: "ws1", message: "today jira tickets", limit: 20 }),
       }),
+    );
+  });
+
+  it("returns a structured API unreachable error when fetch fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await postChatQuery({ workspace_id: "ws1", message: "latest commit" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+      expect(result.body.message).toContain("Start the API");
+    }
+  });
+
+  it("preserves AbortError rejections", async () => {
+    const abortError = new DOMException("aborted", "AbortError");
+    fetchMock.mockRejectedValue(abortError);
+    await expect(postChatQuery({ workspace_id: "ws1", message: "status" })).rejects.toBe(
+      abortError,
     );
   });
 });

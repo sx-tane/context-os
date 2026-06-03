@@ -24,7 +24,6 @@
         postFindings,
         probeService,
     } from "$lib/api";
-    import type { DeleteWorkspaceResult } from "$lib/api";
     import {
         addMessage,
         chatMessages,
@@ -96,6 +95,7 @@
     const analysisSourceTimeoutMs = 90_000;
 
     let apiStatus: ServiceStatus = "checking";
+    let workerStatus: ServiceStatus = "checking";
     let codexLoggedIn = false;
     let codexInstalled = false;
     let codexAccount = "";
@@ -112,10 +112,12 @@
     let entityQuery = "";
     let lastChatResult: ChatQueryResult | null = null;
     let lastFindings: FindingsResult | null = null;
+    let lastAnalysisAt = "";
     let activityArtifacts: Artifact[] = [];
     let removeConfirmOpen = false;
     let workspacePendingRemoval = "";
     let removeInProgress = false;
+    let walkthroughOpen = false;
 
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
@@ -158,6 +160,7 @@
         workspaceStatus?.mismatch_count ?? lastFindings?.mismatch_count ?? 0;
     $: statusLine = buildStatusLine(
         apiStatus,
+        workerStatus,
         codexInstalled,
         codexLoggedIn,
         codexAccount,
@@ -182,14 +185,23 @@
     });
 
     async function refreshSystemStatus() {
-        apiStatus = await probeService(API_URL);
+        [apiStatus, workerStatus] = await Promise.all([
+            probeService(API_URL),
+            probeService("/worker"),
+        ]);
         await checkCodexStatus();
     }
 
     async function checkCodexStatus() {
         try {
             const res = await fetch(`${API_URL}/codex/status`);
-            if (!res.ok) return;
+            if (!res.ok) {
+                codexInstalled = false;
+                codexLoggedIn = false;
+                codexAccount = "";
+                codexPlugins = [];
+                return;
+            }
             const body = await res.json();
             codexInstalled = body?.installed === true;
             codexLoggedIn = body?.logged_in === true;
@@ -198,6 +210,8 @@
         } catch {
             codexInstalled = false;
             codexLoggedIn = false;
+            codexAccount = "";
+            codexPlugins = [];
         }
     }
 
@@ -207,6 +221,7 @@
             graphData = demoGraphData();
             activityArtifacts = demoArtifacts();
             lastFindings = demoFindings();
+            lastAnalysisAt = "2026-01-01T09:30:00.000Z";
             return;
         }
         await loadWorkspaceStatus(workspacePath);
@@ -223,6 +238,13 @@
         lastChatResult = null;
         lastFindings = null;
         await refreshWorkspace();
+    }
+
+    async function openDemoWorkspace() {
+        walkthroughOpen = false;
+        sourcePanelOpen = false;
+        activeInsightTab = "findings";
+        await switchWorkspace(DEMO_WORKSPACE_PATH);
     }
 
     async function createWorkspace() {
@@ -257,9 +279,16 @@
             return;
         }
         removeInProgress = true;
-        let deleted: DeleteWorkspaceResult = { ok: true, status: 200 };
         try {
-            deleted = await deleteWorkspace(path);
+            const deleted = await deleteWorkspace(path);
+            if (!deleted.ok) {
+                addMessage(
+                    assistantMsg(
+                        `Workspace remove failed: backend delete did not complete${deleted.message ? `: ${deleted.message}` : "."}`,
+                    ),
+                );
+                return;
+            }
             removeWorkspace(path);
             workspacePath = getProject().workspacePath;
             newWorkspacePath = "";
@@ -274,13 +303,6 @@
             await refreshWorkspace();
         } finally {
             removeInProgress = false;
-        }
-        if (!deleted.ok) {
-            addMessage(
-                assistantMsg(
-                    `Workspace removed locally, but backend delete did not complete${deleted.message ? `: ${deleted.message}` : "."}`,
-                ),
-            );
         }
     }
 
@@ -369,10 +391,24 @@
     }
 
     async function runLocalQuery(text: string) {
-        const load = loadingMsg("Searching local source data...");
+        const load = loadingMsg("Checking connected source context...");
         addMessage(load);
         busy = true;
         try {
+            if (workspacePath === DEMO_WORKSPACE_PATH) {
+                const result = demoChatQueryResult(text);
+                lastChatResult = result;
+                activityArtifacts = result.artifacts;
+                replaceMessage(
+                    load.id,
+                    assistantMsg(result.answer, {
+                        kind: "query",
+                        chatResult: result,
+                    }),
+                );
+                return;
+            }
+
             const res = await postChatQuery({
                 workspace_id: workspacePath,
                 message: text,
@@ -394,13 +430,13 @@
             replaceMessage(
                 load.id,
                 assistantMsg(
-                    `Local query failed: ${res.body.message ?? res.body.error ?? "unknown error"}`,
+                    `Source query failed: ${res.body.message ?? res.body.error ?? "unknown error"}`,
                 ),
             );
         } catch (error) {
             replaceMessage(
                 load.id,
-                assistantMsg(`Local query failed: ${String(error)}`),
+                assistantMsg(`Source query failed: ${String(error)}`),
             );
         } finally {
             busy = false;
@@ -412,9 +448,10 @@
         if (workspacePath === DEMO_WORKSPACE_PATH) {
             const findings = demoFindings();
             lastFindings = findings;
+            lastAnalysisAt = new Date().toISOString();
             addMessage(
                 assistantMsg(
-                    "Demo analysis complete for 3 selected sources. Found 2 findings.",
+                    "Demo analysis complete for 3 selected sources. Found 2 findings.\n演示分析已完成，覆盖 3 个来源，发现 2 个问题。",
                     {
                         kind: "findings",
                         findingsResult: findings,
@@ -526,6 +563,7 @@
 
             const aggregated = aggregateFindings(completed);
             lastFindings = aggregated;
+            lastAnalysisAt = new Date().toISOString();
             const summary = buildFindingsRunSummary({
                 sourceCount: ready.length,
                 completedCount: completed.length,
@@ -582,17 +620,44 @@
         }
     }
 
+    function openGuideTarget(target: "sources" | "findings" | "graph" | "activity" | "agent") {
+        if (target === "sources") {
+            sourcePanelOpen = true;
+            walkthroughOpen = false;
+            return;
+        }
+        if (target === "agent") {
+            sourcePanelOpen = false;
+            walkthroughOpen = false;
+            return;
+        }
+        switchInsightTab(target);
+        walkthroughOpen = false;
+    }
+
     function buildStatusLine(
         currentApiStatus: ServiceStatus,
+        currentWorkerStatus: ServiceStatus,
         currentCodexInstalled: boolean,
         currentCodexLoggedIn: boolean,
         currentCodexAccount: string,
     ) {
-        if (currentApiStatus === "checking") return "Checking API";
-        if (currentApiStatus !== "ok") return "API offline";
-        if (!currentCodexInstalled) return "Codex CLI not installed";
-        if (!currentCodexLoggedIn) return "Codex CLI not logged in";
-        return `Codex connected${currentCodexAccount ? ` as ${normalizeCodexAccount(currentCodexAccount)}` : ""}`;
+        const api = serviceStatusText("API", currentApiStatus);
+        const worker = serviceStatusText("Worker", currentWorkerStatus);
+        const codex = currentApiStatus === "ok"
+            ? !currentCodexInstalled
+                ? "Codex CLI not installed"
+                : !currentCodexLoggedIn
+                    ? "Codex CLI not logged in"
+                    : `Codex connected${currentCodexAccount ? ` as ${normalizeCodexAccount(currentCodexAccount)}` : ""}`
+            : "Codex unavailable";
+        return `${api} | ${worker} | ${codex}`;
+    }
+
+    function serviceStatusText(label: string, status: ServiceStatus) {
+        if (status === "checking") return `${label}: checking`;
+        if (status === "ok") return `${label}: online`;
+        return `${label}: offline`;
     }
 
     function buildGraphLinks(entities: GraphEntity[], relationships: GraphRelationship[]) {
@@ -886,12 +951,70 @@
 
     function formatTime(value?: string) {
         if (!value) return "never";
-        return new Intl.DateTimeFormat("en", {
+        return new Intl.DateTimeFormat(undefined, {
             month: "short",
             day: "2-digit",
+            year: "numeric",
             hour: "2-digit",
             minute: "2-digit",
+            timeZoneName: "short",
         }).format(new Date(value));
+    }
+
+    function findingDetectedTime() {
+        return formatTime(lastAnalysisAt || new Date().toISOString());
+    }
+
+    function findingEvidenceTime() {
+        const latest = recentArtifacts
+            .map((artifact) => artifact.ingested_at)
+            .filter(Boolean)
+            .sort()
+            .at(-1);
+        return formatTime(latest || lastAnalysisAt || new Date().toISOString());
+    }
+
+    function severityLabel(value?: string) {
+        const normalized = (value ?? "review").toLowerCase();
+        if (normalized === "high") return "HIGH";
+        if (normalized === "medium") return "MEDIUM";
+        if (normalized === "low") return "LOW";
+        return "REVIEW";
+    }
+
+    function relationshipLabel(value: string) {
+        const normalized = value.replaceAll("_", " ");
+        const zh: Record<string, string> = {
+            requires: "需要",
+            "depends on": "依赖",
+            "expects contract": "期望契约",
+            "implemented by": "由其实现",
+            validates: "验证",
+            tracks: "跟踪",
+            owns: "负责",
+            related: "相关",
+        };
+        return `${normalized} / ${zh[normalized] ?? "关系"}`;
+    }
+
+    function findingSummary(mismatch: unknown) {
+        const record = mismatch as Record<string, unknown>;
+        return String(record.summary ?? record.mismatch_type ?? record.id ?? "Finding");
+    }
+
+    function findingDescription(mismatch: unknown) {
+        const record = mismatch as Record<string, unknown>;
+        return String(record.description ?? record.recommended_action ?? "Review this item against source evidence.");
+    }
+
+    function findingRecommendedAction(mismatch: unknown) {
+        const record = mismatch as Record<string, unknown>;
+        return String(record.recommended_action ?? "");
+    }
+
+    function findingImpact(mismatch: unknown) {
+        const record = mismatch as Record<string, unknown>;
+        return String(record.impact ?? "");
     }
 
     function localDateString(date: Date) {
@@ -1080,11 +1203,45 @@
 
     function demoArtifacts(): Artifact[] {
         return [
-            demoArtifact("demo-artifact-1", "jira", "DEMO-42", "Refund status acceptance criteria", "PMO asks for refund status in checkout before launch review.", "2026-01-01T09:25:00.000Z"),
-            demoArtifact("demo-artifact-2", "github", "context-os/demo-api#18", "Payments API ownership question", "Backend PR covers API plumbing but does not assign a service owner.", "2026-01-01T09:15:00.000Z"),
-            demoArtifact("demo-artifact-3", "slack", "#launch-review", "Launch review decision thread", "Team agrees the UI is ready but backend ownership is still unresolved.", "2026-01-01T09:20:00.000Z"),
-            demoArtifact("demo-artifact-4", "github", "context-os/demo-api#21", "refundStatus naming drift", "Frontend uses refundStatus while service notes mention refund_state.", "2026-01-01T09:10:00.000Z"),
+            demoArtifact("demo-artifact-1", "jira", "DEMO-42", "Refund status acceptance criteria / 退款状态验收标准", "PMO asks for refund status in checkout before launch review. / PMO 要求在发布评审前，结账页必须显示退款状态。", "2026-01-01T09:25:00.000Z"),
+            demoArtifact("demo-artifact-2", "github", "context-os/demo-api#18", "Payments API ownership question / 支付 API 负责人问题", "Backend PR covers API plumbing but does not assign a service owner. / 后端 PR 覆盖了 API 管道，但还没有指定服务负责人。", "2026-01-01T09:15:00.000Z"),
+            demoArtifact("demo-artifact-3", "slack", "#launch-review", "Launch review decision thread / 发布评审决策线程", "Team agrees the UI is ready but backend ownership is still unresolved. / 团队认为 UI 已就绪，但后端归属仍未解决。", "2026-01-01T09:20:00.000Z"),
+            demoArtifact("demo-artifact-4", "github", "context-os/demo-api#21", "refundStatus naming drift / refundStatus 命名漂移", "Frontend uses refundStatus while service notes mention refund_state. / 前端使用 refundStatus，但服务说明仍提到 refund_state。", "2026-01-01T09:10:00.000Z"),
         ];
+    }
+
+    function demoChatQueryResult(text: string): ChatQueryResult {
+        const lower = text.toLowerCase();
+        const artifacts = demoArtifacts();
+        let answer = "Demo workspace is working locally. It has Jira, GitHub, and Slack evidence saved for the same workspace, so you can inspect findings, graph, and recent activity without connecting real sources.";
+        let summary = "Demo workspace status";
+        let intent = "status";
+
+        if (lower.includes("finding") || lower.includes("mismatch") || lower.includes("refund")) {
+            intent = "findings";
+            summary = "Demo refund status delivery risk";
+            answer = "Jira says refund status must ship this sprint, GitHub currently covers the UI state, and Slack still has an unresolved backend ownership question. ContextOS flags that as a high-confidence requirement gap, with a second medium finding for refundStatus/refund_state contract drift.";
+        } else if (lower.includes("graph") || lower.includes("entity") || lower.includes("relationship")) {
+            intent = "artifacts";
+            summary = "Demo graph evidence";
+            answer = "The demo graph links Checkout, Refund Status, Payments API, Checkout UI, QA Release Plan, Launch Review, Service Owner, and the refundStatus contract. The weakest link is service ownership, which is why the finding appears.";
+        } else if (lower.includes("source") || lower.includes("connected") || lower.includes("ingest")) {
+            intent = "status";
+            summary = "Demo source status";
+            answer = "This demo workspace has 3 ready sources: Jira DEMO, GitHub context-os/demo-api, and Slack #launch-review. They are frontend demo records, so querying the demo does not call the backend workspace API.";
+        }
+
+        return {
+            intent,
+            workspace_id: DEMO_WORKSPACE_PATH,
+            workspace_path: DEMO_WORKSPACE_PATH,
+            provider: "local",
+            answer,
+            summary,
+            artifact_count: artifacts.length,
+            artifacts,
+            syncs: demoWorkspaceStatus().syncs,
+        };
     }
 
     function demoArtifact(id: string, connector: string, sourceURI: string, title: string, body: string, ingestedAt: string): Artifact {
@@ -1135,7 +1292,33 @@
         </div>
         <div class="top-status">
             <button on:click={() => (sourcePanelOpen = true)}>Sources</button>
-            <strong>{apiStatus === "ok" ? "Ready" : "Offline"}</strong>
+            <span
+                class="status-chip"
+                class:status-ok={apiStatus === "ok"}
+                class:status-checking={apiStatus === "checking"}
+                class:status-offline={apiStatus === "unreachable"}
+                title="API status"
+            >
+                API {apiStatus === "ok" ? "Ready" : apiStatus === "checking" ? "Checking" : "Offline"}
+            </span>
+            <span
+                class="status-chip"
+                class:status-ok={workerStatus === "ok"}
+                class:status-checking={workerStatus === "checking"}
+                class:status-offline={workerStatus === "unreachable"}
+                title="AI worker status"
+            >
+                Worker {workerStatus === "ok" ? "Ready" : workerStatus === "checking" ? "Checking" : "Offline"}
+            </span>
+            <span
+                class="status-chip"
+                class:status-ok={apiStatus === "ok" && codexInstalled && codexLoggedIn}
+                class:status-checking={apiStatus === "checking"}
+                class:status-offline={apiStatus !== "ok" || !codexInstalled || !codexLoggedIn}
+                title="Codex status"
+            >
+                Codex {apiStatus !== "ok" ? "Unavailable" : !codexInstalled ? "Missing" : !codexLoggedIn ? "Login needed" : "Connected"}
+            </span>
         </div>
     </header>
 
@@ -1154,7 +1337,7 @@
                     {#if $chatMessages.length === 0}
                         <article class="message assistant">
                             <span>CONTEXT-OS</span>
-                            <p>{hasSources ? "Ask about Slack messages, GitHub PRs, Jira tickets, docs, findings, or recent activity." : "Connect GitHub repos, Slack channels, or docs first. After setup, chat will answer from those selected sources."}</p>
+                            <p>{hasSources ? "Ask about Slack messages, GitHub PRs, Jira tickets, docs, findings, or recent activity. / 可以询问 Slack 消息、GitHub PR、Jira 工单、文档、发现项或近期活动。" : "Connect GitHub repos, Slack channels, or docs first. / 请先连接 GitHub 仓库、Slack 频道或文档来源。"}</p>
                         </article>
                     {:else}
                         {#each $chatMessages as message (message.id)}
@@ -1220,8 +1403,17 @@
                                         <summary>{message.card.findingsResult.mismatch_count ?? message.card.findingsResult.mismatches.length} findings</summary>
                                         {#each message.card.findingsResult.mismatches.slice(0, 5) as mismatch}
                                             <div class="evidence-item">
-                                                <strong>{mismatch.severity ?? "review"}</strong>
-                                                <p>{mismatch.description ?? mismatch.mismatch_type ?? mismatch.id}</p>
+                                                <div class="finding-preview-head">
+                                                    <span>{severityLabel(mismatch.severity)}</span>
+                                                    <strong>{findingSummary(mismatch)}</strong>
+                                                </div>
+                                                <p>{findingDescription(mismatch)}</p>
+                                                {#if findingImpact(mismatch)}
+                                                    <p><b>Impact:</b> {findingImpact(mismatch)}</p>
+                                                {/if}
+                                                {#if findingRecommendedAction(mismatch)}
+                                                    <p><b>Recommended:</b> {findingRecommendedAction(mismatch)}</p>
+                                                {/if}
                                             </div>
                                         {/each}
                                     </details>
@@ -1268,18 +1460,6 @@
                         onClose={() => (sourcePanelOpen = false)}
                         on:done={handleKnowledgeDone}
                     />
-                    {#if !hasSources}
-                        <div class="sample-sources">
-                            <div class="sample-head">
-                                <strong>Checklist preview</strong>
-                                <span>Real repos and channels will load from connected accounts.</span>
-                            </div>
-                            <label><input type="checkbox" disabled /> GitHub / context-os</label>
-                            <label><input type="checkbox" disabled /> GitHub / docs-site</label>
-                            <label><input type="checkbox" disabled /> Slack / #engineering</label>
-                            <label><input type="checkbox" disabled /> Slack / #product</label>
-                        </div>
-                    {/if}
                 </section>
             {:else if hasSources}
                 <section class="source-summary">
@@ -1314,14 +1494,32 @@
                         {#if lastFindings?.mismatches?.length}
                             {#each lastFindings.mismatches.slice(0, 6) as mismatch}
                                 <article>
-                                    <span>{mismatch.severity ?? "review"}</span>
-                                    <strong>{mismatch.summary ?? mismatch.mismatch_type ?? mismatch.id ?? "Finding"}</strong>
-                                    <p>{mismatch.description ?? mismatch.recommended_action ?? "Review this item against source evidence."}</p>
+                                    <div class="finding-title-row">
+                                        <span>{severityLabel(mismatch.severity)}</span>
+                                        <strong>{findingSummary(mismatch)}</strong>
+                                    </div>
+                                    <div class="finding-time-row">
+                                        <small>Detected: {findingDetectedTime()}</small>
+                                        <small>Evidence: {findingEvidenceTime()}</small>
+                                    </div>
+                                    <div class="finding-copy">
+                                        <p>{findingDescription(mismatch)}</p>
+                                        {#if findingImpact(mismatch)}
+                                            <p><b>Impact:</b> {findingImpact(mismatch)}</p>
+                                        {/if}
+                                    </div>
+                                    {#if findingRecommendedAction(mismatch)}
+                                        <div class="finding-action">
+                                            <small>Recommended action</small>
+                                            <p>{findingRecommendedAction(mismatch)}</p>
+                                        </div>
+                                    {/if}
                                 </article>
                             {/each}
                         {:else if lastFindings}
                             <div class="empty-state">
                                 <strong>Analysis ran, no mismatch signals detected</strong>
+                                <p>Detected: {findingDetectedTime()}</p>
                                 <p>Sources: {lastFindings.uri ?? readySources.length}. Events: {lastFindings.event_count ?? workspaceStatus?.event_count ?? 0}. Entities: {lastFindings.entity_count ?? workspaceStatus?.entity_count ?? 0}.</p>
                             </div>
                         {:else}
@@ -1367,7 +1565,7 @@
                                                             on:click={() => (selectedEntity = entity)}
                                                         >
                                                             <span>{entity.name}</span>
-                                                            <small>{entity.degree} link{entity.degree === 1 ? "" : "s"}</small>
+                                                    <small>{entity.degree} link{entity.degree === 1 ? "" : "s"}</small>
                                                         </button>
                                                     {/each}
                                                 </div>
@@ -1402,7 +1600,7 @@
                                                         on:click={() => (selectedEntity = row.entity)}
                                                     >
                                                         <span>{row.entity.name}</span>
-                                                        <small>{row.link.label.replaceAll("_", " ")}</small>
+                                                        <small>{relationshipLabel(row.link.label)}</small>
                                                     </button>
                                                 {/each}
                                             </div>
@@ -1428,7 +1626,7 @@
                                                         on:click={() => (selectedEntity = row.entity)}
                                                     >
                                                         <span>{row.entity.name}</span>
-                                                        <small>{row.link.label.replaceAll("_", " ")}</small>
+                                                        <small>{relationshipLabel(row.link.label)}</small>
                                                     </button>
                                                 {/each}
                                             </div>
@@ -1472,7 +1670,7 @@
                                     <div class="node-links">
                                         {#each relationshipGroups as group (group.kind)}
                                             <section>
-                                                <h4>{group.kind.replaceAll("_", " ")}</h4>
+                                                <h4>{relationshipLabel(group.kind)}</h4>
                                                 {#if group.outgoing.length}
                                                     <small>Outgoing</small>
                                                     {#each group.outgoing as row}
@@ -1496,7 +1694,7 @@
                                     </div>
                                     <hr />
                                 {/if}
-                                <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis."}</p>
+                                <p>{selectedEntity.evidence?.[0] ?? "Evidence appears after source ingestion and analysis. / 证据会在来源摄取和分析后显示。"}</p>
                             {:else}
                                 <div>
                                     <span>Node Details</span>
@@ -1540,6 +1738,17 @@
         <span>{graphData?.entity_count ?? graphData?.count ?? 0} graph nodes | {graphData?.relationship_count ?? graphLinks.length} links | {mismatchCount} findings</span>
     </footer>
 
+    <button
+        class="guide-fab"
+        type="button"
+        aria-expanded={walkthroughOpen}
+        aria-label={walkthroughOpen ? "Close guide" : "Open guide"}
+        title={walkthroughOpen ? "Close guide" : "Open guide"}
+        on:click={() => (walkthroughOpen = !walkthroughOpen)}
+    >
+        <span aria-hidden="true">{walkthroughOpen ? "×" : "?"}</span>
+    </button>
+
     {#if removeConfirmOpen}
         <div class="modal-backdrop">
             <div
@@ -1561,6 +1770,45 @@
                         {removeInProgress ? "Deleting" : "Delete"}
                     </button>
                 </div>
+            </div>
+        </div>
+    {/if}
+
+    {#if walkthroughOpen}
+        <div
+            class="guide-popout"
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="walkthrough-title"
+            tabindex="-1"
+        >
+            <span>WALKTHROUGH</span>
+            <h2 id="walkthrough-title">Open a section</h2>
+            <div class="walkthrough-steps">
+                <button type="button" on:click={openDemoWorkspace}>
+                    <strong>Open Demo</strong>
+                    <p>Switch to seeded demo data.</p>
+                </button>
+                <button type="button" on:click={() => openGuideTarget("sources")}>
+                    <strong>Sources</strong>
+                    <p>Connect or select source data.</p>
+                </button>
+                <button type="button" on:click={() => openGuideTarget("findings")}>
+                    <strong>Findings</strong>
+                    <p>Read issues, dates, evidence, and actions.</p>
+                </button>
+                <button type="button" on:click={() => openGuideTarget("graph")}>
+                    <strong>Graph</strong>
+                    <p>Inspect entities and relationships.</p>
+                </button>
+                <button type="button" on:click={() => openGuideTarget("activity")}>
+                    <strong>Activity</strong>
+                    <p>Review source artifacts behind the workspace.</p>
+                </button>
+                <button type="button" on:click={() => openGuideTarget("agent")}>
+                    <strong>Report Agent</strong>
+                    <p>Return to chat and ask against local data.</p>
+                </button>
             </div>
         </div>
     {/if}
@@ -1599,7 +1847,7 @@
         height: 100dvh;
         overflow: hidden;
         display: grid;
-        grid-template-rows: 64px minmax(0, 1fr) 50px;
+        grid-template-rows: 64px minmax(0, 1fr) 64px;
         background: #ebe8e0;
     }
 
@@ -1619,7 +1867,6 @@
     .source-strip,
     .source-summary,
     .insight-head,
-    .sample-sources,
     .chat-head span,
     .message span,
     .console-strip {
@@ -1721,13 +1968,53 @@
         display: flex;
         align-items: center;
         justify-content: flex-end;
+        flex-wrap: wrap;
         gap: 8px;
         color: #8a8678;
         font-size: 12px;
     }
 
-    .top-status strong {
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 38px;
+        border-bottom: 1px solid #bdb7a8;
+        padding: 0 12px 2px;
+        white-space: nowrap;
+    }
+
+    .status-chip::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #8a8678;
+        flex: 0 0 auto;
+    }
+
+    .status-ok {
         color: #2d6a4f;
+    }
+
+    .status-ok::before {
+        background: #2d6a4f;
+    }
+
+    .status-checking {
+        color: #8a6a20;
+    }
+
+    .status-checking::before {
+        background: #8a6a20;
+    }
+
+    .status-offline {
+        color: #b5523a;
+    }
+
+    .status-offline::before {
+        background: #b5523a;
     }
 
     .main-grid {
@@ -1902,12 +2189,12 @@
 
     .entity-row:hover,
     .entity-row.selected {
-        border-left-color: var(--type-color);
-        background: rgba(255, 253, 247, 0.58);
+        border-left-color: transparent;
+        background: transparent;
     }
 
     .entity-row.linked:not(.selected) {
-        border-left-color: rgba(31, 95, 139, 0.38);
+        border-left-color: transparent;
     }
 
     .entity-row span {
@@ -2194,7 +2481,6 @@
     }
 
     .source-strip span,
-    .sample-head span,
     .findings-view span,
     .activity-view span,
     .activity-view small {
@@ -2262,28 +2548,6 @@
         min-width: 100%;
     }
 
-    .sample-sources {
-        display: grid;
-        gap: 8px;
-        margin-top: 10px;
-        border-top: 1px solid #d7d2c8;
-        padding: 12px 0 0;
-    }
-
-    .sample-head {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-    }
-
-    .sample-sources label {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        color: #535047;
-        font-size: 13px;
-    }
-
     .insight-card {
         min-height: 420px;
         flex: 1 0 420px;
@@ -2338,14 +2602,64 @@
     .activity-view article,
     .empty-state {
         border-bottom: 1px solid #d7d2c8;
-        padding: 12px 0;
+        padding: 14px 0;
+    }
+
+    .finding-title-row,
+    .finding-preview-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .finding-title-row span,
+    .finding-preview-head span {
+        flex: 0 0 auto;
+        color: #d85d3f;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+    }
+
+    .finding-title-row strong,
+    .finding-preview-head strong {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .finding-time-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        margin-top: 6px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(215, 210, 200, 0.62);
+    }
+
+    .finding-copy,
+    .finding-action {
+        margin-top: 10px;
+    }
+
+    .finding-action {
+        padding-left: 10px;
+        border-left: 2px solid #d7d2c8;
+    }
+
+    .finding-action small {
+        display: block;
+        margin-bottom: 2px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
     }
 
     .findings-view strong,
     .activity-view strong,
     .empty-state strong {
         display: block;
-        margin-top: 4px;
+        margin-top: 0;
     }
 
     .findings-view p,
@@ -2560,7 +2874,7 @@
         border: 0;
         border-bottom: 1px solid #bdb7a8;
         border-radius: 0;
-        background: #f8f6ef;
+        background: transparent;
         padding: 11px 12px;
         outline: none;
     }
@@ -2596,7 +2910,7 @@
         gap: 6px;
         background: #070707;
         color: #d7d2c8;
-        padding: 10px 12px;
+        padding: 14px 12px;
         font-size: 11px;
     }
 
@@ -2604,10 +2918,50 @@
         color: #f8f6ef;
     }
 
+    .guide-fab {
+        position: fixed;
+        right: 18px;
+        bottom: 82px;
+        z-index: 90;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-bottom: 1px solid #bdb7a8;
+        border-radius: 50%;
+        background-color: #ebe8e0;
+        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+        background-position: 100% 0;
+        background-size: 200% 100%;
+        color: #1c1b18;
+        font-weight: 700;
+        box-shadow: 0 10px 28px rgba(28, 27, 24, 0.14);
+        padding: 0;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s,
+            opacity 0.15s;
+    }
+
+    .guide-fab span {
+        display: block;
+        margin-top: 0;
+        font-size: 21px;
+        line-height: 1;
+    }
+
+    .guide-fab:hover {
+        border-bottom-color: #1c1b18;
+        background-position: 0 0;
+        color: #f8f6ef;
+    }
+
     .modal-backdrop {
         position: fixed;
         inset: 0;
-        z-index: 40;
+        z-index: 80;
         display: grid;
         place-items: center;
         background: rgba(28, 27, 24, 0.34);
@@ -2648,6 +3002,69 @@
     .confirm-modal p strong {
         color: #1c1b18;
         overflow-wrap: anywhere;
+    }
+
+    .guide-popout {
+        position: fixed;
+        right: 18px;
+        bottom: 138px;
+        z-index: 90;
+        width: min(360px, calc(100vw - 36px));
+        border: 1px solid #1c1b18;
+        background: #ebe8e0;
+        box-shadow: 0 18px 48px rgba(28, 27, 24, 0.22);
+        padding: 16px;
+    }
+
+    .guide-popout > span {
+        display: block;
+        margin-bottom: 8px;
+        color: #d85d3f;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+    }
+
+    .guide-popout h2 {
+        margin: 0 0 10px;
+        color: #1c1b18;
+        font-size: 16px;
+        line-height: 1.25;
+    }
+
+    .walkthrough-steps {
+        display: grid;
+        gap: 0;
+        margin-top: 8px;
+        border-top: 1px solid #d7d2c8;
+    }
+
+    .walkthrough-steps button {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid #d7d2c8;
+        border-radius: 0;
+        background: transparent;
+        padding: 10px 0;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .walkthrough-steps button:hover {
+        background: transparent;
+    }
+
+    .walkthrough-steps strong {
+        display: block;
+        color: #1c1b18;
+        font-size: 13px;
+    }
+
+    .walkthrough-steps p {
+        margin-top: 5px;
+        font-size: 12px;
+        line-height: 1.55;
     }
 
     .modal-actions {
