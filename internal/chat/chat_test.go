@@ -233,6 +233,56 @@ func TestQueryUsesLiveAnswererForJiraLinksWithoutLocalArtifacts(t *testing.T) {
 	}
 }
 
+// TestQueryUsesLiveAnswererForJiraIssueKeysWithoutLocalArtifacts verifies bare Jira issue keys route to live Codex without the word Jira.
+func TestQueryUsesLiveAnswererForJiraIssueKeysWithoutLocalArtifacts(t *testing.T) {
+	events := &fakeEventRepository{}
+	live := &fakeLiveAnswerer{answer: "BKGDEV-8466 is in implementation review."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, &fakeSyncRepository{}, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "BKGDEV-8466 check this",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if result.Connector != "jira" {
+		t.Fatalf("Connector = %q, want jira", result.Connector)
+	}
+	if live.query.SourceURI != "BKGDEV-8466" {
+		t.Fatalf("live SourceURI = %q, want BKGDEV-8466", live.query.SourceURI)
+	}
+}
+
+// TestQueryKeepsExplicitRouteFieldsAheadOfMessageInference verifies frontend route fields win over ambiguous prompt text.
+func TestQueryKeepsExplicitRouteFieldsAheadOfMessageInference(t *testing.T) {
+	events := &fakeEventRepository{}
+	live := &fakeLiveAnswerer{answer: "Explicit route answer."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, &fakeSyncRepository{}, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "BKGDEV-8466 check this github repo",
+		Connector:   "jira",
+		SourceURI:   "BKGDEV-8466",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if live.query.Connector != "jira" {
+		t.Fatalf("live Connector = %q, want jira", live.query.Connector)
+	}
+	if live.query.SourceURI != "BKGDEV-8466" {
+		t.Fatalf("live SourceURI = %q, want BKGDEV-8466", live.query.SourceURI)
+	}
+}
+
 // TestQueryUsesLiveAnswererForSavedSourceName verifies saved connector syncs resolve named sources before live lookup.
 func TestQueryUsesLiveAnswererForSavedSourceName(t *testing.T) {
 	events := &fakeEventRepository{}

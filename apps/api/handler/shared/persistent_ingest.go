@@ -159,6 +159,45 @@ func (s *PersistentIngestService) PersistEvents(
 	return s.complete(processCtx, workspace.ID, connectorName, req, traceID, capabilities, result), nil
 }
 
+// PersistEvidenceEvents stores already-answered live chat evidence as local
+// artifacts without running graph, identity, or findings derivation.
+func (s *PersistentIngestService) PersistEvidenceEvents(
+	ctx context.Context,
+	input SourceIngestInput,
+	capabilities []string,
+	rawEvents []events.Event,
+) (response.Ingest, error) {
+	processCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), PersistentIngestTimeout)
+	defer cancel()
+
+	connectorName := normalizedConnectorName(input.Connector, "")
+	req := contracts.SourceRequest{
+		URI:      strings.TrimSpace(input.URI),
+		Content:  input.Content,
+		Cursor:   strings.TrimSpace(input.Cursor),
+		Metadata: withProductConnector(input.Metadata, connectorName),
+	}
+	workspace, traceID, err := s.prepare(processCtx, input.WorkspaceID, connectorName, req.URI, req.Cursor)
+	if err != nil {
+		return response.Ingest{}, err
+	}
+	if len(rawEvents) == 0 {
+		err := fmt.Errorf("connector returned no events")
+		s.recordFailure(processCtx, workspace.ID, connectorName, req.URI, traceID, err)
+		return response.Ingest{}, err
+	}
+	if s.events != nil {
+		writeCtx, cancel := s.writeContext(processCtx)
+		_, err := s.events.UpsertBatch(writeCtx, workspace.ID, ingestEventsFromRaw(workspace.ID, connectorName, req.URI, rawEvents))
+		cancel()
+		if err != nil {
+			s.recordFailure(processCtx, workspace.ID, connectorName, req.URI, traceID, err)
+			return response.Ingest{}, err
+		}
+	}
+	return s.completeEvidence(processCtx, workspace.ID, connectorName, req, traceID, capabilities, rawEvents), nil
+}
+
 func withProductConnector(metadata map[string]string, connectorName string) map[string]string {
 	out := make(map[string]string, len(metadata)+1)
 	for key, value := range metadata {
@@ -299,6 +338,82 @@ func (s *PersistentIngestService) complete(ctx context.Context, workspaceID, con
 	ingest.RelationshipCount = len(result.Relationships)
 	ingest.MismatchCount = len(result.Mismatches)
 	return ingest
+}
+
+func (s *PersistentIngestService) completeEvidence(ctx context.Context, workspaceID, connectorName string, req contracts.SourceRequest, traceID string, capabilities []string, rawEvents []events.Event) response.Ingest {
+	persistedEventCount := len(rawEvents)
+	if s.events != nil {
+		writeCtx, cancel := s.writeContext(ctx)
+		if count, err := s.events.Count(writeCtx, workspaceID, connectorName); err == nil {
+			persistedEventCount = count
+		}
+		cancel()
+	}
+
+	now := time.Now().UTC()
+	if s.syncs != nil {
+		writeCtx, cancel := s.writeContext(ctx)
+		_ = s.syncs.Upsert(writeCtx, repository.ConnectorSync{
+			WorkspaceID:  workspaceID,
+			Connector:    connectorName,
+			SourceURI:    strings.TrimSpace(req.URI),
+			Cursor:       strings.TrimSpace(req.Cursor),
+			LastSyncedAt: &now,
+			EventCount:   persistedEventCount,
+			Status:       "idle",
+		})
+		cancel()
+	}
+
+	s.logAudit(ctx, repository.AuditEvent{
+		WorkspaceID: workspaceID,
+		EventType:   "ingest.completed",
+		Actor:       "api",
+		Connector:   connectorName,
+		SourceURI:   strings.TrimSpace(req.URI),
+		TraceID:     traceID,
+		Payload: map[string]string{
+			"event_count":           fmt.Sprintf("%d", len(rawEvents)),
+			"persisted_event_count": fmt.Sprintf("%d", persistedEventCount),
+			"evidence_kind":         "live_chat_answer",
+		},
+	})
+
+	ingest := NewIngestResponse(connectorName, capabilities, rawEvents)
+	ingest.PersistenceMode = "database"
+	ingest.WorkspaceID = workspaceID
+	ingest.PersistedEventCount = persistedEventCount
+	return ingest
+}
+
+func ingestEventsFromRaw(workspaceID, connectorName, sourceURI string, rawEvents []events.Event) []repository.IngestEvent {
+	ingestEvents := make([]repository.IngestEvent, 0, len(rawEvents))
+	for _, e := range rawEvents {
+		ie := repository.IngestEvent{
+			ID:            e.Metadata[events.MetadataEventID],
+			WorkspaceID:   workspaceID,
+			Connector:     connectorName,
+			SourceURI:     sourceURI,
+			EventType:     string(e.Type),
+			Title:         eventTitleFromRaw(e),
+			Body:          e.Content,
+			ContentHash:   e.Metadata["content_hash"],
+			Metadata:      e.Metadata,
+			SchemaVersion: e.SchemaVersion,
+		}
+		if ie.ID == "" {
+			ie.ID = e.ID
+		}
+		ingestEvents = append(ingestEvents, ie)
+	}
+	return ingestEvents
+}
+
+func eventTitleFromRaw(e events.Event) string {
+	if subject := strings.TrimSpace(e.Subject); subject != "" {
+		return subject
+	}
+	return Preview(e.Content)
 }
 
 func (s *PersistentIngestService) recordFailure(ctx context.Context, workspaceID, connectorName, sourceURI, traceID string, err error) {

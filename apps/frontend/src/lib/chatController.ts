@@ -1,7 +1,7 @@
 import { postChatQuery, streamChatQuery } from "$lib/api";
 import { demoChatQueryResult } from "$lib/demoWorkspace";
 import { DEMO_WORKSPACE_PATH } from "$lib/projectStore";
-import type { Artifact, ChatMessage, ChatQueryResult } from "$lib/types";
+import type { Artifact, ChatMessage, ChatQueryResult, ChatStreamState } from "$lib/types";
 
 export type ChatCommandAction =
   | "clear"
@@ -65,6 +65,17 @@ export function progressMsg(id: string, text: string): ChatMessage {
   };
 }
 
+export function streamMsg(id: string, stream: ChatStreamState, text = ""): ChatMessage {
+  return {
+    id,
+    role: "assistant",
+    text,
+    createdAt: now(),
+    loading: stream.status === "running",
+    stream,
+  };
+}
+
 export function classifyChatCommand(text: string): ChatCommandAction {
   const lower = text.toLowerCase();
   if (lower === "clear") return "clear";
@@ -98,10 +109,54 @@ export function buildChatLoadingText(text: string) {
   return `**Live Codex**\n1. ${connectorLabel} plugin lookup: ${source}\n2. Running through Codex CLI via /chat/query/stream.\n\n**Local DB**\n1. Fallback only if live lookup fails or has no answer.\n2. Uses persisted artifacts, graph, findings, and evidence history.`;
 }
 
+export function localDBStatusLine(result: ChatQueryResult | null | undefined) {
+  if (!result?.evidence_save_status) return "";
+  switch (result.evidence_save_status) {
+    case "saved":
+      return `Local DB: saved ${artifactCountLabel(result.evidence_event_count ?? 0)}`;
+    case "saving":
+      return "Local DB: saving source evidence...";
+    case "skipped":
+      return `Local DB: skipped ${skipReasonLabel(result)}`;
+    case "error":
+      return `Local DB: save failed${result.evidence_save_error ? `: ${result.evidence_save_error}` : ""}`;
+    default:
+      return `Local DB: ${result.evidence_save_status}`;
+  }
+}
+
+export function appendStreamLine(stream: ChatStreamState, line: string): ChatStreamState {
+  const clean = line.trim();
+  if (!clean) return stream;
+  return {
+    ...stream,
+    lines: [...stream.lines, clean],
+    latestLine: clean,
+    expanded: stream.expanded ?? false,
+  };
+}
+
+export function buildStreamSummary(result: ChatQueryResult | null | undefined) {
+  const summary = result?.summary?.trim();
+  if (summary) return summary;
+  return previewAnswer(result?.answer ?? "");
+}
+
+export function isNearBottom(
+  element: Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">,
+  threshold = 96,
+) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
+}
+
 export async function runChatQuery(options: ChatQueryOptions) {
-  const load = loadingMsg(buildChatLoadingText(options.text));
+  const loadText = buildChatLoadingText(options.text);
+  const route = inferLiveRoute(options.text);
+  const initialStream = initialStreamState(loadText);
+  const load = streamMsg(makeId(), initialStream);
   options.addMessage(load);
   options.setBusy(true);
+  let refreshedWorkspace = false;
   try {
     if (options.workspacePath === DEMO_WORKSPACE_PATH) {
       const result = demoChatQueryResult(options.text);
@@ -120,26 +175,36 @@ export async function runChatQuery(options: ChatQueryOptions) {
     const body = {
       workspace_id: options.workspacePath,
       message: options.text,
+      ...(route.connector ? { connector: route.connector } : {}),
+      ...(route.sourceURI ? { source_uri: route.sourceURI } : {}),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       local_date: localDateString(new Date()),
       limit: 20,
     };
     let streamedResult: ChatQueryResult | null = null;
+    let streamedAnswer: ChatQueryResult | null = null;
+    let streamedAnswerText = "";
     let streamStarted = false;
-    const transcript: string[] = [load.text];
+    let stream = initialStream;
     try {
       await streamChatQuery(body, {
         onLog: (line) => {
           streamStarted = true;
-          appendTranscriptLine(transcript, line);
-          options.replaceMessage(load.id, progressMsg(load.id, transcript.join("\n")));
+          stream = appendStreamLine(stream, line);
+          options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
         },
         onStatus: (elapsed) => {
           streamStarted = true;
           const statusLine = `• Codex still running... ${elapsed}s`;
-          const next = [...transcript.filter((line) => !line.startsWith("• Codex still running...")), statusLine];
-          transcript.splice(0, transcript.length, ...next);
-          options.replaceMessage(load.id, progressMsg(load.id, transcript.join("\n")));
+          stream = replaceStreamStatusLine(stream, statusLine);
+          options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
+        },
+        onAnswer: (result) => {
+          streamedAnswer = result;
+          streamedAnswerText = result.answer;
+          options.setLastChatResult(result);
+          stream = { ...stream, summary: buildStreamSummary(result) };
+          options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
         },
         onResult: (result) => {
           streamedResult = result;
@@ -149,37 +214,99 @@ export async function runChatQuery(options: ChatQueryOptions) {
         },
       });
     } catch (error) {
-      if (streamStarted) {
-        appendTranscriptLine(transcript, `• Live Codex lookup failed: ${errorMessage(error)}`);
-        options.replaceMessage(load.id, assistantMsg(transcript.join("\n")));
+      const answeredResult = streamedAnswer as ChatQueryResult | null;
+      if (answeredResult) {
+        const failedResult: ChatQueryResult = {
+          ...answeredResult,
+          evidence_save_status: "error",
+          evidence_save_error: errorMessage(error),
+        };
+        options.setLastChatResult(failedResult);
+        stream = appendStreamLine(stream, `• Local DB save failed: ${errorMessage(error)}`);
+        options.replaceMessage(
+          load.id,
+          {
+            ...assistantMsg(failedResult.answer, {
+              kind: "query",
+              chatResult: failedResult,
+            }),
+            id: load.id,
+            stream: {
+              ...stream,
+              status: "complete",
+              summary: finalStreamSummary(failedResult),
+              expanded: stream.expanded ?? false,
+            },
+          },
+        );
         return;
       }
-      appendTranscriptLine(transcript, `• Streaming unavailable: ${errorMessage(error)}`);
-      appendTranscriptLine(transcript, "• Falling back to standard chat query.");
-      options.replaceMessage(load.id, progressMsg(load.id, transcript.join("\n")));
+      if (streamStarted) {
+        stream = {
+          ...appendStreamLine(stream, `• Live Codex lookup failed: ${errorMessage(error)}`),
+          status: "error",
+          summary: buildStreamSummary(streamedAnswer) || "Live Codex lookup failed.",
+        };
+        options.replaceMessage(load.id, {
+          ...streamMsg(load.id, stream, streamedAnswerText),
+          loading: false,
+        });
+        return;
+      }
+      stream = appendStreamLine(stream, `• Streaming unavailable: ${errorMessage(error)}`);
+      stream = appendStreamLine(stream, "• Falling back to standard chat query.");
+      options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
     }
     const finalStreamedResult = streamedResult as ChatQueryResult | null;
     if (finalStreamedResult) {
       options.setLastChatResult(finalStreamedResult);
+      if (finalStreamedResult.artifacts?.length) {
+        options.setActivityArtifacts(finalStreamedResult.artifacts);
+      }
       options.replaceMessage(
         load.id,
-        assistantMsg(finalStreamedResult.answer, {
-          kind: "query",
-          chatResult: finalStreamedResult,
-        }),
+        {
+          ...assistantMsg(finalStreamedResult.answer, {
+            kind: "query",
+            chatResult: finalStreamedResult,
+          }),
+          id: load.id,
+          stream: {
+            ...stream,
+            status: "complete",
+            summary: finalStreamSummary(finalStreamedResult),
+            expanded: stream.expanded ?? false,
+          },
+        },
       );
+      if (finalStreamedResult.evidence_save_status === "saved") {
+        await options.refreshWorkspace();
+        refreshedWorkspace = true;
+      }
       return;
     }
 
     const res = await postChatQuery(body);
     if (res.ok) {
       options.setLastChatResult(res.body);
+      if (res.body.artifacts?.length) {
+        options.setActivityArtifacts(res.body.artifacts);
+      }
       options.replaceMessage(
         load.id,
-        assistantMsg(res.body.answer, {
-          kind: "query",
-          chatResult: res.body,
-        }),
+        {
+          ...assistantMsg(res.body.answer, {
+            kind: "query",
+            chatResult: res.body,
+          }),
+          id: load.id,
+          stream: {
+            ...stream,
+            status: "complete",
+            summary: finalStreamSummary(res.body),
+            expanded: stream.expanded ?? false,
+          },
+        },
       );
       return;
     }
@@ -196,14 +323,10 @@ export async function runChatQuery(options: ChatQueryOptions) {
     );
   } finally {
     options.setBusy(false);
-    await options.refreshWorkspace();
+    if (!refreshedWorkspace) {
+      await options.refreshWorkspace();
+    }
   }
-}
-
-function appendTranscriptLine(lines: string[], line: string) {
-  const clean = line.trim();
-  if (!clean) return;
-  lines.push(clean);
 }
 
 function errorMessage(error: unknown) {
@@ -215,6 +338,53 @@ export function localDateString(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function initialStreamState(text: string): ChatStreamState {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return {
+    lines,
+    latestLine: lines.at(-1) ?? "Starting source query.",
+    status: "running",
+    expanded: false,
+  };
+}
+
+function replaceStreamStatusLine(stream: ChatStreamState, line: string): ChatStreamState {
+  const lines = stream.lines.filter((item) => !item.startsWith("• Codex still running..."));
+  return {
+    ...stream,
+    lines: [...lines, line],
+    latestLine: line,
+    expanded: stream.expanded ?? false,
+  };
+}
+
+function previewAnswer(answer: string) {
+  const clean = answer.trim().replace(/\s+/g, " ");
+  if (!clean) return "";
+  return clean.length > 160 ? `${clean.slice(0, 157)}...` : clean;
+}
+
+function finalStreamSummary(result: ChatQueryResult) {
+  return localDBStatusLine(result) || buildStreamSummary(result);
+}
+
+function artifactCountLabel(count: number) {
+  return `${count} artifact${count === 1 ? "" : "s"}`;
+}
+
+function skipReasonLabel(result: ChatQueryResult) {
+  const connector = result.connector?.trim();
+  const sourceURI = result.source_uri?.trim();
+  if (connector && sourceURI && connector.toLowerCase() === sourceURI.toLowerCase()) {
+    return `broad ${connector} scope`;
+  }
+  if (result.provider !== "codex") return "local-only answer";
+  return "evidence save";
 }
 
 type PendingLiveRoute = {
@@ -229,6 +399,8 @@ function inferLiveRoute(text: string): PendingLiveRoute {
 }
 
 function inferSourceURI(text: string) {
+  const jiraKey = text.match(/\b[A-Z][A-Z0-9]+-\d+\b/);
+  if (jiraKey) return jiraKey[0];
   const match = text.match(/(#[A-Za-z0-9_.-]+|[a-z]+:\/\/[^\s,]+|https?:\/\/[^\s,]+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+)/i);
   return match?.[0]?.replace(/[.,;:"'()[\]{}]+$/g, "") ?? "";
 }
@@ -248,6 +420,7 @@ function inferConnector(text: string, sourceURI: string) {
     if (source.startsWith("#") || source.startsWith("slack://") || source.includes("slack.com")) return "slack";
     if (source.startsWith("github://") || source.includes("github.com") || source.includes("api.github.com")) return "github";
     if (/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(sourceURI)) return "github";
+    if (/^[A-Z][A-Z0-9]+-\d+$/.test(sourceURI)) return "jira";
     if (source.startsWith("jira://") || source.includes("atlassian.net") || source.includes("/browse/")) return "jira";
     if (source.startsWith("notion://") || source.includes("notion.so") || source.includes("notion.site")) return "notion";
     if (source.startsWith("googledrive://") || source.startsWith("gdrive://") || source.includes("drive.google.com") || source.includes("docs.google.com")) return "googledrive";

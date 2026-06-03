@@ -18,12 +18,19 @@ const chatRequestTimeout = 5 * time.Minute
 
 // Handler holds the service dependency for local chat handlers.
 type Handler struct {
-	service *internalchat.Service
+	service       *internalchat.Service
+	evidenceSaver EvidenceSaver
 }
 
 // NewHandler returns a Handler wired to the provided chat service.
 func NewHandler(service *internalchat.Service) *Handler {
-	return &Handler{service: service}
+	return &Handler{service: service, evidenceSaver: persistentEvidenceSaver{}}
+}
+
+// WithEvidenceSaver replaces the default live evidence persistence adapter.
+func (h *Handler) WithEvidenceSaver(saver EvidenceSaver) *Handler {
+	h.evidenceSaver = saver
+	return h
 }
 
 // Query handles POST /chat/query.
@@ -75,7 +82,9 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.WriteJSON(w, http.StatusOK, mapChatResult(result))
+	chatResult := mapChatResult(result)
+	chatResult = h.startAsyncEvidenceSave(ctx, chatResult)
+	response.WriteJSON(w, http.StatusOK, chatResult)
 }
 
 // StreamQuery handles POST /chat/query/stream.
@@ -146,7 +155,13 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 				writeStreamQueryError(sw, result.err)
 				return
 			}
-			sw.Result(mapChatResult(result.result))
+			chatResult := mapChatResult(result.result)
+			if shouldSaveEvidence(chatResult) {
+				chatResult.EvidenceSaveStatus = evidenceStatusSaving
+				sw.Event("answer", mustJSON(chatResult))
+				chatResult = h.saveEvidence(ctx, chatResult, sw.Log)
+			}
+			sw.Result(chatResult)
 			return
 		case <-ctx.Done():
 			sw.Error("query_timeout", ctx.Err().Error())
@@ -157,6 +172,51 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 			sw.Event("status", string(body))
 		}
 	}
+}
+
+func (h *Handler) startAsyncEvidenceSave(ctx context.Context, result response.ChatQuery) response.ChatQuery {
+	if !shouldSaveEvidence(result) {
+		return result
+	}
+	result.EvidenceSaveStatus = evidenceStatusSaving
+	go func() {
+		_ = h.saveEvidence(context.WithoutCancel(ctx), result, nil)
+	}()
+	return result
+}
+
+func (h *Handler) saveEvidence(ctx context.Context, result response.ChatQuery, progress func(string)) response.ChatQuery {
+	input, ok := evidenceSaveInput(result)
+	if !ok {
+		result.EvidenceSaveStatus = evidenceStatusSkipped
+		return result
+	}
+	if h.evidenceSaver == nil {
+		result.EvidenceSaveStatus = evidenceStatusSkipped
+		return result
+	}
+	saved, err := h.evidenceSaver.Save(ctx, input, progress)
+	if err != nil {
+		result.EvidenceSaveStatus = evidenceStatusError
+		result.EvidenceSaveError = err.Error()
+		if progress != nil {
+			progress("• Local DB evidence save failed: " + err.Error())
+		}
+		return result
+	}
+	result.EvidenceSaveStatus = evidenceStatusSaved
+	result.EvidenceEventCount = saved.EventCount
+	return result
+}
+
+func shouldSaveEvidence(result response.ChatQuery) bool {
+	_, ok := evidenceSaveInput(result)
+	return ok
+}
+
+func mustJSON(value any) string {
+	body, _ := json.Marshal(value)
+	return string(body)
 }
 
 func writeStreamQueryError(sw *shared.SSEWriter, err error) {
@@ -191,18 +251,19 @@ func mapChatResult(result internalchat.Result) response.ChatQuery {
 	}
 
 	return response.ChatQuery{
-		Intent:        result.Intent,
-		WorkspaceID:   result.WorkspaceID,
-		WorkspacePath: result.WorkspacePath,
-		Connector:     result.Connector,
-		SourceURI:     result.SourceURI,
-		Provider:      result.Provider,
-		Answer:        result.Answer,
-		Summary:       result.Summary,
-		RangeStart:    rangeStart,
-		RangeEnd:      rangeEnd,
-		ArtifactCount: len(result.Artifacts),
-		Artifacts:     response.NewArtifacts(result.Artifacts),
-		Syncs:         result.Syncs,
+		Intent:             result.Intent,
+		WorkspaceID:        result.WorkspaceID,
+		WorkspacePath:      result.WorkspacePath,
+		Connector:          result.Connector,
+		SourceURI:          result.SourceURI,
+		Provider:           result.Provider,
+		Answer:             result.Answer,
+		Summary:            result.Summary,
+		RangeStart:         rangeStart,
+		RangeEnd:           rangeEnd,
+		ArtifactCount:      len(result.Artifacts),
+		Artifacts:          response.NewArtifacts(result.Artifacts),
+		Syncs:              result.Syncs,
+		EvidenceSaveStatus: evidenceStatusSkipped,
 	}
 }

@@ -33,6 +33,7 @@ var (
 	sourcePattern      = regexp.MustCompile(`(?i)(#[A-Za-z0-9_.-]+|[a-z]+://[^\s,]+|https?://[^\s,]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)`)
 	sourceTokenPattern = regexp.MustCompile(`[^a-z0-9_.-]+`)
 	githubRepoPattern  = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
+	jiraKeyPattern     = regexp.MustCompile(`\b[A-Z][A-Z0-9]+-\d+\b`)
 )
 
 // Query is one local chat request.
@@ -288,6 +289,9 @@ func classifyIntent(message, connector, sourceURI string) string {
 
 func inferConnector(message string) string {
 	lower := strings.ToLower(message)
+	if jiraKeyPattern.MatchString(message) {
+		return "jira"
+	}
 	checks := []struct {
 		name  string
 		terms []string
@@ -345,7 +349,13 @@ func normalizeConnector(connector string) string {
 
 func inferSourceURI(message string) string {
 	match := sourcePattern.FindString(message)
-	return strings.Trim(match, `.,;:"'()[]{} `)
+	if trimmed := strings.Trim(match, `.,;:"'()[]{} `); trimmed != "" {
+		return trimmed
+	}
+	if match := jiraKeyPattern.FindString(message); match != "" {
+		return match
+	}
+	return ""
 }
 
 func inferSearchText(message string) string {

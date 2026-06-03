@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { tick } from "svelte";
+    import { isNearBottom, localDBStatusLine } from "$lib/chatController";
     import type { ChatMessage, ChatQueryResult } from "$lib/types";
     import {
         artifactLink,
@@ -19,6 +21,31 @@
     export let onClear: () => void = () => {};
     export let onSubmit: () => void | Promise<void> = () => {};
 
+    let messagesEl: HTMLDivElement | null = null;
+    let composerForm: HTMLFormElement | null = null;
+    let stickToBottom = true;
+    let expandedStreams: Record<string, boolean> = {};
+    let lastMessageSignature = "";
+
+    $: messageSignature = messages
+        .map((message) => [
+            message.id,
+            message.text,
+            message.loading ? "loading" : "done",
+            message.stream?.status ?? "",
+            message.stream?.latestLine ?? "",
+            message.stream?.lines.length ?? 0,
+        ].join(":"))
+        .join("|");
+
+    $: if (messageSignature !== lastMessageSignature) {
+        lastMessageSignature = messageSignature;
+        const shouldScroll = stickToBottom;
+        void tick().then(() => {
+            if (shouldScroll) scrollMessagesToBottom();
+        });
+    }
+
     function queryProviderLabel(provider?: string) {
         return provider === "codex" ? "Live Codex" : "Local DB";
     }
@@ -29,6 +56,61 @@
         if (result.connector) parts.push(result.connector);
         if (result.source_uri) parts.push(result.source_uri);
         return parts.join(" · ");
+    }
+
+    function streamStatusLabel(message: ChatMessage) {
+        if (message.stream?.status === "complete") return "Complete";
+        if (message.stream?.status === "error") return "Error";
+        return "Running";
+    }
+
+    function streamExpanded(message: ChatMessage) {
+        return expandedStreams[message.id] ?? message.stream?.expanded ?? false;
+    }
+
+    function toggleStream(message: ChatMessage) {
+        expandedStreams = {
+            ...expandedStreams,
+            [message.id]: !streamExpanded(message),
+        };
+    }
+
+    function traceSummary(result: ChatQueryResult, message: ChatMessage) {
+        const pieces = [
+            `Provider: ${queryProviderLabel(result.provider)}`,
+        ];
+        if (result.connector) pieces.push(`Connector: ${result.connector}`);
+        if (result.source_uri) pieces.push(`Source: ${result.source_uri}`);
+        if (message.stream?.summary && message.stream.summary !== result.answer && message.stream.summary !== result.summary) {
+            pieces.push(`Stream: ${message.stream.summary}`);
+        }
+        pieces.push(`Artifacts: ${result.artifact_count ?? result.artifacts?.length ?? 0}`);
+        return pieces.join(" · ");
+    }
+
+    function sourceTraceLabel(result: ChatQueryResult) {
+        if (result.artifacts?.length) return "Source trace";
+        if (result.provider === "codex") return "Live source trace";
+        return "Source trace";
+    }
+
+    function handleMessagesScroll() {
+        if (!messagesEl) return;
+        stickToBottom = isNearBottom(messagesEl);
+    }
+
+    function scrollMessagesToBottom() {
+        if (!messagesEl) return;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        stickToBottom = true;
+    }
+
+    function handleComposerKeydown(event: KeyboardEvent) {
+        if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) {
+            return;
+        }
+        event.preventDefault();
+        composerForm?.requestSubmit();
     }
 </script>
 
@@ -41,7 +123,12 @@
         <button type="button" on:click={onClear}>Clear</button>
     </div>
 
-    <div class="messages" aria-live="polite">
+    <div
+        class="messages"
+        aria-live="polite"
+        bind:this={messagesEl}
+        on:scroll={handleMessagesScroll}
+    >
         {#if messages.length === 0}
             <article class="message assistant">
                 <span>CONTEXT-OS</span>
@@ -52,7 +139,7 @@
                 <article class="message" class:user={message.role === "user"}>
                     <span>{message.role === "user" ? "YOU" : "CONTEXT-OS"}</span>
                     <div class="message-body">
-                        {#each messageLines(message.loading ? message.text || "Working..." : message.text) as line}
+                        {#each messageLines(message.text || (message.loading && !message.stream ? "Working..." : "")) as line}
                             {#if line.kind === "blank"}
                                 <div class="message-gap"></div>
                             {:else if line.kind === "heading"}
@@ -66,6 +153,36 @@
                             {/if}
                         {/each}
                     </div>
+                    {#if message.stream}
+                        <section
+                            class="stream-panel"
+                            class:running={message.stream.status === "running"}
+                            class:error={message.stream.status === "error"}
+                            aria-label="Live stream progress"
+                        >
+                            <button
+                                type="button"
+                                class="stream-toggle"
+                                aria-expanded={streamExpanded(message)}
+                                on:click={() => toggleStream(message)}
+                            >
+                                <span>{streamStatusLabel(message)}</span>
+                                <strong>{streamExpanded(message) ? "Hide stream" : "Show stream"}</strong>
+                            </button>
+                            {#if !streamExpanded(message)}
+                                <p class="stream-latest">{message.stream.latestLine}</p>
+                                {#if message.stream.summary}
+                                    <p class="stream-summary">{message.stream.summary}</p>
+                                {/if}
+                            {:else}
+                                <div class="stream-lines">
+                                    {#each message.stream.lines as line, index (`${message.id}-${index}`)}
+                                        <p>{line}</p>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </section>
+                    {/if}
                     {#if message.card?.kind === "query" && message.card.chatResult}
                         <div
                             class="query-meta"
@@ -75,6 +192,22 @@
                             {#if querySourceLabel(message.card.chatResult)}
                                 <small>{querySourceLabel(message.card.chatResult)}</small>
                             {/if}
+                        </div>
+                        {#if localDBStatusLine(message.card.chatResult)}
+                            <p
+                                class="local-db-status"
+                                class:saved={message.card.chatResult.evidence_save_status === "saved"}
+                                class:error={message.card.chatResult.evidence_save_status === "error"}
+                            >
+                                {localDBStatusLine(message.card.chatResult)}
+                            </p>
+                        {/if}
+                        <div
+                            class="source-trace"
+                            class:live={message.card.chatResult.provider === "codex" && !message.card.chatResult.artifacts?.length}
+                        >
+                            <strong>{sourceTraceLabel(message.card.chatResult)}</strong>
+                            <span>{traceSummary(message.card.chatResult, message)}</span>
                         </div>
                     {/if}
                     {#if message.card?.chatResult?.artifacts?.length}
@@ -124,19 +257,25 @@
         {/if}
     </div>
 
-    <form class="composer" on:submit|preventDefault={onSubmit}>
-        <input
+    <form
+        class="composer"
+        bind:this={composerForm}
+        on:submit|preventDefault={onSubmit}
+    >
+        <textarea
             bind:value={command}
             disabled={busy || !hasSources}
             placeholder={hasSources ? "Ask about PRs, Slack threads, findings, or recent activity..." : "Connect sources first..."}
-        />
+            rows="2"
+            on:keydown={handleComposerKeydown}
+        ></textarea>
         <button class="send-icon" aria-label="Send message" title="Send" disabled={busy || !hasSources || command.trim() === ""}>↑</button>
     </form>
 </section>
 
 <style>
     button,
-    input {
+    textarea {
         font: inherit;
     }
 
@@ -299,6 +438,77 @@
         padding-top: 10px;
     }
 
+    .stream-panel {
+        margin-top: 12px;
+        border-top: 1px solid #d7d2c8;
+        border-bottom: 1px solid #e4ded2;
+        padding: 8px 0 10px;
+        color: #625f55;
+        font-size: 12px;
+    }
+
+    .stream-panel.running .stream-toggle span {
+        color: #1f5f8b;
+    }
+
+    .stream-panel.error .stream-toggle span {
+        color: #b4422a;
+    }
+
+    .stream-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 0;
+        color: inherit;
+        text-align: left;
+    }
+
+    .stream-toggle span {
+        color: #8a6a20;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .stream-toggle strong {
+        flex: 0 0 auto;
+        border-bottom: 1px solid #bdb7a8;
+        color: #1c1b18;
+        font-size: 11px;
+    }
+
+    .stream-toggle:hover strong {
+        border-bottom-color: #1c1b18;
+    }
+
+    .stream-latest,
+    .stream-summary {
+        margin-top: 7px;
+        overflow-wrap: anywhere;
+    }
+
+    .stream-summary {
+        color: #1c1b18;
+        font-weight: 700;
+    }
+
+    .stream-lines {
+        display: grid;
+        gap: 5px;
+        margin-top: 8px;
+    }
+
+    .stream-lines p {
+        color: #625f55;
+        overflow-wrap: anywhere;
+    }
+
     .query-meta {
         display: flex;
         align-items: center;
@@ -325,6 +535,44 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .local-db-status {
+        margin-top: 7px;
+        color: #625f55;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .local-db-status.saved {
+        color: #27633a;
+    }
+
+    .local-db-status.error {
+        color: #b4422a;
+    }
+
+    .source-trace {
+        display: grid;
+        gap: 4px;
+        margin-top: 8px;
+        border-top: 1px solid #e4ded2;
+        padding-top: 8px;
+        color: #625f55;
+        font-size: 11px;
+    }
+
+    .source-trace strong {
+        color: #8a6a20;
+        text-transform: uppercase;
+    }
+
+    .source-trace.live strong {
+        color: #1f5f8b;
+    }
+
+    .source-trace span {
+        overflow-wrap: anywhere;
     }
 
     summary {
@@ -411,17 +659,28 @@
         border-top: 1px solid #d7d2c8;
     }
 
-    .composer input {
+    .composer textarea {
+        resize: none;
         min-width: 0;
+        max-height: 132px;
         border: 0;
         border-bottom: 1px solid #bdb7a8;
         border-radius: 0;
         background: transparent;
         padding: 11px 12px;
         outline: none;
+        line-height: 1.45;
+        overflow: auto;
+        scrollbar-width: none;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
     }
 
-    .composer input:focus {
+    .composer textarea::-webkit-scrollbar {
+        display: none;
+    }
+
+    .composer textarea:focus {
         border-bottom-color: #1c1b18;
     }
 

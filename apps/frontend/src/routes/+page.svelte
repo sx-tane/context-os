@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import type {
         Artifact,
         ChatQueryResult,
@@ -82,6 +82,8 @@
     let paneSplit = 52;
     let mainGrid: HTMLElement | null = null;
     let resizingPanes = false;
+    let currentTime = new Date();
+    let clockTimer: ReturnType<typeof setInterval> | null = null;
 
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
@@ -98,14 +100,24 @@
         codexLoggedIn,
         codexAccount,
     );
-    $: codexLabel = codexLoggedIn ? normalizeCodexAccount(codexAccount) : "Codex not logged in";
+    $: codexLabel = codexLoggedIn
+        ? normalizeCodexAccount(codexAccount)
+        : "Codex not logged in";
     $: sourceSummary = `${readySources.length} source${readySources.length === 1 ? "" : "s"}`;
     $: topContext = `${$project.name} · ${sourceSummary}`;
     $: hasSources = readySources.length > 0;
-    $: recentArtifacts = activityArtifacts.length > 0 ? activityArtifacts : (lastChatResult?.artifacts ?? []);
-    $: protectedWorkspace = workspacePath === DEFAULT_WORKSPACE_PATH || workspacePath === DEMO_WORKSPACE_PATH;
+    $: recentArtifacts =
+        activityArtifacts.length > 0
+            ? activityArtifacts
+            : (lastChatResult?.artifacts ?? []);
+    $: protectedWorkspace =
+        workspacePath === DEFAULT_WORKSPACE_PATH ||
+        workspacePath === DEMO_WORKSPACE_PATH;
 
     onMount(async () => {
+        clockTimer = setInterval(() => {
+            currentTime = new Date();
+        }, 1000);
         const savedPath = localStorage.getItem("contextos_workspace_path");
         workspacePath = savedPath || getProject().workspacePath;
         openProject(workspacePath);
@@ -114,6 +126,10 @@
             hydrateWorkspaces(),
             refreshWorkspace(),
         ]);
+    });
+
+    onDestroy(() => {
+        if (clockTimer) clearInterval(clockTimer);
     });
 
     async function refreshSystemStatus() {
@@ -159,7 +175,10 @@
         await loadWorkspaceStatus(workspacePath);
         workspaceStatus = await getWorkspaceStatus(workspacePath);
         graphData = await getGraphData(workspacePath);
-        const artifacts = await getArtifacts({ workspace_id: workspacePath, limit: 12 });
+        const artifacts = await getArtifacts({
+            workspace_id: workspacePath,
+            limit: 12,
+        });
         activityArtifacts = artifacts?.artifacts ?? [];
     }
 
@@ -197,7 +216,9 @@
         updatePaneSplit(event.clientX);
         window.addEventListener("pointermove", handlePaneResize);
         window.addEventListener("pointerup", stopPaneResize, { once: true });
-        window.addEventListener("pointercancel", stopPaneResize, { once: true });
+        window.addEventListener("pointercancel", stopPaneResize, {
+            once: true,
+        });
     }
 
     function handlePaneResize(event: PointerEvent) {
@@ -279,12 +300,16 @@
             clearChat();
             lastChatResult = null;
             lastFindings = null;
-            addMessage(assistantMsg("Chat history cleared for this workspace."));
+            addMessage(
+                assistantMsg("Chat history cleared for this workspace."),
+            );
             return;
         }
         if (action === "openSources") {
             sourcePanelOpen = true;
-            addMessage(assistantMsg("Source setup is open in the workspace panel."));
+            addMessage(
+                assistantMsg("Source setup is open in the workspace panel."),
+            );
             return;
         }
         if (action === "runFindings") {
@@ -298,7 +323,8 @@
             replaceMessage,
             setBusy: (value) => (busy = value),
             setLastChatResult: (result) => (lastChatResult = result),
-            setActivityArtifacts: (artifacts) => (activityArtifacts = artifacts),
+            setActivityArtifacts: (artifacts) =>
+                (activityArtifacts = artifacts),
             refreshWorkspace,
         });
     }
@@ -306,7 +332,9 @@
     async function runFindings() {
         await runAnalysis({
             workspacePath,
-            readySources: getProject().connectors.filter((source) => source.status === "ready"),
+            readySources: getProject().connectors.filter(
+                (source) => source.status === "ready",
+            ),
             addMessage,
             replaceMessage,
             setBusy: (value) => (busy = value),
@@ -331,7 +359,9 @@
         }
     }
 
-    function openGuideTarget(target: "sources" | "findings" | "graph" | "activity" | "agent") {
+    function openGuideTarget(
+        target: "sources" | "findings" | "graph" | "activity" | "agent",
+    ) {
         if (target === "sources") {
             sourcePanelOpen = true;
             walkthroughOpen = false;
@@ -355,13 +385,14 @@
     ) {
         const api = serviceStatusText("API", currentApiStatus);
         const worker = serviceStatusText("Worker", currentWorkerStatus);
-        const codex = currentApiStatus === "ok"
-            ? !currentCodexInstalled
-                ? "Codex CLI not installed"
-                : !currentCodexLoggedIn
-                    ? "Codex CLI not logged in"
-                    : `Codex connected${currentCodexAccount ? ` as ${normalizeCodexAccount(currentCodexAccount)}` : ""}`
-            : "Codex unavailable";
+        const codex =
+            currentApiStatus === "ok"
+                ? !currentCodexInstalled
+                    ? "Codex CLI not installed"
+                    : !currentCodexLoggedIn
+                      ? "Codex CLI not logged in"
+                      : `Codex connected${currentCodexAccount ? ` as ${normalizeCodexAccount(currentCodexAccount)}` : ""}`
+                : "Codex unavailable";
         return `${api} | ${worker} | ${codex}`;
     }
 
@@ -375,11 +406,12 @@
         const clean = value
             .split("\n")
             .map((line) => line.trim())
-            .filter((line) => line && !line.toLowerCase().startsWith("warning:"))
+            .filter(
+                (line) => line && !line.toLowerCase().startsWith("warning:"),
+            )
             .slice(-1)[0];
         return clean || "Codex logged in";
     }
-
 </script>
 
 <svelte:head>
@@ -393,21 +425,36 @@
             <select
                 aria-label="Workspace"
                 bind:value={workspacePath}
-                on:change={(event) => switchWorkspace((event.currentTarget as HTMLSelectElement).value)}
+                on:change={(event) =>
+                    switchWorkspace(
+                        (event.currentTarget as HTMLSelectElement).value,
+                    )}
             >
                 {#each $workspaces as workspace (workspace.workspacePath)}
-                    <option value={workspace.workspacePath}>{workspace.name}</option>
+                    <option value={workspace.workspacePath}
+                        >{workspace.name}</option
+                    >
                 {/each}
             </select>
-            <form class="new-workspace" on:submit|preventDefault={createWorkspace}>
-                <input bind:value={newWorkspacePath} placeholder="New workspace path" />
-                <button type="submit" disabled={newWorkspacePath.trim() === ""}>New</button>
+            <form
+                class="new-workspace"
+                on:submit|preventDefault={createWorkspace}
+            >
+                <input
+                    bind:value={newWorkspacePath}
+                    placeholder="New workspace path"
+                />
+                <button type="submit" disabled={newWorkspacePath.trim() === ""}
+                    >New</button
+                >
                 <button
                     type="button"
                     on:click={requestRemoveActiveWorkspace}
                     disabled={busy || protectedWorkspace}
-                    title={protectedWorkspace ? "Default and demo workspaces cannot be removed" : "Remove workspace"}
-                >Remove</button>
+                    title={protectedWorkspace
+                        ? "Default and demo workspaces cannot be removed"
+                        : "Remove workspace"}>Remove</button
+                >
             </form>
         </div>
         <div class="top-status">
@@ -419,7 +466,11 @@
                 class:status-offline={apiStatus === "unreachable"}
                 title="API status"
             >
-                API {apiStatus === "ok" ? "Ready" : apiStatus === "checking" ? "Checking" : "Offline"}
+                API {apiStatus === "ok"
+                    ? "Ready"
+                    : apiStatus === "checking"
+                      ? "Checking"
+                      : "Offline"}
             </span>
             <span
                 class="status-chip"
@@ -428,16 +479,30 @@
                 class:status-offline={workerStatus === "unreachable"}
                 title="AI worker status"
             >
-                Worker {workerStatus === "ok" ? "Ready" : workerStatus === "checking" ? "Checking" : "Offline"}
+                Worker {workerStatus === "ok"
+                    ? "Ready"
+                    : workerStatus === "checking"
+                      ? "Checking"
+                      : "Offline"}
             </span>
             <span
                 class="status-chip"
-                class:status-ok={apiStatus === "ok" && codexInstalled && codexLoggedIn}
+                class:status-ok={apiStatus === "ok" &&
+                    codexInstalled &&
+                    codexLoggedIn}
                 class:status-checking={apiStatus === "checking"}
-                class:status-offline={apiStatus !== "ok" || !codexInstalled || !codexLoggedIn}
+                class:status-offline={apiStatus !== "ok" ||
+                    !codexInstalled ||
+                    !codexLoggedIn}
                 title="Codex status"
             >
-                Codex {apiStatus !== "ok" ? "Unavailable" : !codexInstalled ? "Missing" : !codexLoggedIn ? "Login needed" : "Connected"}
+                Codex {apiStatus !== "ok"
+                    ? "Unavailable"
+                    : !codexInstalled
+                      ? "Missing"
+                      : !codexLoggedIn
+                        ? "Login needed"
+                        : "Connected"}
             </span>
         </div>
     </header>
@@ -482,11 +547,31 @@
             <section class="insight-card">
                 <div class="insight-head">
                     <nav aria-label="Insight tabs">
-                        <button type="button" class:active={activeInsightTab === "findings"} on:click={() => switchInsightTab("findings")}>Findings</button>
-                        <button type="button" class:active={activeInsightTab === "graph"} on:click={() => switchInsightTab("graph")}>Graph</button>
-                        <button type="button" class:active={activeInsightTab === "activity"} on:click={() => switchInsightTab("activity")}>Activity</button>
+                        <button
+                            type="button"
+                            class:active={activeInsightTab === "findings"}
+                            on:click={() => switchInsightTab("findings")}
+                            >Findings</button
+                        >
+                        <button
+                            type="button"
+                            class:active={activeInsightTab === "graph"}
+                            on:click={() => switchInsightTab("graph")}
+                            >Graph</button
+                        >
+                        <button
+                            type="button"
+                            class:active={activeInsightTab === "activity"}
+                            on:click={() => switchInsightTab("activity")}
+                            >Activity</button
+                        >
                     </nav>
-                    <button type="button" on:click={runFindings} disabled={!hasSources || busy}>{busy ? "Running" : "Run Analysis"}</button>
+                    <button
+                        type="button"
+                        on:click={runFindings}
+                        disabled={!hasSources || busy}
+                        >{busy ? "Running" : "Run Analysis"}</button
+                    >
                 </div>
 
                 {#if activeInsightTab === "findings"}
@@ -499,11 +584,7 @@
                         {hasSources}
                     />
                 {:else if activeInsightTab === "graph"}
-                    <GraphView
-                        {graphData}
-                        bind:selectedEntity
-                        {hasSources}
-                    />
+                    <GraphView {graphData} bind:selectedEntity {hasSources} />
                 {:else}
                     <ActivityView {recentArtifacts} />
                 {/if}
@@ -513,8 +594,11 @@
 
     <footer class="console-strip">
         <strong>{topContext}</strong>
-        <span>{new Date().toLocaleTimeString()} | {statusLine}</span>
-        <span>{graphData?.entity_count ?? graphData?.count ?? 0} graph nodes | {graphData?.relationship_count ?? graphLinks.length} links | {mismatchCount} findings</span>
+        <span>{currentTime.toLocaleTimeString()} | {statusLine}</span>
+        <span
+            >{graphData?.entity_count ?? graphData?.count ?? 0} graph nodes | {graphData?.relationship_count ??
+                graphLinks.length} links | {mismatchCount} findings</span
+        >
     </footer>
 
     <button
@@ -557,11 +641,17 @@
                     <strong>Open Demo</strong>
                     <p>Switch to seeded demo data.</p>
                 </button>
-                <button type="button" on:click={() => openGuideTarget("sources")}>
+                <button
+                    type="button"
+                    on:click={() => openGuideTarget("sources")}
+                >
                     <strong>Sources</strong>
                     <p>Connect or select source data.</p>
                 </button>
-                <button type="button" on:click={() => openGuideTarget("findings")}>
+                <button
+                    type="button"
+                    on:click={() => openGuideTarget("findings")}
+                >
                     <strong>Findings</strong>
                     <p>Read issues, dates, evidence, and actions.</p>
                 </button>
@@ -569,7 +659,10 @@
                     <strong>Graph</strong>
                     <p>Inspect entities and relationships.</p>
                 </button>
-                <button type="button" on:click={() => openGuideTarget("activity")}>
+                <button
+                    type="button"
+                    on:click={() => openGuideTarget("activity")}
+                >
                     <strong>Activity</strong>
                     <p>Review source artifacts behind the workspace.</p>
                 </button>
@@ -644,7 +737,11 @@
         border-bottom: 1px solid #bdb7a8;
         border-radius: 0;
         background-color: transparent;
-        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+        background-image: linear-gradient(
+            90deg,
+            #1c1b18 0 50%,
+            transparent 50% 100%
+        );
         background-position: 100% 0;
         background-size: 200% 100%;
         color: #1c1b18;
@@ -779,7 +876,10 @@
         height: 100%;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(360px, var(--pane-split, 52%)) 9px minmax(360px, 1fr);
+        grid-template-columns: minmax(360px, var(--pane-split, 52%)) 9px minmax(
+                360px,
+                1fr
+            );
         border-bottom: 1px solid #d7d2c8;
     }
 
@@ -922,7 +1022,11 @@
         border-bottom: 1px solid #bdb7a8;
         border-radius: 50%;
         background-color: #ebe8e0;
-        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+        background-image: linear-gradient(
+            90deg,
+            #1c1b18 0 50%,
+            transparent 50% 100%
+        );
         background-position: 100% 0;
         background-size: 200% 100%;
         color: #1c1b18;
@@ -1042,6 +1146,5 @@
         .top-status {
             justify-content: flex-start;
         }
-
     }
 </style>

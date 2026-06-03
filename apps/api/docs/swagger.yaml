@@ -439,6 +439,18 @@ definitions:
         type: array
       connector:
         type: string
+      evidence_event_count:
+        description: EvidenceEventCount is the number of local events produced by
+          the evidence save.
+        type: integer
+      evidence_save_error:
+        description: EvidenceSaveError is set when evidence persistence failed without
+          discarding the live answer.
+        type: string
+      evidence_save_status:
+        description: EvidenceSaveStatus describes whether a live Codex answer also
+          persisted local evidence.
+        type: string
       intent:
         type: string
       provider:

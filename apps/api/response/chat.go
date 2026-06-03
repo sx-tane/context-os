@@ -17,4 +17,10 @@ type ChatQuery struct {
 	ArtifactCount int                        `json:"artifact_count"`
 	Artifacts     []Artifact                 `json:"artifacts"`
 	Syncs         []repository.ConnectorSync `json:"syncs,omitempty"`
+	// EvidenceSaveStatus describes whether a live Codex answer also persisted local evidence.
+	EvidenceSaveStatus string `json:"evidence_save_status,omitempty"`
+	// EvidenceEventCount is the number of local events produced by the evidence save.
+	EvidenceEventCount int `json:"evidence_event_count,omitempty"`
+	// EvidenceSaveError is set when evidence persistence failed without discarding the live answer.
+	EvidenceSaveError string `json:"evidence_save_error,omitempty"`
 }

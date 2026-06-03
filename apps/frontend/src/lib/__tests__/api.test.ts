@@ -489,11 +489,13 @@ describe("streamChatQuery", () => {
         "event: log\ndata: › Live Codex: GitHub plugin lookup\n\n",
         "event: log\ndata: • Starting Codex CLI exec.\n\n",
         "event: status\ndata: {\"elapsed\":2,\"status\":\"running\"}\n\n",
+        `event: answer\ndata: ${JSON.stringify({ ...result, evidence_save_status: "saving" })}\n\n`,
         `event: result\ndata: ${JSON.stringify(result)}\n\n`,
       ]),
     );
     const logs: string[] = [];
     const statuses: number[] = [];
+    const answers: unknown[] = [];
     const results: unknown[] = [];
 
     await streamChatQuery(
@@ -501,6 +503,7 @@ describe("streamChatQuery", () => {
       {
         onLog: (line) => logs.push(line),
         onStatus: (elapsed) => statuses.push(elapsed),
+        onAnswer: (body) => answers.push(body),
         onResult: (body) => results.push(body),
       },
     );
@@ -521,6 +524,7 @@ describe("streamChatQuery", () => {
       "• Starting Codex CLI exec.",
     ]);
     expect(statuses).toEqual([2]);
+    expect(answers).toEqual([{ ...result, evidence_save_status: "saving" }]);
     expect(results).toEqual([result]);
   });
 });

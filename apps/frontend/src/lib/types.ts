@@ -300,6 +300,9 @@ export interface ChatQueryResult {
   artifact_count: number;
   artifacts: Artifact[];
   syncs?: WorkspaceSyncState[];
+  evidence_save_status?: "skipped" | "saving" | "saved" | "error" | string;
+  evidence_event_count?: number;
+  evidence_save_error?: string;
 }
 
 // ---- Graph types ----
@@ -358,6 +361,16 @@ export interface ChatCard {
   onboardingConnectors?: ConnectorKnowledge[];
 }
 
+export type ChatStreamStatus = "running" | "complete" | "error";
+
+export interface ChatStreamState {
+  lines: string[];
+  latestLine: string;
+  status: ChatStreamStatus;
+  summary?: string;
+  expanded?: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -365,4 +378,5 @@ export interface ChatMessage {
   createdAt: string;
   card?: ChatCard;
   loading?: boolean;
+  stream?: ChatStreamState;
 }

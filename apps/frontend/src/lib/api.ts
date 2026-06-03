@@ -30,6 +30,7 @@ interface StreamHandlers {
 interface ChatStreamHandlers {
   onLog?: (line: string) => void;
   onStatus?: (elapsed: number) => void;
+  onAnswer?: (result: ChatQueryResult) => void;
   onResult?: (result: ChatQueryResult) => void;
   onError?: (message: string) => void;
 }
@@ -579,6 +580,9 @@ export async function streamChatQuery(
     } else if (message.event === "status") {
       const status = parseJSON<{ elapsed?: number }>(message.data);
       if (status?.elapsed !== undefined) handlers.onStatus?.(status.elapsed);
+    } else if (message.event === "answer") {
+      const result = parseJSON<ChatQueryResult>(message.data);
+      if (result) handlers.onAnswer?.(result);
     } else if (message.event === "result") {
       const result = parseJSON<ChatQueryResult>(message.data);
       if (result) handlers.onResult?.(result);
