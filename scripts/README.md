@@ -97,9 +97,7 @@ Generated docs under `apps/api/docs/` are committed OpenAPI artifacts and the so
 
 ## start-infra.sh
 
-Starts local infrastructure only (Postgres + pgvector and NATS) using Docker Compose.
-
-Requires either the Docker Compose plugin (`docker compose`) or `docker-compose` in `PATH`.
+Starts local infrastructure only (Postgres + pgvector and NATS). Uses Docker Compose when available and falls back to plain `docker run` containers otherwise.
 
 ```bash
 chmod +x scripts/start-infra.sh

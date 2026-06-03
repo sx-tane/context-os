@@ -38,7 +38,11 @@ append_if_missing() {
 install_base_packages() {
   info "Installing base utilities"
   sudo apt update
-  sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs
+  if dpkg -s libnode-dev >/dev/null 2>&1; then
+    info "Removing conflicting Ubuntu node development headers"
+    sudo apt remove -y libnode-dev
+  fi
+  sudo apt install -y curl wget tar xz-utils unzip git build-essential ca-certificates nodejs
 }
 
 install_go() {

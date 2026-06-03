@@ -108,10 +108,12 @@ for skill_file in "$skills_dir"/*/SKILL.md; do
     score=$((score + 5))
   fi
 
-  if [[ -f "$github_readme" ]] && grep -q "\`$skill_name\`" "$github_readme"; then
-    score=$((score + 10))
-  else
-    findings+=("missing-github-readme-map")
+  if [[ -f "$github_readme" ]]; then
+    if grep -q "\`$skill_name\`" "$github_readme"; then
+      score=$((score + 10))
+    else
+      findings+=("missing-github-readme-map")
+    fi
   fi
 
   if grep -q 'README' "$skill_file"; then

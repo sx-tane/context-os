@@ -7,7 +7,7 @@ Alternatively, run `./scripts/setup-local.sh` which performs all steps below aut
 
 ```bash
 sudo apt update
-sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs
+sudo apt install -y curl wget tar xz-utils unzip git build-essential ca-certificates nodejs
 ```
 
 ## 2) Install Go 1.24.13
