@@ -8,6 +8,7 @@ import {
   getCodexSources,
   getWorkspaces,
   getArtifacts,
+  cleanupLiveEvidence,
   postChatQuery,
   getGraphData,
   upsertWorkspace,
@@ -374,6 +375,41 @@ describe("getArtifacts", () => {
   it("returns null when response is non-2xx", async () => {
     fetchMock.mockResolvedValue({ ok: false } as Response);
     expect(await getArtifacts({ workspace_id: "ws1" })).toBeNull();
+  });
+});
+
+// ---- cleanupLiveEvidence ----
+
+describe("cleanupLiveEvidence", () => {
+  it("posts to the cleanup endpoint and returns the cleanup result", async () => {
+    const body = {
+      workspace_id: "ws1",
+      workspace_path: "/workspace",
+      matched_count: 2,
+      deleted_count: 2,
+      deleted_ids: ["a", "b"],
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+
+    const result = await cleanupLiveEvidence("/workspace");
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/artifacts/live-evidence/cleanup?workspace_id=%2Fworkspace",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns an API error body when cleanup fails", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ error: "store_error" }, false, 500));
+
+    const result = await cleanupLiveEvidence("ws1");
+
+    expect(result).toEqual({
+      ok: false,
+      status: 500,
+      body: { error: "store_error" },
+    });
   });
 });
 
