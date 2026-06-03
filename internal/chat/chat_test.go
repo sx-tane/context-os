@@ -248,3 +248,7 @@ func (u *unusedEntityRepository) UpsertRelationships(ctx context.Context, worksp
 func (u *unusedEntityRepository) ListEntities(ctx context.Context, workspaceID, entityType string) ([]entities.CanonicalEntity, error) {
 	return nil, nil
 }
+
+func (u *unusedEntityRepository) ListRelationships(ctx context.Context, workspaceID string, entityIDs []string) ([]types.Relationship, error) {
+	return nil, nil
+}

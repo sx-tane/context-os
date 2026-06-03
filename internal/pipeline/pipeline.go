@@ -132,7 +132,7 @@ func persistResult(ctx context.Context, stores *Stores, req contracts.SourceRequ
 			log.Printf("pipeline: persist events: %v", err)
 		} else {
 			cancel()
-			log.Printf("pipeline: persisted %d new events for workspace %s", n, stores.WorkspaceID)
+			log.Printf("pipeline: persisted %d event rows for workspace %s", n, stores.WorkspaceID)
 		}
 	}
 

@@ -111,38 +111,47 @@ func NewEventStore(db *sql.DB) *EventStore {
 	return &EventStore{db: db}
 }
 
-// UpsertBatch writes events, skipping any with a duplicate (id, workspace_id).
-// Returns the number of new rows inserted.
+// UpsertBatch writes events, updating any with a duplicate (id, workspace_id).
+// Returns the number of rows inserted or updated.
 func (s *EventStore) UpsertBatch(ctx context.Context, workspaceID string, evts []repository.IngestEvent) (int, error) {
 	if len(evts) == 0 {
 		return 0, nil
 	}
-	var inserted int
+	var written int
 	for _, e := range evts {
 		if e.IngestedAt.IsZero() {
 			e.IngestedAt = time.Now().UTC()
 		}
 		metaJSON, err := json.Marshal(e.Metadata)
 		if err != nil {
-			return inserted, fmt.Errorf("store: marshal metadata for event %s: %w", e.ID, err)
+			return written, fmt.Errorf("store: marshal metadata for event %s: %w", e.ID, err)
 		}
 		r, err := s.db.ExecContext(ctx, `
-			INSERT INTO ingest_events
-				(id, workspace_id, connector, source_uri, event_type, title, body,
-				 content_hash, metadata, schema_version, ingested_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-			ON CONFLICT (id, workspace_id) DO NOTHING
-		`,
+				INSERT INTO ingest_events
+					(id, workspace_id, connector, source_uri, event_type, title, body,
+					 content_hash, metadata, schema_version, ingested_at)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+				ON CONFLICT (id, workspace_id) DO UPDATE SET
+					connector      = EXCLUDED.connector,
+					source_uri     = EXCLUDED.source_uri,
+					event_type     = EXCLUDED.event_type,
+					title          = EXCLUDED.title,
+					body           = EXCLUDED.body,
+					content_hash   = EXCLUDED.content_hash,
+					metadata       = EXCLUDED.metadata,
+					schema_version = EXCLUDED.schema_version,
+					ingested_at    = EXCLUDED.ingested_at
+			`,
 			e.ID, workspaceID, e.Connector, e.SourceURI, e.EventType,
 			e.Title, e.Body, e.ContentHash, metaJSON, e.SchemaVersion, e.IngestedAt,
 		)
 		if err != nil {
-			return inserted, fmt.Errorf("store: upsert event %s: %w", e.ID, err)
+			return written, fmt.Errorf("store: upsert event %s: %w", e.ID, err)
 		}
 		n, _ := r.RowsAffected()
-		inserted += int(n)
+		written += int(n)
 	}
-	return inserted, nil
+	return written, nil
 }
 
 // ListByWorkspace returns events for a workspace ordered by ingested_at desc.
@@ -351,6 +360,46 @@ func (s *EntityStore) ListEntities(ctx context.Context, workspaceID, entityType 
 	return out, rows.Err()
 }
 
+// ListRelationships returns persisted relationships for a workspace.
+func (s *EntityStore) ListRelationships(ctx context.Context, workspaceID string, entityIDs []string) ([]types.Relationship, error) {
+	query := `SELECT id, from_id, to_id, kind, confidence, evidence, metadata
+	          FROM relationships WHERE workspace_id = $1`
+	args := []any{workspaceID}
+	ids := compactStrings(entityIDs)
+	if len(ids) > 0 {
+		args = append(args, aliasesToPGArray(ids))
+		query += fmt.Sprintf(" AND (from_id = ANY($%d::text[]) OR to_id = ANY($%d::text[]))", len(args), len(args))
+	}
+	query += " ORDER BY updated_at DESC"
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: list relationships: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []types.Relationship
+	for rows.Next() {
+		var rel types.Relationship
+		var evidenceRaw string
+		var metaJSON []byte
+		if err := rows.Scan(
+			&rel.ID, &rel.FromID, &rel.ToID, &rel.Kind,
+			&rel.Confidence, &evidenceRaw, &metaJSON,
+		); err != nil {
+			return nil, fmt.Errorf("store: scan relationship: %w", err)
+		}
+		rel.Evidence = parsePGArray(evidenceRaw)
+		if len(metaJSON) > 0 {
+			if err := json.Unmarshal(metaJSON, &rel.Metadata); err != nil {
+				return nil, fmt.Errorf("store: unmarshal relationship metadata: %w", err)
+			}
+		}
+		out = append(out, rel)
+	}
+	return out, rows.Err()
+}
+
 // CountRelationships returns the total relationship count for a workspace.
 func (s *EntityStore) CountRelationships(ctx context.Context, workspaceID string) (int, error) {
 	var n int
@@ -360,6 +409,23 @@ func (s *EntityStore) CountRelationships(ctx context.Context, workspaceID string
 		return 0, fmt.Errorf("store: count relationships: %w", err)
 	}
 	return n, nil
+}
+
+func compactStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 // ─── Mismatches ───────────────────────────────────────────────────────────────

@@ -297,14 +297,6 @@ export interface ChatQueryResult {
 
 // ---- Graph types ----
 
-export interface GraphEntityAlias {
-  name: string;
-  source_id: string;
-  source: string;
-  layer: string;
-  confidence: number;
-}
-
 export interface GraphEntityCandidate {
   alias: string;
   layer: string;
@@ -321,15 +313,28 @@ export interface GraphEntity {
   needs_human?: boolean;
   conflict_reason?: string;
   evidence?: string[];
-  aliases?: GraphEntityAlias[];
+  aliases?: string[];
   candidates?: GraphEntityCandidate[];
+}
+
+export interface GraphRelationship {
+  id: string;
+  from_id: string;
+  to_id: string;
+  kind: string;
+  confidence: number;
+  evidence?: string[];
+  metadata?: Record<string, string>;
 }
 
 export interface GraphData {
   workspace_id: string;
   entity_type?: string;
   count: number;
+  entity_count?: number;
+  relationship_count?: number;
   entities: GraphEntity[];
+  relationships?: GraphRelationship[];
 }
 
 // ---- Chat types ----

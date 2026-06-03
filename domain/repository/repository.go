@@ -105,8 +105,8 @@ type WorkspaceResetter interface {
 
 // EventRepository manages ingested source events.
 type EventRepository interface {
-	// UpsertBatch writes events, ignoring duplicates with the same (id, workspace_id).
-	// Returns the number of new events written.
+	// UpsertBatch writes events, updating duplicates with the same (id, workspace_id).
+	// Returns the number of rows inserted or updated.
 	UpsertBatch(ctx context.Context, workspaceID string, events []IngestEvent) (int, error)
 	// ListByWorkspace returns events for a workspace ordered by ingested_at desc.
 	// If connector is non-empty, results are filtered by connector.
@@ -127,6 +127,9 @@ type EntityRepository interface {
 	UpsertRelationships(ctx context.Context, workspaceID string, rels []types.Relationship) error
 	// ListEntities returns all entities for a workspace, optionally filtered by entityType.
 	ListEntities(ctx context.Context, workspaceID, entityType string) ([]entities.CanonicalEntity, error)
+	// ListRelationships returns all relationships for a workspace, optionally scoped
+	// to relationships touching one of the provided entity IDs.
+	ListRelationships(ctx context.Context, workspaceID string, entityIDs []string) ([]types.Relationship, error)
 }
 
 // RelationshipCounter reports relationship density for a workspace.

@@ -316,7 +316,14 @@ describe("postChatQuery", () => {
 
 describe("getGraphData", () => {
   it("returns GraphData when response is 2xx", async () => {
-    const body = { workspace_id: "ws1", count: 2, entities: [{ id: "e1", name: "Auth", type: "service", confidence: 0.9 }] };
+    const body = {
+      workspace_id: "ws1",
+      count: 2,
+      entity_count: 2,
+      relationship_count: 1,
+      entities: [{ id: "e1", name: "Auth", type: "service", confidence: 0.9 }],
+      relationships: [{ id: "r1", from_id: "e1", to_id: "e2", kind: "service_depends_on", confidence: 0.8 }],
+    };
     fetchMock.mockResolvedValue(makeResponse(body, true, 200));
     const result = await getGraphData("/workspace");
     expect(result).toEqual(body);
