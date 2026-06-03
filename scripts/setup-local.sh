@@ -38,7 +38,7 @@ append_if_missing() {
 install_base_packages() {
   info "Installing base utilities"
   sudo apt update
-  sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs npm
+  sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs
 }
 
 install_go() {
@@ -72,8 +72,8 @@ install_bun() {
 }
 
 install_python() {
-  info "Installing Python 3.12 and tooling"
-  sudo apt install -y python3.12 python3.12-venv python3-pip
+  info "Installing Python tooling"
+  sudo apt install -y python3-venv python3-pip
 }
 
 install_uv() {
@@ -97,7 +97,7 @@ is_headless() {
 install_codex() {
   info "Installing Codex CLI"
   if ! command -v npm >/dev/null 2>&1; then
-    echo "npm is required to install Codex CLI." >&2
+    echo "npm is required to install Codex CLI. Install nodejs (which provides npm on NodeSource) or add npm to PATH." >&2
     exit 1
   fi
 
@@ -135,9 +135,12 @@ verify_tools() {
   info "Verifying installed tool versions"
   go version
   bun --version
-  python3.12 --version
   uv --version
   codex --version
+  (
+    cd "$ROOT_DIR/apps/ai-worker"
+    uv run python --version
+  )
 }
 
 validate_repo() {

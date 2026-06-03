@@ -139,7 +139,7 @@ if command -v uv >/dev/null 2>&1; then
   echo "Starting AI worker health server..."
   (
     cd "$ROOT_DIR/apps/ai-worker"
-    python3.12 health.py 2>&1 | prefix_logs "worker"
+    uv run python health.py 2>&1 | prefix_logs "worker"
   ) &
   WORKER_PID=$!
 else

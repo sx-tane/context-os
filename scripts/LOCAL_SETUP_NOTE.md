@@ -7,7 +7,7 @@ Alternatively, run `./scripts/setup-local.sh` which performs all steps below aut
 
 ```bash
 sudo apt update
-sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs npm
+sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs
 ```
 
 ## 2) Install Go 1.24.13
@@ -36,10 +36,10 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 ```
 
-## 4) Install Python 3.12 and tools
+## 4) Install Python tooling
 
 ```bash
-sudo apt install -y python3.12 python3.12-venv python3-pip
+sudo apt install -y python3-venv python3-pip
 ```
 
 ## 5) Install uv
@@ -69,9 +69,11 @@ codex login
 ```bash
 go version
 bun --version
-python3.12 --version
 uv --version
 codex --version
+
+# Verifies the worker can run under uv-managed Python 3.12
+cd apps/ai-worker && uv run python --version
 
 # From the repo root
 go mod tidy

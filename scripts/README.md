@@ -10,10 +10,10 @@ Installs all required tools on Ubuntu/Linux and validates the repository. Run th
 
 What it does:
 
-1. Installs system packages (`curl`, `wget`, `build-essential`, `nodejs`, `npm`, etc.)
+1. Installs system packages (`curl`, `wget`, `build-essential`, `nodejs`, etc.)
 2. Installs Go 1.24.13 and goimports
 3. Installs Bun (UI runtime)
-4. Installs Python 3.12 and pip
+4. Installs Python tooling for the worker environment
 5. Installs `uv` (Python environment manager)
 6. Installs Codex CLI and GitHub, Atlassian Rovo, and Slack plugins
 7. Performs Codex CLI authentication (with device auth support)
@@ -91,13 +91,15 @@ Once running:
 - **http://localhost:8080/swagger/doc.json** — Raw OpenAPI spec (Postman/Insomnia)
 - **apps/api/docs/api.html** — Standalone Redoc HTML (open directly in browser after docs are generated)
 
-Generated docs under `apps/api/docs/` are committed OpenAPI artifacts and the source for frontend type generation. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository and are regenerated automatically on each startup.
+Generated docs under `apps/api/docs/` are committed OpenAPI artifacts and the source for frontend type generation. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository and are regenerated automatically on each startup. The AI worker uses `uv run python`, so it does not depend on a system `python3.12` binary being installed.
 
 ---
 
 ## start-infra.sh
 
 Starts local infrastructure only (Postgres + pgvector and NATS) using Docker Compose.
+
+Requires either the Docker Compose plugin (`docker compose`) or `docker-compose` in `PATH`.
 
 ```bash
 chmod +x scripts/start-infra.sh
