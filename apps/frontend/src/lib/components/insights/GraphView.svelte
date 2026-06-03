@@ -89,7 +89,7 @@
                                         style={typeAccentStyle(entity.type)}
                                         on:click={() => (selectedEntity = entity)}
                                     >
-                                        <span>{entity.name}</span>
+                                        <span class="entity-name"><i></i><span>{entity.name}</span></span>
                                         <small>{entity.degree} link{entity.degree === 1 ? "" : "s"}</small>
                                     </button>
                                 {/each}
@@ -124,7 +124,7 @@
                                     style={`top:${row.y}%;--type-color:${row.color};`}
                                     on:click={() => (selectedEntity = row.entity)}
                                 >
-                                    <span>{row.entity.name}</span>
+                                    <span class="focus-label"><i></i><span>{row.entity.name}</span></span>
                                     <small>{relationshipLabel(row.link.label)}</small>
                                 </button>
                             {/each}
@@ -136,8 +136,8 @@
                             style={typeAccentStyle(selectedEntity.type)}
                             title={selectedEntity.name}
                         >
-                            <span>{selectedEntity.type}</span>
-                            <strong>{selectedEntity.name}</strong>
+                            <span class="focus-type">{selectedEntity.type}</span>
+                            <strong><i></i><span>{selectedEntity.name}</span></strong>
                             <small>{selectedLinks.length} link{selectedLinks.length === 1 ? "" : "s"}</small>
                         </button>
 
@@ -150,7 +150,7 @@
                                     style={`top:${row.y}%;--type-color:${row.color};`}
                                     on:click={() => (selectedEntity = row.entity)}
                                 >
-                                    <span>{row.entity.name}</span>
+                                    <span class="focus-label"><i></i><span>{row.entity.name}</span></span>
                                     <small>{relationshipLabel(row.link.label)}</small>
                                 </button>
                             {/each}
@@ -238,25 +238,27 @@
         height: 100%;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 324px;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
         gap: 0;
+        color: #1c1b18;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
     }
 
     .graph-canvas {
         position: relative;
         min-height: 0;
         overflow: hidden;
-        background: linear-gradient(180deg, #f1eee5, #ebe8e0);
+        background: #ebe8e0;
         border-right: 1px solid #d7d2c8;
-        padding: 16px;
+        padding: 14px 14px 16px;
     }
 
     .graph-map-layout {
         height: 100%;
         min-height: 520px;
         display: grid;
-        grid-template-columns: 220px minmax(520px, 1fr);
-        gap: 16px;
+        grid-template-columns: minmax(190px, 220px) minmax(460px, 1fr);
+        gap: 14px;
         padding-top: 0;
     }
 
@@ -267,7 +269,7 @@
         scrollbar-width: none;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
         padding-right: 2px;
         overscroll-behavior: contain;
     }
@@ -282,14 +284,15 @@
         justify-content: space-between;
         gap: 8px;
         border-bottom: 1px solid #d7d2c8;
-        padding-bottom: 8px;
+        padding: 0 2px 8px 0;
     }
 
     .entity-index-head strong,
     .index-section h3 {
         color: #1c1b18;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
     }
 
@@ -307,7 +310,8 @@
         background: transparent;
         color: #1c1b18;
         font: inherit;
-        padding: 7px 0;
+        font-size: 12px;
+        padding: 8px 2px;
     }
 
     .entity-search:focus {
@@ -322,6 +326,7 @@
     .index-section h3 {
         margin: 0 0 5px;
         color: #d85d3f;
+        letter-spacing: 0.04em;
     }
 
     .graph-count {
@@ -333,10 +338,11 @@
         align-items: baseline;
         gap: 6px;
         border-bottom: 1px solid #bdb7a8;
-        background: rgba(235, 232, 224, 0.82);
+        background: rgba(235, 232, 224, 0.94);
         padding: 6px 2px;
         color: #625f55;
         font-size: 11px;
+        letter-spacing: 0.04em;
         pointer-events: none;
     }
 
@@ -346,7 +352,7 @@
 
     .entity-list {
         display: grid;
-        gap: 0;
+        gap: 1px;
     }
 
     .entity-row {
@@ -357,25 +363,56 @@
         gap: 2px;
         border: 0;
         border-top: 1px solid rgba(215, 210, 200, 0.72);
-        border-left: 3px solid transparent;
         background: transparent;
         color: #28261f;
-        padding: 6px 0 6px 8px;
+        font: inherit;
+        padding: 7px 8px 7px 10px;
         text-align: left;
     }
 
-    .entity-row:hover,
-    .entity-row.selected,
-    .entity-row.linked:not(.selected) {
-        border-left-color: transparent;
-        background: transparent;
+    .entity-row:hover {
+        background: rgba(248, 246, 239, 0.56);
     }
 
-    .entity-row span {
+    .entity-row.selected {
+        background: rgba(248, 246, 239, 0.78);
+    }
+
+    .entity-row.linked:not(.selected) {
+        background: rgba(248, 246, 239, 0.34);
+    }
+
+    .entity-name {
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        overflow: hidden;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .entity-name i {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--type-color);
+        flex: 0 0 auto;
+    }
+
+    .entity-name span {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
+    }
+
+    .entity-row.selected .entity-name i {
+        box-shadow: 0 0 0 1px var(--type-color);
+    }
+
+    .entity-row.linked:not(.selected) .entity-name i {
+        opacity: 0.68;
     }
 
     .entity-row small {
@@ -384,6 +421,8 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
     }
 
     .focus-graph {
@@ -391,10 +430,8 @@
         min-width: 0;
         min-height: 520px;
         overflow: hidden;
-        border: 1px solid rgba(215, 210, 200, 0.78);
-        background:
-            radial-gradient(circle, rgba(28, 27, 24, 0.09) 1px, transparent 1px) 0 0 / 22px 22px,
-            rgba(248, 246, 239, 0.62);
+        border: 1px solid #d7d2c8;
+        background: rgba(248, 246, 239, 0.46);
     }
 
     .focus-lines {
@@ -407,14 +444,14 @@
 
     .focus-lines path {
         fill: none;
-        stroke-width: 1.4;
-        stroke-opacity: 0.34;
+        stroke-width: 1.2;
+        stroke-opacity: 0.28;
         vector-effect: non-scaling-stroke;
     }
 
     .focus-lines path.strong {
-        stroke-width: 2.2;
-        stroke-opacity: 0.58;
+        stroke-width: 1.8;
+        stroke-opacity: 0.48;
     }
 
     .focus-center,
@@ -423,48 +460,73 @@
         z-index: 2;
         min-width: 0;
         border: 0;
-        border-top: 1px solid rgba(215, 210, 200, 0.84);
-        background: #f8f6ef;
+        border-top: 1px solid #d7d2c8;
+        border-bottom: 1px solid rgba(215, 210, 200, 0.78);
+        background: rgba(248, 246, 239, 0.9);
         color: #1c1b18;
+        box-shadow: none;
     }
 
     .focus-center {
         left: 50%;
         top: 50%;
-        width: min(240px, 34%);
-        min-height: 86px;
+        width: min(178px, 26%);
+        min-height: 60px;
         display: grid;
-        gap: 6px;
+        gap: 5px;
         transform: translate(-50%, -50%);
-        border-top: 4px solid var(--type-color);
-        border-bottom: 1px solid rgba(215, 210, 200, 0.84);
-        padding: 14px;
+        border-top: 1px solid #d7d2c8;
+        border-bottom: 1px solid #d7d2c8;
+        padding: 9px 11px;
         text-align: left;
     }
 
-    .focus-center span,
+    .focus-center .focus-type,
     .focus-center small,
     .focus-node small,
     .focus-column > strong {
         color: #8a8678;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 10px;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
     }
 
     .focus-center strong {
         min-width: 0;
-        overflow-wrap: anywhere;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        overflow: hidden;
         color: #1c1b18;
-        font-size: 15px;
+        font-size: 13px;
         line-height: 1.25;
+    }
+
+    .focus-center strong i,
+    .focus-label i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--type-color);
+        flex: 0 0 auto;
+    }
+
+    .focus-center strong i {
+        box-shadow: 0 0 0 1px var(--type-color);
+    }
+
+    .focus-center strong span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
     }
 
     .focus-column {
         position: absolute;
         top: 0;
         bottom: 0;
-        width: 31%;
+        width: 28%;
         pointer-events: none;
     }
 
@@ -485,24 +547,32 @@
     .focus-node {
         width: 100%;
         display: grid;
-        gap: 4px;
+        gap: 5px;
         transform: translateY(-50%);
-        border-left: 4px solid var(--type-color);
-        padding: 8px 10px;
+        padding: 7px 9px;
         text-align: left;
         pointer-events: auto;
     }
 
     .focus-node:hover {
         background: #fffdf7;
-        border-left-color: var(--type-color);
     }
 
-    .focus-node span {
+    .focus-label {
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        overflow: hidden;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .focus-label span {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
     }
 
     .focus-empty {
@@ -520,9 +590,9 @@
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
-        border: 1px solid rgba(215, 210, 200, 0.65);
-        border-radius: 8px;
-        background: rgba(248, 246, 239, 0.92);
+        border: 1px solid #d7d2c8;
+        border-radius: 0;
+        background: rgba(248, 246, 239, 0.9);
         padding: 18px;
         text-align: center;
     }
@@ -530,9 +600,15 @@
     .node-card {
         min-height: 0;
         background: transparent;
-        padding: 16px;
+        border-left: 1px solid #d7d2c8;
+        padding: 14px 16px;
         font-size: 13px;
         overflow: auto;
+        scrollbar-width: none;
+    }
+
+    .node-card::-webkit-scrollbar {
+        display: none;
     }
 
     .node-card div {
@@ -543,18 +619,22 @@
 
     .node-card span,
     .node-card strong {
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 12px;
     }
 
     .node-card strong {
-        color: #2d6a4f;
+        color: #1c1b18;
     }
 
     .node-card p {
         margin: 9px 0;
+        color: #625f55;
         line-height: 1.45;
         overflow-wrap: anywhere;
+    }
+
+    .node-card p b {
+        color: #1c1b18;
     }
 
     .node-card hr {
@@ -582,14 +662,15 @@
     .node-links h4 {
         margin: 0;
         color: #1c1b18;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 11px;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
     }
 
     .node-links small {
         color: #8a8678;
         font-size: 10px;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
     }
 
@@ -622,8 +703,8 @@
 
     .node-legend > strong {
         color: #d85d3f;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 11px;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
     }
 

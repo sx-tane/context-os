@@ -4,6 +4,7 @@ Svelte UI components for the ContextOS frontend. Organised into sub-directories 
 
 ```
 components/
+├── ConfirmModal.svelte
 ├── chat/         Homepage and reusable chat thread surfaces
 ├── connectors/   Connector-specific forms and cards (GitHub, Jira, Slack, generic SourceConnector)
 ├── feedback/     Status display, log streams, error messages, and ingest results
@@ -15,6 +16,7 @@ components/
 
 | Directory                             | What lives there                                                                                       |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [`ConfirmModal.svelte`](ConfirmModal.svelte) | Shared destructive-action confirmation dialog used by workspace removal and source reset flows. |
 | [`chat/`](chat/README.md)             | `ChatPanel`, `ChatInput`, `ChatMessage`, `ChatThread`                                                  |
 | [`connectors/`](connectors/README.md) | `ConnectorCard`, `SourceConnector`, `GitHubConnector`, `JiraConnector`, `SlackConnector`, `CodexBadge` |
 | [`feedback/`](feedback/README.md)     | `StatusSection`, `LogPanel`, `IngestResult`, `ErrorPanel`                                              |
@@ -31,6 +33,7 @@ components/
   └─ StatusSection                                        (health probes)
   └─ WorkspaceSummary / FindingsView / GraphView / ActivityView
                                                            (homepage right pane)
+  └─ ConfirmModal                                         (destructive confirmations)
   └─ LogPanel                                             (SSE log stream)
   └─ IngestResult                                         (parsed events)
   └─ ErrorPanel                                           (error display)

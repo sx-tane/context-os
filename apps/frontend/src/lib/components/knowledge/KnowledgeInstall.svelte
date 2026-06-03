@@ -4,6 +4,7 @@
      * Shows readiness per connector, streams ingest progress, marks knowledge ready.
      */
     import { createEventDispatcher } from "svelte";
+    import ConfirmModal from "$lib/components/ConfirmModal.svelte";
     import type {
         CodexPlugin,
         CodexSourceOption,
@@ -31,6 +32,7 @@
     export let onClose: () => void = () => {};
 
     const dispatch = createEventDispatcher<{ done: void }>();
+    let resetConfirmOpen = false;
 
     // Required connectors for v1 knowledge.
     const REQUIRED: {
@@ -310,12 +312,16 @@
         installing = false;
     }
 
-    async function resetAllData() {
-        const confirmed = confirm(
-            "Reset all workspace data? This clears saved sources, chat history, graph data, findings, and local workspace memory for every workspace. This cannot be undone.",
-        );
-        if (!confirmed) return;
+    function requestResetAllData() {
+        resetConfirmOpen = true;
+    }
 
+    function cancelResetAllData() {
+        if (resettingAll) return;
+        resetConfirmOpen = false;
+    }
+
+    async function resetAllData() {
         resettingAll = true;
         try {
             const workspaces = await getWorkspaces();
@@ -353,6 +359,7 @@
             selectedSources = {};
             sourceOptions = {};
             allDone = false;
+            resetConfirmOpen = false;
             dispatch("done");
         } finally {
             resettingAll = false;
@@ -589,7 +596,7 @@
                 >
                 <button
                     class="btn danger"
-                    on:click={resetAllData}
+                    on:click={requestResetAllData}
                     disabled={installing || resettingAll}
                 >
                     {resettingAll ? "Resetting..." : "Reset all data"}
@@ -598,6 +605,19 @@
         </div>
     </div>
 </div>
+
+{#if resetConfirmOpen}
+    <ConfirmModal
+        eyebrow="RESET DATA"
+        title="Reset all workspace data?"
+        description="This clears saved sources, chat history, graph data, findings, and local workspace memory for every workspace. This cannot be undone."
+        confirmLabel="Reset"
+        busyLabel="Resetting"
+        busy={resettingAll}
+        on:cancel={cancelResetAllData}
+        on:confirm={resetAllData}
+    />
+{/if}
 
 <style>
     .ki-overlay {

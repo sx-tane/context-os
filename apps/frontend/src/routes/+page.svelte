@@ -35,6 +35,7 @@
         workspaces,
     } from "$lib/projectStore";
     import ChatPanel from "$lib/components/chat/ChatPanel.svelte";
+    import ConfirmModal from "$lib/components/ConfirmModal.svelte";
     import ActivityView from "$lib/components/insights/ActivityView.svelte";
     import FindingsView from "$lib/components/insights/FindingsView.svelte";
     import GraphView from "$lib/components/insights/GraphView.svelte";
@@ -78,6 +79,9 @@
     let workspacePendingRemoval = "";
     let removeInProgress = false;
     let walkthroughOpen = false;
+    let paneSplit = 52;
+    let mainGrid: HTMLElement | null = null;
+    let resizingPanes = false;
 
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
@@ -185,6 +189,33 @@
         lastChatResult = null;
         lastFindings = null;
         await refreshWorkspace();
+    }
+
+    function startPaneResize(event: PointerEvent) {
+        if (!mainGrid) return;
+        resizingPanes = true;
+        updatePaneSplit(event.clientX);
+        window.addEventListener("pointermove", handlePaneResize);
+        window.addEventListener("pointerup", stopPaneResize, { once: true });
+        window.addEventListener("pointercancel", stopPaneResize, { once: true });
+    }
+
+    function handlePaneResize(event: PointerEvent) {
+        updatePaneSplit(event.clientX);
+    }
+
+    function stopPaneResize() {
+        resizingPanes = false;
+        window.removeEventListener("pointermove", handlePaneResize);
+        window.removeEventListener("pointerup", stopPaneResize);
+        window.removeEventListener("pointercancel", stopPaneResize);
+    }
+
+    function updatePaneSplit(clientX: number) {
+        if (!mainGrid) return;
+        const rect = mainGrid.getBoundingClientRect();
+        const next = ((clientX - rect.left) / rect.width) * 100;
+        paneSplit = Math.max(32, Math.min(68, Math.round(next)));
     }
 
     function requestRemoveActiveWorkspace() {
@@ -411,7 +442,12 @@
         </div>
     </header>
 
-    <section class="main-grid">
+    <section
+        class="main-grid"
+        bind:this={mainGrid}
+        class:resizing={resizingPanes}
+        style={`--pane-split:${paneSplit}%;`}
+    >
         <section class="chat-pane" aria-label="Report agent chat">
             <ChatPanel
                 messages={$chatMessages}
@@ -422,6 +458,14 @@
                 onSubmit={submitCommand}
             />
         </section>
+
+        <button
+            type="button"
+            class="pane-resizer"
+            aria-label="Resize chat and insights panes"
+            title="Drag to resize panes"
+            on:pointerdown={startPaneResize}
+        ></button>
 
         <section class="insight-pane" aria-label="Project insights">
             <WorkspaceSummary
@@ -485,28 +529,17 @@
     </button>
 
     {#if removeConfirmOpen}
-        <div class="modal-backdrop">
-            <div
-                class="confirm-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="remove-workspace-title"
-                tabindex="-1"
-            >
-                <span>DELETE WORKSPACE</span>
-                <h2 id="remove-workspace-title">Remove this workspace?</h2>
-                <p>
-                    This clears local chat, selected sources, source readiness, graph state, and project state for
-                    <strong>{workspacePendingRemoval}</strong>. Backend workspace memory delete will be attempted too.
-                </p>
-                <div class="modal-actions">
-                    <button type="button" on:click={cancelWorkspaceRemoval} disabled={removeInProgress}>Cancel</button>
-                    <button class="danger" type="button" on:click={confirmWorkspaceRemoval} disabled={removeInProgress}>
-                        {removeInProgress ? "Deleting" : "Delete"}
-                    </button>
-                </div>
-            </div>
-        </div>
+        <ConfirmModal
+            eyebrow="DELETE WORKSPACE"
+            title="Remove this workspace?"
+            description="This clears local chat, selected sources, source readiness, graph state, and project state for "
+            detail={workspacePendingRemoval}
+            confirmLabel="Delete"
+            busyLabel="Deleting"
+            busy={removeInProgress}
+            on:cancel={cancelWorkspaceRemoval}
+            on:confirm={confirmWorkspaceRemoval}
+        />
     {/if}
 
     {#if walkthroughOpen}
@@ -746,8 +779,14 @@
         height: 100%;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(480px, 1fr) minmax(460px, 0.92fr);
+        grid-template-columns: minmax(360px, var(--pane-split, 52%)) 9px minmax(360px, 1fr);
         border-bottom: 1px solid #d7d2c8;
+    }
+
+    .main-grid.resizing,
+    .main-grid.resizing * {
+        cursor: col-resize;
+        user-select: none;
     }
 
     .chat-pane,
@@ -760,8 +799,42 @@
     .chat-pane {
         display: flex;
         min-height: 0;
-        border-right: 1px solid #d7d2c8;
         padding: 16px;
+    }
+
+    .pane-resizer {
+        width: 9px;
+        min-width: 9px;
+        height: 100%;
+        border: 0;
+        border-left: 1px solid #d7d2c8;
+        border-right: 1px solid transparent;
+        border-radius: 0;
+        background: #ebe8e0;
+        cursor: col-resize;
+        padding: 0;
+        position: relative;
+    }
+
+    .pane-resizer::before {
+        content: "";
+        position: absolute;
+        top: 12px;
+        bottom: 12px;
+        left: 3px;
+        border-left: 1px solid #bdb7a8;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+
+    .pane-resizer:hover,
+    .main-grid.resizing .pane-resizer {
+        background: #f1eee5;
+    }
+
+    .pane-resizer:hover::before,
+    .main-grid.resizing .pane-resizer::before {
+        opacity: 1;
     }
 
     .insight-pane {
@@ -876,52 +949,6 @@
         color: #f8f6ef;
     }
 
-    .modal-backdrop {
-        position: fixed;
-        inset: 0;
-        z-index: 80;
-        display: grid;
-        place-items: center;
-        background: rgba(28, 27, 24, 0.34);
-        padding: 18px;
-    }
-
-    .confirm-modal {
-        width: min(520px, 100%);
-        border: 1px solid #1c1b18;
-        background: #ebe8e0;
-        box-shadow: 0 18px 48px rgba(28, 27, 24, 0.22);
-        padding: 20px;
-    }
-
-    .confirm-modal > span {
-        display: block;
-        margin-bottom: 10px;
-        color: #d85d3f;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-    }
-
-    .confirm-modal h2 {
-        margin: 0 0 12px;
-        color: #1c1b18;
-        font-size: 18px;
-        line-height: 1.25;
-    }
-
-    .confirm-modal p {
-        margin: 0;
-        color: #625f55;
-        font-size: 13px;
-        line-height: 1.6;
-    }
-
-    .confirm-modal p strong {
-        color: #1c1b18;
-        overflow-wrap: anywhere;
-    }
-
     .guide-popout {
         position: fixed;
         right: 18px;
@@ -985,59 +1012,13 @@
         line-height: 1.55;
     }
 
-    .modal-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-        margin-top: 22px;
-        border-top: 1px solid #d7d2c8;
-        padding: 14px 0 4px;
-    }
-
-    .modal-actions button {
-        min-width: 92px;
-        height: 36px;
-        border: 0;
-        border-bottom: 1px solid #bdb7a8;
-        border-radius: 0;
-        background-color: transparent;
-        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
-        background-position: 100% 0;
-        background-size: 200% 100%;
-        color: #1c1b18;
-        font-weight: 700;
-        transition:
-            background-position 0.18s ease,
-            color 0.15s,
-            border-color 0.15s,
-            opacity 0.15s;
-    }
-
-    .modal-actions button:hover:not(:disabled) {
-        border-bottom-color: #1c1b18;
-        background-position: 0 0;
-        color: #f8f6ef;
-    }
-
-    .modal-actions button.danger {
-        background-image: linear-gradient(90deg, #d85d3f 0 50%, transparent 50% 100%);
-        border-bottom-color: #d85d3f;
-        color: #d85d3f;
-    }
-
-    .modal-actions button.danger:hover:not(:disabled) {
-        background-position: 0 0;
-        color: #fffdf7;
-    }
-
-    .modal-actions button:disabled {
-        cursor: not-allowed;
-        opacity: 0.45;
-    }
-
     @media (max-width: 1100px) {
         .main-grid {
             grid-template-columns: 1fr;
+        }
+
+        .pane-resizer {
+            display: none;
         }
 
         .chat-pane {
@@ -1061,5 +1042,6 @@
         .top-status {
             justify-content: flex-start;
         }
+
     }
 </style>
