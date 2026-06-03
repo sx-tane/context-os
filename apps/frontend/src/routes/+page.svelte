@@ -24,11 +24,13 @@
         postFindings,
         probeService,
     } from "$lib/api";
+    import type { DeleteWorkspaceResult } from "$lib/api";
     import {
         addMessage,
         chatMessages,
         clearChat,
         DEFAULT_WORKSPACE_PATH,
+        DEMO_WORKSPACE_PATH,
         addWorkspace,
         getProject,
         hydrateWorkspaces,
@@ -111,6 +113,9 @@
     let lastChatResult: ChatQueryResult | null = null;
     let lastFindings: FindingsResult | null = null;
     let activityArtifacts: Artifact[] = [];
+    let removeConfirmOpen = false;
+    let workspacePendingRemoval = "";
+    let removeInProgress = false;
 
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
@@ -163,6 +168,7 @@
     $: hasSources = readySources.length > 0;
     $: sourceGroups = groupSources(readySources);
     $: recentArtifacts = activityArtifacts.length > 0 ? activityArtifacts : (lastChatResult?.artifacts ?? []);
+    $: protectedWorkspace = workspacePath === DEFAULT_WORKSPACE_PATH || workspacePath === DEMO_WORKSPACE_PATH;
 
     onMount(async () => {
         const savedPath = localStorage.getItem("contextos_workspace_path");
@@ -196,6 +202,13 @@
     }
 
     async function refreshWorkspace() {
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            workspaceStatus = demoWorkspaceStatus();
+            graphData = demoGraphData();
+            activityArtifacts = demoArtifacts();
+            lastFindings = demoFindings();
+            return;
+        }
         await loadWorkspaceStatus(workspacePath);
         workspaceStatus = await getWorkspaceStatus(workspacePath);
         graphData = await getGraphData(workspacePath);
@@ -224,15 +237,44 @@
         await refreshWorkspace();
     }
 
-    async function removeActiveWorkspace() {
-        const path = workspacePath;
-        const deleted = await deleteWorkspace(path);
-        removeWorkspace(path);
-        workspacePath = getProject().workspacePath;
-        newWorkspacePath = "";
-        lastChatResult = null;
-        lastFindings = null;
-        await refreshWorkspace();
+    function requestRemoveActiveWorkspace() {
+        if (protectedWorkspace) return;
+        workspacePendingRemoval = workspacePath;
+        removeConfirmOpen = true;
+    }
+
+    function cancelWorkspaceRemoval() {
+        if (removeInProgress) return;
+        workspacePendingRemoval = "";
+        removeConfirmOpen = false;
+    }
+
+    async function confirmWorkspaceRemoval() {
+        if (removeInProgress) return;
+        const path = workspacePendingRemoval || workspacePath;
+        if (path === DEFAULT_WORKSPACE_PATH || path === DEMO_WORKSPACE_PATH) {
+            cancelWorkspaceRemoval();
+            return;
+        }
+        removeInProgress = true;
+        let deleted: DeleteWorkspaceResult = { ok: true, status: 200 };
+        try {
+            deleted = await deleteWorkspace(path);
+            removeWorkspace(path);
+            workspacePath = getProject().workspacePath;
+            newWorkspacePath = "";
+            lastChatResult = null;
+            lastFindings = null;
+            graphData = null;
+            selectedEntity = null;
+            activityArtifacts = [];
+            sourcePanelOpen = false;
+            workspacePendingRemoval = "";
+            removeConfirmOpen = false;
+            await refreshWorkspace();
+        } finally {
+            removeInProgress = false;
+        }
         if (!deleted.ok) {
             addMessage(
                 assistantMsg(
@@ -367,6 +409,21 @@
     }
 
     async function runFindings() {
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            const findings = demoFindings();
+            lastFindings = findings;
+            addMessage(
+                assistantMsg(
+                    "Demo analysis complete for 3 selected sources. Found 2 findings.",
+                    {
+                        kind: "findings",
+                        findingsResult: findings,
+                    },
+                ),
+            );
+            return;
+        }
+
         const ready = getProject().connectors.filter(
             (source) => source.status === "ready",
         );
@@ -931,6 +988,121 @@
         }
         return "";
     }
+
+    function demoWorkspaceStatus(): WorkspaceStatus {
+        return {
+            workspace: {
+                id: DEMO_WORKSPACE_PATH,
+                name: "Demo Workspace",
+                path: DEMO_WORKSPACE_PATH,
+            },
+            workspace_count: 2,
+            event_count: 54,
+            entity_count: 8,
+            relationship_count: 7,
+            mismatch_count: 2,
+            connector_sync_count: 3,
+            audit_count: 9,
+            syncs: [
+                { connector: "github", source_uri: "context-os/demo-api", event_count: 18, status: "ready" },
+                { connector: "slack", source_uri: "#launch-review", event_count: 24, status: "ready" },
+                { connector: "jira", source_uri: "DEMO", event_count: 12, status: "ready" },
+            ],
+        };
+    }
+
+    function demoFindings(): FindingsResult {
+        return {
+            connector: "multiple",
+            uri: "3 demo sources",
+            role: "pmo",
+            trace_id: "demo-trace",
+            summary: "Demo findings show how ContextOS connects source evidence into cross-layer delivery risks.",
+            event_count: 54,
+            entity_count: 8,
+            mismatch_count: 2,
+            severity_count: { high: 1, medium: 1, low: 0 },
+            mismatch_ids: ["demo-finding-1", "demo-finding-2"],
+            mismatches: [
+                {
+                    id: "demo-finding-1",
+                    severity: "high",
+                    mismatch_type: "requirement_gap",
+                    summary: "Checkout requirement missing service owner",
+                    description: "Jira says refund status must ship this sprint, but GitHub work only covers the UI state and Slack has an unresolved backend ownership question.",
+                    evidence: ["jira:DEMO-42", "github:context-os/demo-api#18", "slack:#launch-review"],
+                    confidence: 0.88,
+                    impact: "PMO cannot confirm delivery readiness without backend ownership.",
+                    recommended_action: "Assign a service owner and update the Jira acceptance criteria before release review.",
+                },
+                {
+                    id: "demo-finding-2",
+                    severity: "medium",
+                    mismatch_type: "contract_drift",
+                    summary: "API contract drift for refundStatus",
+                    description: "Frontend discussion references refundStatus, while service notes still describe refund_state.",
+                    evidence: ["github:context-os/demo-api#21", "slack:#launch-review"],
+                    confidence: 0.76,
+                    impact: "QA may validate the wrong response field.",
+                    recommended_action: "Normalize the API contract name and add the field to the test plan.",
+                },
+            ],
+        };
+    }
+
+    function demoGraphData(): GraphData {
+        return {
+            workspace_id: DEMO_WORKSPACE_PATH,
+            count: 8,
+            entity_count: 8,
+            relationship_count: 7,
+            entities: [
+                { id: "entity-checkout", name: "Checkout", type: "feature", source: "jira", confidence: 0.94, evidence: ["DEMO-42 acceptance criteria"] },
+                { id: "entity-refund", name: "Refund Status", type: "requirement", source: "jira", confidence: 0.9, evidence: ["DEMO-42: show refund status"] },
+                { id: "entity-api", name: "Payments API", type: "service", source: "github", confidence: 0.86, evidence: ["context-os/demo-api#18"] },
+                { id: "entity-ui", name: "Checkout UI", type: "presentation", source: "github", confidence: 0.82, evidence: ["context-os/demo-api#21"] },
+                { id: "entity-qa", name: "QA Release Plan", type: "qa", source: "jira", confidence: 0.78, evidence: ["DEMO-51"] },
+                { id: "entity-pmo", name: "Launch Review", type: "pmo", source: "slack", confidence: 0.84, evidence: ["#launch-review decision thread"] },
+                { id: "entity-owner", name: "Service Owner", type: "person", source: "slack", confidence: 0.63, evidence: ["Ownership unresolved in Slack"] },
+                { id: "entity-contract", name: "refundStatus contract", type: "contract", source: "github", confidence: 0.72, evidence: ["OpenAPI notes in PR #21"] },
+            ],
+            relationships: [
+                { id: "rel-1", from_id: "entity-checkout", to_id: "entity-refund", kind: "requires", confidence: 0.94, evidence: ["DEMO-42"] },
+                { id: "rel-2", from_id: "entity-refund", to_id: "entity-api", kind: "depends_on", confidence: 0.86, evidence: ["PR #18"] },
+                { id: "rel-3", from_id: "entity-ui", to_id: "entity-contract", kind: "expects_contract", confidence: 0.82, evidence: ["PR #21"] },
+                { id: "rel-4", from_id: "entity-contract", to_id: "entity-api", kind: "implemented_by", confidence: 0.72, evidence: ["API notes"] },
+                { id: "rel-5", from_id: "entity-qa", to_id: "entity-contract", kind: "validates", confidence: 0.78, evidence: ["DEMO-51"] },
+                { id: "rel-6", from_id: "entity-pmo", to_id: "entity-checkout", kind: "tracks", confidence: 0.84, evidence: ["Launch review"] },
+                { id: "rel-7", from_id: "entity-owner", to_id: "entity-api", kind: "owns", confidence: 0.42, evidence: ["Unconfirmed Slack thread"] },
+            ],
+        };
+    }
+
+    function demoArtifacts(): Artifact[] {
+        return [
+            demoArtifact("demo-artifact-1", "jira", "DEMO-42", "Refund status acceptance criteria", "PMO asks for refund status in checkout before launch review.", "2026-01-01T09:25:00.000Z"),
+            demoArtifact("demo-artifact-2", "github", "context-os/demo-api#18", "Payments API ownership question", "Backend PR covers API plumbing but does not assign a service owner.", "2026-01-01T09:15:00.000Z"),
+            demoArtifact("demo-artifact-3", "slack", "#launch-review", "Launch review decision thread", "Team agrees the UI is ready but backend ownership is still unresolved.", "2026-01-01T09:20:00.000Z"),
+            demoArtifact("demo-artifact-4", "github", "context-os/demo-api#21", "refundStatus naming drift", "Frontend uses refundStatus while service notes mention refund_state.", "2026-01-01T09:10:00.000Z"),
+        ];
+    }
+
+    function demoArtifact(id: string, connector: string, sourceURI: string, title: string, body: string, ingestedAt: string): Artifact {
+        return {
+            id,
+            workspace_id: DEMO_WORKSPACE_PATH,
+            connector,
+            source_uri: sourceURI,
+            event_type: "document.ingested",
+            title,
+            body,
+            preview: body,
+            content_hash: id,
+            metadata: {},
+            schema_version: "demo.v1",
+            ingested_at: ingestedAt,
+        };
+    }
 </script>
 
 <svelte:head>
@@ -953,7 +1125,12 @@
             <form class="new-workspace" on:submit|preventDefault={createWorkspace}>
                 <input bind:value={newWorkspacePath} placeholder="New workspace path" />
                 <button type="submit" disabled={newWorkspacePath.trim() === ""}>New</button>
-                <button type="button" on:click={removeActiveWorkspace} disabled={busy}>Remove</button>
+                <button
+                    type="button"
+                    on:click={requestRemoveActiveWorkspace}
+                    disabled={busy || protectedWorkspace}
+                    title={protectedWorkspace ? "Default and demo workspaces cannot be removed" : "Remove workspace"}
+                >Remove</button>
             </form>
         </div>
         <div class="top-status">
@@ -1362,6 +1539,31 @@
         <span>{new Date().toLocaleTimeString()} | {statusLine}</span>
         <span>{graphData?.entity_count ?? graphData?.count ?? 0} graph nodes | {graphData?.relationship_count ?? graphLinks.length} links | {mismatchCount} findings</span>
     </footer>
+
+    {#if removeConfirmOpen}
+        <div class="modal-backdrop">
+            <div
+                class="confirm-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="remove-workspace-title"
+                tabindex="-1"
+            >
+                <span>DELETE WORKSPACE</span>
+                <h2 id="remove-workspace-title">Remove this workspace?</h2>
+                <p>
+                    This clears local chat, selected sources, source readiness, graph state, and project state for
+                    <strong>{workspacePendingRemoval}</strong>. Backend workspace memory delete will be attempted too.
+                </p>
+                <div class="modal-actions">
+                    <button type="button" on:click={cancelWorkspaceRemoval} disabled={removeInProgress}>Cancel</button>
+                    <button class="danger" type="button" on:click={confirmWorkspaceRemoval} disabled={removeInProgress}>
+                        {removeInProgress ? "Deleting" : "Delete"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
 </main>
 
 <style>
@@ -2400,6 +2602,102 @@
 
     .console-strip strong {
         color: #f8f6ef;
+    }
+
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        background: rgba(28, 27, 24, 0.34);
+        padding: 18px;
+    }
+
+    .confirm-modal {
+        width: min(520px, 100%);
+        border: 1px solid #1c1b18;
+        background: #ebe8e0;
+        box-shadow: 0 18px 48px rgba(28, 27, 24, 0.22);
+        padding: 20px;
+    }
+
+    .confirm-modal > span {
+        display: block;
+        margin-bottom: 10px;
+        color: #d85d3f;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+    }
+
+    .confirm-modal h2 {
+        margin: 0 0 12px;
+        color: #1c1b18;
+        font-size: 18px;
+        line-height: 1.25;
+    }
+
+    .confirm-modal p {
+        margin: 0;
+        color: #625f55;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .confirm-modal p strong {
+        color: #1c1b18;
+        overflow-wrap: anywhere;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 22px;
+        border-top: 1px solid #d7d2c8;
+        padding: 14px 0 4px;
+    }
+
+    .modal-actions button {
+        min-width: 92px;
+        height: 36px;
+        border: 0;
+        border-bottom: 1px solid #bdb7a8;
+        border-radius: 0;
+        background-color: transparent;
+        background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+        background-position: 100% 0;
+        background-size: 200% 100%;
+        color: #1c1b18;
+        font-weight: 700;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s,
+            opacity 0.15s;
+    }
+
+    .modal-actions button:hover:not(:disabled) {
+        border-bottom-color: #1c1b18;
+        background-position: 0 0;
+        color: #f8f6ef;
+    }
+
+    .modal-actions button.danger {
+        background-image: linear-gradient(90deg, #d85d3f 0 50%, transparent 50% 100%);
+        border-bottom-color: #d85d3f;
+        color: #d85d3f;
+    }
+
+    .modal-actions button.danger:hover:not(:disabled) {
+        background-position: 0 0;
+        color: #fffdf7;
+    }
+
+    .modal-actions button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
     }
 
     @media (max-width: 1100px) {

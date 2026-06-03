@@ -8,6 +8,7 @@ Shared TypeScript modules for the ContextOS frontend. Everything in this directo
 | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | [`api.ts`](api.ts)                                       | HTTP and SSE client for the Go API. All network calls go through here.                                                             |
 | [`types.ts`](types.ts)                                   | Canonical frontend type definitions. Split between re-exports of auto-generated API types and hand-maintained frontend-only types. |
+| [`projectStore.ts`](projectStore.ts)                     | Svelte stores for workspace project state, chat history, selected connectors, protected demo/default workspaces, and backend workspace registration. |
 | [`ingestRunner.ts`](ingestRunner.ts)                     | Orchestrates a single connector ingest run, branching between the direct `POST /ingest` path and the Codex SSE streaming path.     |
 | [`reauthRunner.ts`](reauthRunner.ts)                     | Runs a Codex plugin re-auth SSE stream and refreshes Codex status when it finishes.                                                |
 | [`sourceConnectorConfigs.ts`](sourceConnectorConfigs.ts) | Static configuration objects that drive the `SourceConnector` UI for each non-Codex connector (filesystem).                        |
@@ -81,6 +82,12 @@ Central type registry for the frontend.
 ## findingsAggregator.ts
 
 Merges per-source `postFindings` responses into one `FindingsResult` for the homepage. It combines mismatch arrays, sums mismatch/event/entity counts, and builds the chat summary text that distinguishes a successful zero-finding analysis from source failures.
+
+---
+
+## projectStore.ts
+
+Maintains local workspace state in browser storage and registers user-created workspaces with the backend. The store always exposes the default workspace and a protected `contextos-demo` workspace; neither protected workspace is marked removed or deleted from local storage. The demo workspace is local-only and is not registered with the backend when opened.
 
 ---
 

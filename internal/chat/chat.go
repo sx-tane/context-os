@@ -30,7 +30,8 @@ var (
 	// ErrMessageRequired is returned when a chat query omits the user message.
 	ErrMessageRequired = errors.New("message is required")
 
-	sourcePattern = regexp.MustCompile(`(?i)(#[A-Za-z0-9_.-]+|[a-z]+://[^\s,]+|https?://[^\s,]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)`)
+	sourcePattern     = regexp.MustCompile(`(?i)(#[A-Za-z0-9_.-]+|[a-z]+://[^\s,]+|https?://[^\s,]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)`)
+	sourceTokenPattern = regexp.MustCompile(`[^a-z0-9_.-]+`)
 )
 
 // Query is one local chat request.
@@ -90,7 +91,7 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 	}
 
 	connector := normalizeConnector(firstNonEmpty(query.Connector, inferConnector(message)))
-	sourceURI := firstNonEmpty(strings.TrimSpace(query.SourceURI), inferSourceURI(message))
+	sourceURI := firstNonEmpty(strings.TrimSpace(query.SourceURI), inferSourceURI(message), inferSourceURIFromSyncs(message, connector, syncs))
 	since, until := inferTimeRange(query, message)
 	intent := classifyIntent(message, connector, sourceURI)
 
@@ -140,6 +141,14 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 	}
 	result.Artifacts = artifacts
 	result.Answer, result.Summary = buildArtifactAnswer(result, limit)
+	if isCommitQuestion(message) && result.Connector == "github" && !hasCommitArtifact(result.Artifacts) {
+		scope := result.SourceURI
+		if scope == "" {
+			scope = "that GitHub source"
+		}
+		result.Answer = fmt.Sprintf("I do not have local commit artifacts for %s yet. The current GitHub data is repository, issue, or pull request level, so I can only summarize what has been ingested.\n\n%s", scope, result.Answer)
+		result.Summary = result.Answer
+	}
 	return result, nil
 }
 
@@ -331,6 +340,75 @@ func describeScope(result Result) string {
 		parts = append(parts, "for "+result.Since.Format("2006-01-02"))
 	}
 	return strings.Join(parts, " ")
+}
+
+func inferSourceURIFromSyncs(message, connector string, syncs []repository.ConnectorSync) string {
+	messageTokens := sourceMatchTokens(message)
+	if len(messageTokens) == 0 {
+		return ""
+	}
+	for _, sync := range syncs {
+		if connector != "" && normalizeConnector(sync.Connector) != connector {
+			continue
+		}
+		sourceURI := strings.TrimSpace(sync.SourceURI)
+		if sourceURI == "" {
+			continue
+		}
+		for token := range sourceMatchTokens(sourceURI) {
+			if messageTokens[token] {
+				return sourceURI
+			}
+		}
+	}
+	return ""
+}
+
+func sourceMatchTokens(value string) map[string]bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.TrimPrefix(normalized, "https://github.com/")
+	normalized = strings.TrimPrefix(normalized, "http://github.com/")
+	normalized = strings.TrimPrefix(normalized, "https://api.github.com/repos/")
+	normalized = strings.TrimPrefix(normalized, "http://api.github.com/repos/")
+	normalized = strings.TrimPrefix(normalized, "github://repos/")
+	normalized = strings.TrimPrefix(normalized, "github://")
+	normalized = strings.TrimPrefix(normalized, "repo://")
+	normalized = strings.Trim(normalized, `.,;:"'()[]{} `)
+
+	parts := sourceTokenPattern.Split(normalized, -1)
+	tokens := map[string]bool{}
+	for _, part := range parts {
+		part = strings.Trim(part, "-_.")
+		if len(part) < 3 {
+			continue
+		}
+		tokens[part] = true
+	}
+	if len(parts) >= 2 {
+		owner := strings.Trim(parts[0], "-_.")
+		repo := strings.Trim(parts[1], "-_.")
+		if owner != "" && repo != "" {
+			tokens[owner+"/"+repo] = true
+		}
+	}
+	return tokens
+}
+
+func isCommitQuestion(message string) bool {
+	lower := strings.ToLower(message)
+	return strings.Contains(lower, "commit")
+}
+
+func hasCommitArtifact(artifacts []repository.IngestEvent) bool {
+	for _, artifact := range artifacts {
+		if strings.EqualFold(artifact.Metadata["object_type"], "commit") {
+			return true
+		}
+		if strings.Contains(strings.ToLower(artifact.SourceURI), "/commit/") {
+			return true
+		}
+	}
+	return false
 }
 
 func summarizeArtifacts(artifacts []repository.IngestEvent) string {

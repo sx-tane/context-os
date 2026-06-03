@@ -19,6 +19,7 @@ const REMOVED_WORKSPACES_KEY = "contextos_removed_workspaces";
 export const DEFAULT_WORKSPACE_PATH =
   import.meta.env.VITE_CONTEXTOS_DEFAULT_WORKSPACE?.trim() ||
   "contextos-default";
+export const DEMO_WORKSPACE_PATH = "contextos-demo";
 
 function getLocalStorage(): Storage | null {
   if (typeof localStorage === "undefined") return null;
@@ -36,6 +37,7 @@ function cleanWorkspacePath(path?: string): string {
 
 function loadProject(path: string): ProjectState {
   const cleanPath = cleanWorkspacePath(path);
+  if (cleanPath === DEMO_WORKSPACE_PATH) return demoProject();
   try {
     const storage = getLocalStorage();
     if (!storage) return defaultProject(cleanPath);
@@ -54,6 +56,38 @@ function defaultProject(path: string): ProjectState {
     name: cleanPath.split("/").filter(Boolean).pop() ?? "project",
     createdAt: new Date().toISOString(),
     connectors: [],
+  };
+}
+
+function demoProject(): ProjectState {
+  return {
+    workspacePath: DEMO_WORKSPACE_PATH,
+    name: "Demo Workspace",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    knowledgeInstalledAt: "2026-01-01T00:00:00.000Z",
+    connectors: [
+      {
+        connector: "github",
+        uri: "context-os/demo-api",
+        status: "ready",
+        lastIngestedAt: "2026-01-01T09:15:00.000Z",
+        eventCount: 18,
+      },
+      {
+        connector: "slack",
+        uri: "#launch-review",
+        status: "ready",
+        lastIngestedAt: "2026-01-01T09:20:00.000Z",
+        eventCount: 24,
+      },
+      {
+        connector: "jira",
+        uri: "DEMO",
+        status: "ready",
+        lastIngestedAt: "2026-01-01T09:25:00.000Z",
+        eventCount: 12,
+      },
+    ],
   };
 }
 
@@ -95,7 +129,7 @@ function saveMessages(path: string, messages: ChatMessage[]): void {
 }
 
 function loadWorkspacePaths(): string[] {
-  const paths = new Set<string>([DEFAULT_WORKSPACE_PATH]);
+  const paths = new Set<string>([DEMO_WORKSPACE_PATH, DEFAULT_WORKSPACE_PATH]);
   const removedPaths = loadRemovedWorkspacePaths();
   try {
     const storage = getLocalStorage();
@@ -142,7 +176,7 @@ function saveRemovedWorkspacePaths(paths: Set<string>): void {
 }
 
 function markWorkspaceRemoved(path: string): void {
-  if (!path || path === DEFAULT_WORKSPACE_PATH) return;
+  if (!path || path === DEFAULT_WORKSPACE_PATH || path === DEMO_WORKSPACE_PATH) return;
   const removed = loadRemovedWorkspacePaths();
   removed.add(path);
   saveRemovedWorkspacePaths(removed);
@@ -215,6 +249,7 @@ export function openProject(workspacePath: string): void {
   getLocalStorage()?.setItem(ACTIVE_WORKSPACE_KEY, cleanPath);
   _project.set(p);
   _messages.set(m);
+  if (cleanPath === DEMO_WORKSPACE_PATH) return;
   // Fire-and-forget: register workspace with the backend (non-blocking).
   upsertWorkspace(cleanPath, p.name).catch(() => {/* ignore offline */});
 }
@@ -242,6 +277,7 @@ export function addWorkspace(workspacePath: string, name?: string): void {
 
 /** Remove a workspace from local project, chat, source state, and the switcher. */
 export function removeWorkspace(workspacePath: string): void {
+  if (workspacePath === DEFAULT_WORKSPACE_PATH || workspacePath === DEMO_WORKSPACE_PATH) return;
   const storage = getLocalStorage();
   markWorkspaceRemoved(workspacePath);
   storage?.removeItem(STORAGE_KEY_PREFIX + workspacePath);

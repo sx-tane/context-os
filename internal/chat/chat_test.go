@@ -88,6 +88,87 @@ func TestQuerySupportsNonSlackConnectors(t *testing.T) {
 	}
 }
 
+// TestQueryInfersGitHubSourceFromConfiguredRepoName verifies repo slugs in messages constrain GitHub artifact queries to the matching synced source.
+func TestQueryInfersGitHubSourceFromConfiguredRepoName(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{
+		{
+			ID:          "evt-mirofish",
+			WorkspaceID: "ws1",
+			Connector:   "github",
+			SourceURI:   "sx-tane/MiroFish",
+			Title:       "sx-tane/MiroFish",
+			Body:        "Repository summary.",
+			IngestedAt:  time.Date(2026, 6, 2, 10, 0, 0, 0, time.UTC),
+		},
+		{
+			ID:          "evt-tourii",
+			WorkspaceID: "ws1",
+			Connector:   "github",
+			SourceURI:   "sx-tane/tourii-backend",
+			Title:       "sx-tane/tourii-backend",
+			Body:        "Tourii backend repository summary.",
+			IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+		},
+	}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/MiroFish", Status: "ready"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/tourii-backend", Status: "ready"},
+	}}
+	service := internalchat.NewService(fakeWorkspaces(), events, syncs)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "ok for tourii-backend can you give me more information",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.SourceURI != "sx-tane/tourii-backend" {
+		t.Fatalf("SourceURI = %q, want sx-tane/tourii-backend", result.SourceURI)
+	}
+	if events.lastQuery.SourceURI != "sx-tane/tourii-backend" {
+		t.Fatalf("query SourceURI = %q, want sx-tane/tourii-backend", events.lastQuery.SourceURI)
+	}
+	if len(result.Artifacts) != 1 {
+		t.Fatalf("artifact count = %d, want 1", len(result.Artifacts))
+	}
+	if strings.Contains(result.Answer, "MiroFish") {
+		t.Fatalf("Answer = %q, should not include another repository", result.Answer)
+	}
+}
+
+// TestQueryDoesNotPresentRepositoryArtifactAsLatestCommit verifies commit questions are honest when only repository-level GitHub data exists.
+func TestQueryDoesNotPresentRepositoryArtifactAsLatestCommit(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-tourii",
+		WorkspaceID: "ws1",
+		Connector:   "github",
+		SourceURI:   "sx-tane/tourii-backend",
+		Title:       "sx-tane/tourii-backend",
+		Body:        "Repository summary.",
+		Metadata:    map[string]string{"object_type": "repository"},
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/tourii-backend", Status: "ready"},
+	}}
+	service := internalchat.NewService(fakeWorkspaces(), events, syncs)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "what is the latest commit for tourii-backend",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if !strings.Contains(result.Answer, "I do not have local commit artifacts") {
+		t.Fatalf("Answer = %q, want commit artifact limitation", result.Answer)
+	}
+	if !strings.Contains(result.Answer, "sx-tane/tourii-backend") {
+		t.Fatalf("Answer = %q, want requested repository scope", result.Answer)
+	}
+}
+
 // TestQueryNoArtifactsDoesNotFallbackToFindings verifies source questions with no local data stay source-scoped.
 func TestQueryNoArtifactsDoesNotFallbackToFindings(t *testing.T) {
 	events := &fakeEventRepository{}
@@ -216,7 +297,9 @@ func (f *fakeEventRepository) Count(ctx context.Context, workspaceID, connector 
 	return len(f.events), nil
 }
 
-type fakeSyncRepository struct{}
+type fakeSyncRepository struct {
+	syncs []repository.ConnectorSync
+}
 
 func (f *fakeSyncRepository) Upsert(ctx context.Context, sync repository.ConnectorSync) error {
 	return nil
@@ -227,6 +310,9 @@ func (f *fakeSyncRepository) Get(ctx context.Context, workspaceID, connector, so
 }
 
 func (f *fakeSyncRepository) ListByWorkspace(ctx context.Context, workspaceID string) ([]repository.ConnectorSync, error) {
+	if len(f.syncs) > 0 {
+		return f.syncs, nil
+	}
 	return []repository.ConnectorSync{{WorkspaceID: workspaceID, Connector: "slack", SourceURI: "#team", Status: "idle"}}, nil
 }
 
