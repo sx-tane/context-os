@@ -2,6 +2,7 @@
     import { tick } from "svelte";
     import { isNearBottom, localDBStatusLine } from "$lib/chatController";
     import type { ChatMessage, ChatQueryResult } from "$lib/types";
+    import InlineText from "$lib/components/chat/InlineText.svelte";
     import {
         artifactLink,
         artifactSourceLabel,
@@ -23,6 +24,7 @@
 
     let messagesEl: HTMLDivElement | null = null;
     let composerForm: HTMLFormElement | null = null;
+    let composerTextarea: HTMLTextAreaElement | null = null;
     let stickToBottom = true;
     let expandedStreams: Record<string, boolean> = {};
     let lastMessageSignature = "";
@@ -81,7 +83,12 @@
         ];
         if (result.connector) pieces.push(`Connector: ${result.connector}`);
         if (result.source_uri) pieces.push(`Source: ${result.source_uri}`);
-        if (message.stream?.summary && message.stream.summary !== result.answer && message.stream.summary !== result.summary) {
+        if (
+            message.stream?.summary &&
+            message.stream.summary !== result.answer &&
+            message.stream.summary !== result.summary &&
+            !message.stream.summary.startsWith("Local DB:")
+        ) {
             pieces.push(`Stream: ${message.stream.summary}`);
         }
         pieces.push(`Artifacts: ${result.artifact_count ?? result.artifacts?.length ?? 0}`);
@@ -111,6 +118,17 @@
         }
         event.preventDefault();
         composerForm?.requestSubmit();
+    }
+
+    function resizeComposer() {
+        if (!composerTextarea) return;
+        composerTextarea.style.height = "auto";
+        composerTextarea.style.height = `${Math.min(composerTextarea.scrollHeight, 132)}px`;
+    }
+
+    $: if (composerTextarea) {
+        command;
+        void tick().then(resizeComposer);
     }
 </script>
 
@@ -143,13 +161,13 @@
                             {#if line.kind === "blank"}
                                 <div class="message-gap"></div>
                             {:else if line.kind === "heading"}
-                                <h4>{line.text}</h4>
+                                <h4><InlineText text={line.text} /></h4>
                             {:else if line.kind === "number"}
-                                <p class="number-line">{line.text}</p>
+                                <p class="number-line"><InlineText text={line.text} /></p>
                             {:else if line.kind === "bullet"}
-                                <p class="bullet-line">{line.text}</p>
+                                <p class="bullet-line"><InlineText text={line.text} /></p>
                             {:else}
-                                <p>{line.text}</p>
+                                <p><InlineText text={line.text} /></p>
                             {/if}
                         {/each}
                     </div>
@@ -263,11 +281,13 @@
         on:submit|preventDefault={onSubmit}
     >
         <textarea
+            bind:this={composerTextarea}
             bind:value={command}
             disabled={busy || !hasSources}
             placeholder={hasSources ? "Ask about PRs, Slack threads, findings, or recent activity..." : "Connect sources first..."}
             rows="2"
             on:keydown={handleComposerKeydown}
+            on:input={resizeComposer}
         ></textarea>
         <button class="send-icon" aria-label="Send message" title="Send" disabled={busy || !hasSources || command.trim() === ""}>↑</button>
     </form>
@@ -662,6 +682,7 @@
     .composer textarea {
         resize: none;
         min-width: 0;
+        min-height: 47px;
         max-height: 132px;
         border: 0;
         border-bottom: 1px solid #bdb7a8;

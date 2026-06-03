@@ -113,7 +113,7 @@ export function localDBStatusLine(result: ChatQueryResult | null | undefined) {
   if (!result?.evidence_save_status) return "";
   switch (result.evidence_save_status) {
     case "saved":
-      return `Local DB: saved ${artifactCountLabel(result.evidence_event_count ?? 0)}`;
+      return `Local DB: saved ${artifactCountLabel(result.evidence_event_count ?? 0)}${result.evidence_graph_status === "updated" ? "; graph updated" : ""}`;
     case "saving":
       return "Local DB: saving source evidence...";
     case "skipped":
@@ -393,9 +393,16 @@ type PendingLiveRoute = {
 };
 
 function inferLiveRoute(text: string): PendingLiveRoute {
+  if (hasDriveFileName(text)) {
+    return { connector: "googledrive", sourceURI: "" };
+  }
   const sourceURI = inferSourceURI(text);
   const connector = inferConnector(text, sourceURI);
   return { connector, sourceURI };
+}
+
+function hasDriveFileName(text: string) {
+  return /\.(xlsx|xls|gsheet|gdoc|gslides|docx|pptx)\b/i.test(text);
 }
 
 function inferSourceURI(text: string) {

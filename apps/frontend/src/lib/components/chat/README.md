@@ -6,7 +6,8 @@ Svelte components for the main local chat thread.
 
 | File | Purpose |
 | --- | --- |
-| `ChatPanel.svelte` | Renders the homepage report-agent pane, compact stream progress, source traces, message evidence previews, findings previews, and composer. |
+| `ChatPanel.svelte` | Renders the homepage report-agent pane, compact stream progress, safe Markdown text, source traces, message evidence previews, findings previews, and composer. |
+| `InlineText.svelte` | Renders inline links, raw URLs, code, and bold text without using raw HTML injection. |
 | `ChatInput.svelte` | Captures and submits the user's chat message. |
 | `ChatMessage.svelte` | Renders one chat message and its metadata. |
 | `ChatThread.svelte` | Renders the message list and scrolls to the latest message after updates. |
@@ -19,7 +20,9 @@ Pending query progress lives in `ChatMessage.stream` instead of the answer text.
 
 The composer uses a wrapping textarea so long prompts move onto new lines instead of stretching horizontally. Enter inserts a line break, the send button submits, and Ctrl/Cmd+Enter submits from the keyboard.
 
-Query answers always render the answer first, then a lightweight Local DB save status when the backend reports `evidence_save_status`, then a source trace with provider, connector, source URI, non-duplicative stream summary, and artifact count. Artifact evidence details remain available when `chatResult.artifacts.length > 0`. Live Codex answers without artifacts are labeled as a live source trace; a separate `Local DB: saved ...`, `skipped ...`, or `save failed ...` line tells the user whether the live answer evidence was persisted.
+Query answers always render the answer first, then a lightweight Local DB save status when the backend reports `evidence_save_status`, then a source trace with provider, connector, source URI, non-duplicative stream summary, and artifact count. Artifact evidence details remain available when `chatResult.artifacts.length > 0`. Live Codex answers without artifacts are labeled as a live source trace; a separate `Local DB: saved ...; graph updated`, `skipped ...`, or `save failed ...` line tells the user whether the live answer evidence was persisted and whether Graph updated. Findings are not refreshed from chat saves.
+
+Chat message text preserves Japanese and other non-English content. Markdown rendering is intentionally small and safe: headings, bullets, numbered lines, raw URLs, Markdown links, inline code, and bold spans render as structured Svelte nodes rather than raw HTML.
 
 The message list follows new messages only while the user is already near the bottom of the thread. If the user scrolls upward during a long Codex stream, the pane preserves their viewport instead of jumping to the newest progress line.
 

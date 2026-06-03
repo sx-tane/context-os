@@ -50,10 +50,10 @@ describe("messageLines", () => {
     ]);
   });
 
-  it("prefers the English side of bilingual lines and drops Han-only lines", () => {
+  it("preserves bilingual and Japanese lines", () => {
     expect(messageLines("English / 中文\n中文")).toEqual([
-      { kind: "body", text: "English" },
-      { kind: "blank", text: "" },
+      { kind: "body", text: "English / 中文" },
+      { kind: "body", text: "中文" },
     ]);
   });
 });

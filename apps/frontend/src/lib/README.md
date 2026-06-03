@@ -82,7 +82,7 @@ Central type registry for the frontend.
 | `WorkspaceSyncState`        | Connector sync or connected-source registry row; `status: "connected"` means setup saved a live external source without ingesting it locally. |
 | `ArtifactList`              | API response for local ingested source artifacts.                                    |
 | `ChatQueryRequest`          | Request body for source chat queries.                                                |
-| `ChatQueryResult`           | Chat answer with intent, provider, answer text, artifact evidence, range, and sync state. |
+| `ChatQueryResult`           | Chat answer with intent, provider, answer text, artifact evidence, range, sync state, live evidence save status, and graph update status. |
 | `ChatStreamState`           | Frontend-only live query stream transcript with latest line, status, optional summary, and collapsed/expanded preference. |
 | `GraphRelationship`         | Persisted graph edge exposed by `/graph`, including source and evidence identifiers. |
 | `GraphData`                 | Graph response with flattened entities, relationships, and summary stats.            |
@@ -105,7 +105,7 @@ Owns the homepage analysis execution loop. It runs ready sources one at a time, 
 
 Owns homepage chat command routing and source query execution. The route passes callbacks for Svelte state/store updates, while this module handles command classification, chat message construction, demo query answers, backend `streamChatQuery`, non-streaming `postChatQuery` fallback, and source-query error messages.
 
-The loading stream intentionally names both live Codex sources and the local DB because plugin-backed source questions ask live context first, then use persisted artifacts as fallback and evidence history. `runChatQuery` reuses that inferred route for the request body, so concrete prompts such as `BKGDEV-8466 check this` send `connector: "jira"` and `source_uri: "BKGDEV-8466"` to both stream and fallback routes. During `/chat/query/stream`, Codex-style `›` and `•` progress lines update `ChatMessage.stream` while `ChatMessage.text` remains reserved for the answer. Final streamed results attach the `ChatQueryResult`, mark the stream complete, and keep a compact Local DB save summary for the chat panel. If the stream fails after an early answer, the answer remains visible and the UI reports the Local DB save failure instead of marking the live lookup failed. Saved evidence refreshes workspace Activity immediately; Graph and Findings stay unchanged until analysis runs.
+The loading stream intentionally names both live Codex sources and the local DB because plugin-backed source questions ask live context first, then use persisted artifacts as fallback and evidence history. `runChatQuery` reuses that inferred route for the request body, so concrete prompts such as `BKGDEV-8466 check this` send `connector: "jira"` and `source_uri: "BKGDEV-8466"` to both stream and fallback routes. Spreadsheet filename prompts such as `BKGDEV-8096_帳票項目のマッピング確認.xlsx ... Jira ... Slack` send `connector: "googledrive"` without forcing a Jira source URI, letting the backend save concrete Drive/Jira/Slack provenance from the returned answer. During `/chat/query/stream`, Codex-style `›` and `•` progress lines update `ChatMessage.stream` while `ChatMessage.text` remains reserved for the answer. Final streamed results attach the `ChatQueryResult`, mark the stream complete, and keep a compact Local DB save summary such as `Local DB: saved 8 artifacts; graph updated` for the chat panel. If the stream fails after an early answer, the answer remains visible and the UI reports the Local DB save failure instead of marking the live lookup failed. Saved evidence refreshes workspace Activity and Graph immediately; Findings stay unchanged until analysis runs.
 
 ---
 
@@ -117,7 +117,7 @@ Provides the protected `contextos-demo` workspace records used by the homepage w
 
 ## findingsViewModel.ts
 
-Keeps presentation-only formatting outside the route and insight components: severity labels, finding text fallbacks, message line parsing, artifact origin/provider labels, artifact source link extraction, preview truncation, and timestamp formatting.
+Keeps presentation-only formatting outside the route and insight components: severity labels, finding text fallbacks, message line parsing, artifact origin/provider labels, artifact source link extraction, preview truncation, and timestamp formatting. Chat line parsing preserves Japanese and other non-English content; inline Markdown rendering is handled by the chat components without raw HTML injection.
 
 ---
 

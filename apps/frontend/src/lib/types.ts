@@ -303,6 +303,9 @@ export interface ChatQueryResult {
   evidence_save_status?: "skipped" | "saving" | "saved" | "error" | string;
   evidence_event_count?: number;
   evidence_save_error?: string;
+  evidence_graph_status?: "updated" | "unchanged" | string;
+  evidence_graph_entity_count?: number;
+  evidence_graph_relationship_count?: number;
 }
 
 // ---- Graph types ----

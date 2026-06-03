@@ -69,21 +69,21 @@ export function findingImpact(mismatch: FindingsMismatch | unknown) {
 
 export function messageLines(text: string): MessageLine[] {
   return text.split("\n").map((line) => {
-    const trimmed = preferEnglishLine(line).trim();
+    const trimmed = line.replace(/\r/g, "").trim();
     if (trimmed === "") return { kind: "blank", text: "" };
     if (/^\*\*[^*]+\*\*$/.test(trimmed)) {
       return { kind: "heading", text: cleanMarkdown(trimmed) };
     }
     if (/^\d+\.\s+/.test(trimmed)) {
-      return { kind: "number", text: cleanMarkdown(trimmed) };
+      return { kind: "number", text: trimmed };
     }
     if (/^[-*]\s+/.test(trimmed)) {
       return {
         kind: "bullet",
-        text: cleanMarkdown(trimmed.replace(/^[-*]\s+/, "")),
+        text: trimmed.replace(/^[-*]\s+/, ""),
       };
     }
-    return { kind: "body", text: cleanMarkdown(trimmed) };
+    return { kind: "body", text: trimmed };
   });
 }
 
@@ -139,18 +139,4 @@ export function artifactLink(artifact: Artifact) {
     if (match) return match[0].replace(/[.,;]+$/, "");
   }
   return "";
-}
-
-function preferEnglishLine(line: string) {
-  const cleaned = line.replace(/\r/g, "");
-  const delimiterIndex = cleaned.indexOf(" / ");
-  if (delimiterIndex >= 0) {
-    return cleaned.slice(0, delimiterIndex).trim();
-  }
-  const containsHan = /[\u4e00-\u9fff]/.test(cleaned);
-  const hasAsciiAlpha = /[A-Za-z]/.test(cleaned);
-  if (containsHan && !hasAsciiAlpha) {
-    return "";
-  }
-  return cleaned;
 }

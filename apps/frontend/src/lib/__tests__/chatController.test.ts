@@ -122,6 +122,7 @@ describe("stream helpers", () => {
 
   it("builds compact Local DB status lines for evidence saves", () => {
     expect(localDBStatusLine(makeChatResult({ evidence_save_status: "saved", evidence_event_count: 1 }))).toBe("Local DB: saved 1 artifact");
+    expect(localDBStatusLine(makeChatResult({ evidence_save_status: "saved", evidence_event_count: 2, evidence_graph_status: "updated" }))).toBe("Local DB: saved 2 artifacts; graph updated");
     expect(localDBStatusLine(makeChatResult({ connector: "jira", source_uri: "jira", evidence_save_status: "skipped" }))).toBe("Local DB: skipped broad jira scope");
     expect(localDBStatusLine(makeChatResult({ evidence_save_status: "error", evidence_save_error: "offline" }))).toBe("Local DB: save failed: offline");
   });
@@ -219,6 +220,7 @@ describe("runChatQuery", () => {
         artifacts: [],
         evidence_save_status: "saved",
         evidence_event_count: 2,
+        evidence_graph_status: "updated",
       });
     });
     const state = makeState();
@@ -249,7 +251,7 @@ describe("runChatQuery", () => {
     expect(state.lastChatResult?.evidence_save_status).toBe("saved");
     expect(state.replacements.at(-1)?.text).toBe("Live answer");
     expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
-    expect(state.replacements.at(-1)?.stream?.summary).toBe("Local DB: saved 2 artifacts");
+    expect(state.replacements.at(-1)?.stream?.summary).toBe("Local DB: saved 2 artifacts; graph updated");
     expect(state.refreshWorkspace).toHaveBeenCalled();
   });
 
@@ -287,6 +289,39 @@ describe("runChatQuery", () => {
       source_uri: "BKGDEV-8466",
     });
     expect(state.lastChatResult?.source_uri).toBe("BKGDEV-8466");
+  });
+
+  it("sends Google Drive connector scope for spreadsheet filename prompts with Jira and Slack words", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({
+        connector: "googledrive",
+        source_uri: "googledrive",
+        provider: "codex",
+      }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "BKGDEV-8096_帳票項目のマッピング確認.xlsx のJiraとSlackを確認して",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      connector: "googledrive",
+    });
+    expect(mockStreamChatQuery.mock.calls[0][0].source_uri).toBeUndefined();
+    expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({
+      connector: "googledrive",
+    });
+    expect(mockPostChatQuery.mock.calls[0][0].source_uri).toBeUndefined();
   });
 
   it("keeps the answer when the stream fails after an early answer", async () => {

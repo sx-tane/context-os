@@ -9,7 +9,7 @@
     let value = "";
 
     function handleKeyDown(e: KeyboardEvent) {
-        if (e.key === "Enter" && !e.shiftKey) {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             submit();
         }
@@ -56,6 +56,7 @@
         line-height: 1.4;
         outline: none;
         transition: border-color 0.15s;
+        min-height: 2.4rem;
         max-height: 8rem;
         overflow-y: auto;
     }
