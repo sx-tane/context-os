@@ -89,6 +89,7 @@ runConnectorIngest(options: IngestRunnerOptions): Promise<void>
 | Field                                                             | Purpose                                                                                                                         |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `connector`                                                       | Which `ConnectorKind` to call.                                                                                                  |
+| `workspace_id`                                                    | Optional workspace path or ID forwarded to direct and Codex ingest requests so backend persistence is workspace-scoped.         |
 | `uri`, `token`, `content`, `cursor`, `metadata`                   | Ingest payload fields.                                                                                                          |
 | `provider`                                                        | `"codex"` routes through `streamCodexIngest`; anything else uses `postIngest`.                                                  |
 | `setLoading`, `setError`, `setResult`, `setLiveLog`, `setElapsed` | Svelte reactive setters the runner calls as state changes.                                                                      |
@@ -103,6 +104,8 @@ provider !== "codex"  →  postIngest  →  result or error body
 ```
 
 A `setInterval` timer increments `elapsed` every second during Codex streaming and is cleared in `finally`.
+
+Connector components should pass the current `$project.workspacePath` as `workspace_id` so all ingest providers write to the active workspace.
 
 ---
 

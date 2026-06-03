@@ -21,6 +21,7 @@ device-auth login, and plugin re-authentication flows.
 
 ## Private helpers
 
+- `sourceDiscoveryTimeout` - bounds Codex source discovery at 5 minutes so slower plugin reads can complete while still surfacing a deterministic timeout.
 - `resolveCodexBin()` — locates the Codex binary, falling back to nvm paths.
 - `runCodexInfo(args…)` — runs Codex with a 5-second timeout, captures combined output.
 - `runCodexSSE(ctx, sw, binary, args…)` — streams a Codex sub-command to an `SSEWriter` with a 3-minute timeout.
@@ -30,6 +31,8 @@ device-auth login, and plugin re-authentication flows.
 ## Notes
 
 `codex plugin add` has no `--device-auth` flag. `PluginReauth` sets `BROWSER=echo` in the subprocess environment so the CLI prints the OAuth URL to stdout instead of opening a browser on the server. The URL appears in the SSE log.
+
+Codex source discovery uses the longer `sourceDiscoveryTimeout` because plugin-backed source listing can take longer than normal status checks. Timeout errors include the configured duration.
 
 > **Frontend reauth UI is not currently wired.** The `/codex/plugin-reauth` endpoint is fully functional but the frontend button has been removed. To reconnect a plugin to a different account, run in your terminal:
 >

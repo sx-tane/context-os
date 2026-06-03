@@ -4,6 +4,8 @@ Svelte components that render individual source-connector forms and identity bad
 
 ## Components
 
+All ingesting connector components read the active workspace from `$lib/projectStore` and pass `$project.workspacePath` to `runConnectorIngest` as `workspace_id`. This keeps direct and Codex-backed ingest persistence scoped to the workspace selected in the frontend.
+
 ### ConnectorCard
 
 Generic layout shell for any connector section.
@@ -37,6 +39,8 @@ Generic connector form for `DirectSourceConnectorKind` connectors (currently fil
 
 Internally calls `runConnectorIngest` for server-path ingest and `postFilesystemUpload` directly for file/folder uploads. Manages its own `AbortController` and cleans up on `onDestroy`.
 
+Server-path ingest forwards the active workspace path through `workspace_id`; file and folder uploads use the upload endpoint directly.
+
 ---
 
 ### GitHubConnector
@@ -45,6 +49,7 @@ Connector form for GitHub repository/issue ingestion via the Codex GitHub plugin
 
 - **Codex mode**: streams SSE through `streamCodexIngest`; shows a live log via `LogPanel`.
 - **Token mode**: calls `postIngest` with the provided token.
+- Both modes include the active workspace path in the ingest request.
 - URI format: `github://<owner>/<repo>` or an issue/PR URL.
 
 ---
@@ -55,6 +60,7 @@ Connector form for Jira/Rovo ingestion via the Atlassian Rovo Codex plugin or di
 
 - **Codex (Rovo) mode**: SSE stream; plugin must be installed and enabled.
 - **Token mode**: `postIngest` with `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` sourced from env or the token field.
+- Both modes include the active workspace path in the ingest request.
 - URI format: `jira://<host>/issue/<KEY>` or a JQL query string.
 
 ---
@@ -65,6 +71,7 @@ Connector form for Slack channel/message ingestion via the Codex Slack plugin or
 
 - **Codex mode**: SSE stream.
 - **Token mode**: `postIngest` with the bot token.
+- Both modes include the active workspace path in the ingest request.
 - URI format: `slack://<workspace>/<channel-id>` or a Slack message permalink.
 
 ---
@@ -75,6 +82,7 @@ Connector form for Notion page/database ingestion via the Notion Codex plugin or
 
 - **Codex mode**: SSE stream; plugin must be installed and enabled.
 - **Token mode**: `postIngest` with `NOTION_TOKEN` sourced from env or the token field.
+- Both modes include the active workspace path in the ingest request.
 - URI formats: `notion://page/<id>`, `notion://database/<id>`, or a `notion.so` URL.
 
 ---
@@ -85,6 +93,7 @@ Connector form for SharePoint and OneDrive file ingestion via the SharePoint Cod
 
 - **Codex mode**: SSE stream; plugin must be installed and enabled.
 - **Token/credentials mode**: `postIngest` with access token OR tenant/client/secret fields.
+- Both modes include the active workspace path in the ingest request.
 - URI formats: `sharepoint://sites/<siteId>/items/<itemId>`, `sharepoint://drives/<driveId>/items/<itemId>`.
 
 ---

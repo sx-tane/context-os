@@ -13,3 +13,4 @@ Routes under `/presentation/*` expose graph-backed role summaries for PMO, prese
 
 - Execution evidence is assistive and never replaces deterministic mismatch evidence.
 - The endpoint preserves mismatch IDs, confidence, impact, severity, evidence, and recommended next actions for API/UI stability.
+- Sync cursor and audit writes use a detached 30 second `presentationWriteTimeout` context so client cancellation does not interrupt operational persistence after findings complete.
