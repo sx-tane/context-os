@@ -1,5 +1,5 @@
 jest.mock("$lib/api");
-jest.mock("$lib/projectStore", () => ({
+jest.mock("$lib/workspace/projectStore", () => ({
   DEMO_WORKSPACE_PATH: "contextos-demo",
 }));
 
@@ -7,7 +7,7 @@ import {
   analysisProvider,
   buildAnalysisProgress,
   runAnalysis,
-} from "../analysisRunner";
+} from "../findings/analysisRunner";
 
 import { postFindings } from "$lib/api";
 import type { ConnectorKnowledge, FindingsResult } from "../types";

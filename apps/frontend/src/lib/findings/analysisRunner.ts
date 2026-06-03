@@ -3,16 +3,16 @@ import {
   aggregateFindings,
   buildFindingsRunSummary,
   type FindingsFailure,
-} from "$lib/findingsAggregator";
-import { DEMO_WORKSPACE_PATH } from "$lib/projectStore";
+} from "$lib/findings/aggregator";
+import { DEMO_WORKSPACE_PATH } from "$lib/workspace/projectStore";
 import type {
   ChatMessage,
   ConnectorKind,
   ConnectorKnowledge,
   FindingsResult,
 } from "$lib/types";
-import { demoFindings } from "$lib/demoWorkspace";
-import { assistantMsg, loadingMsg, progressMsg } from "$lib/chatController";
+import { demoFindings } from "$lib/chat/demoWorkspace";
+import { assistantMsg, loadingMsg, progressMsg } from "$lib/chat/controller";
 
 export type AnalysisSourceStatus = {
   connector: ConnectorKind;

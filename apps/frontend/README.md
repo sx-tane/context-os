@@ -54,7 +54,7 @@ Use the current restrained mono theme: warm background, separator-based rows, pa
 
 ## Project Store
 
-`src/lib/projectStore.ts` — Svelte writable store persisted to `localStorage`:
+`src/lib/workspace/projectStore.ts` — Svelte writable store persisted to `localStorage`:
 - `project` — project metadata, connectors, knowledge install timestamp.
 - `chatMessages` — chat history (last 200 messages).
 - `openProject(path)` — switch workspace.
@@ -66,14 +66,14 @@ Use the current restrained mono theme: warm background, separator-based rows, pa
 
 ```mermaid
 flowchart TD
-    CHAT[/ product workspace] --> STORE[projectStore.ts]
+    CHAT[/ product workspace] --> STORE[workspace/projectStore.ts]
     CHAT --> CMDS[Chat command router]
     CMDS --> QUERY[postChatQuery]
     CMDS --> INGEST[runConnectorIngest]
     KI --> SOURCE[postWorkspaceSource]
     CMDS --> FINDINGS[postFindings]
     CHAT --> GRAPH[getGraphData]
-    INGEST --> API[api.ts]
+    INGEST --> API[api/index.ts]
     QUERY --> API
     FINDINGS --> API
     GRAPH --> API

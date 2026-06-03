@@ -275,6 +275,28 @@ export interface ArtifactList {
   artifacts: Artifact[];
 }
 
+export interface ActivityCleanupResult {
+  workspace_id: string;
+  workspace_path: string;
+  matched_count: number;
+  deleted_count: number;
+  deleted_ids: string[];
+}
+
+export interface AnswerSection {
+  source_label: string;
+  connector?: string;
+  source_uri?: string;
+  summary?: string;
+  facts?: string[];
+  open_items?: string[];
+  coding_notes?: string[];
+  links?: string[];
+  timestamps?: string[];
+  confidence?: number;
+  status?: string;
+}
+
 export interface ChatQueryRequest {
   workspace_id: string;
   workspace_path?: string;
@@ -295,6 +317,7 @@ export interface ChatQueryResult {
   provider: "local" | "codex" | string;
   answer: string;
   summary: string;
+  answer_sections?: AnswerSection[];
   range_start?: string;
   range_end?: string;
   artifact_count: number;

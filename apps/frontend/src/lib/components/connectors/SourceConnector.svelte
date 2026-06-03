@@ -7,8 +7,8 @@
     SupportedFormat,
   } from "$lib/types";
   import { postFilesystemUpload } from "$lib/api";
-  import { project } from "$lib/projectStore";
-  import { runConnectorIngest } from "$lib/ingestRunner";
+  import { project } from "$lib/workspace/projectStore";
+  import { runConnectorIngest } from "$lib/ingest/runner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import ResultPanel from "../feedback/IngestResult.svelte";
   import Button from "../ui/Button.svelte";

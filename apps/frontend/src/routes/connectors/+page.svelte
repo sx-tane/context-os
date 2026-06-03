@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import type { ServiceStatus, CodexPlugin } from "$lib/types";
     import { API_URL, apiFetch, probeService, streamCodexLogin } from "$lib/api";
-    import { sourceConnectorConfigs } from "$lib/sourceConnectorConfigs";
+    import { sourceConnectorConfigs } from "$lib/connectors/sourceConnectorConfigs";
     import StatusSection from "$lib/components/feedback/StatusSection.svelte";
     import GitHubConnector from "$lib/components/connectors/GitHubConnector.svelte";
     import GoogleDriveConnector from "$lib/components/connectors/GoogleDriveConnector.svelte";

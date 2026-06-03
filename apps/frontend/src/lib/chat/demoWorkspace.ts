@@ -5,7 +5,7 @@ import type {
   GraphData,
   WorkspaceStatus,
 } from "$lib/types";
-import { DEMO_WORKSPACE_PATH } from "$lib/projectStore";
+import { DEMO_WORKSPACE_PATH } from "$lib/workspace/projectStore";
 
 export function demoWorkspaceStatus(): WorkspaceStatus {
   return {

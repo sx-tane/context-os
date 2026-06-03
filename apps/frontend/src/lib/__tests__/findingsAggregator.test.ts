@@ -2,7 +2,7 @@ import {
   aggregateFindings,
   buildFindingsRunSummary,
   type FindingsFailure,
-} from "../findingsAggregator";
+} from "../findings/aggregator";
 
 describe("aggregateFindings", () => {
   it("merges mismatches and sums counts across multiple findings responses", () => {

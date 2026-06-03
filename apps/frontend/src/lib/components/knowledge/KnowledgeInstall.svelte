@@ -26,7 +26,7 @@
         setConnectorKnowledge,
         markKnowledgeInstalled,
         project,
-    } from "$lib/projectStore";
+    } from "$lib/workspace/projectStore";
 
     export let codexLoggedIn: boolean;
     export let codexPlugins: CodexPlugin[];

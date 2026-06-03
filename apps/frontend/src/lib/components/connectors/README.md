@@ -4,7 +4,7 @@ Svelte components that render individual source-connector forms and identity bad
 
 ## Components
 
-All ingesting connector components read the active workspace from `$lib/projectStore` and pass `$project.workspacePath` to `runConnectorIngest` as `workspace_id`. This keeps direct and Codex-backed ingest persistence scoped to the workspace selected in the frontend.
+All ingesting connector components read the active workspace from `$lib/workspace/projectStore` and pass `$project.workspacePath` to `runConnectorIngest` as `workspace_id`. This keeps direct and Codex-backed ingest persistence scoped to the workspace selected in the frontend.
 
 ### ConnectorCard
 

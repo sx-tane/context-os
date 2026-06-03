@@ -1,6 +1,6 @@
 import { postChatQuery, streamChatQuery } from "$lib/api";
-import { demoChatQueryResult } from "$lib/demoWorkspace";
-import { DEMO_WORKSPACE_PATH } from "$lib/projectStore";
+import { demoChatQueryResult } from "$lib/chat/demoWorkspace";
+import { DEMO_WORKSPACE_PATH } from "$lib/workspace/projectStore";
 import type { Artifact, ChatMessage, ChatQueryResult, ChatStreamState } from "$lib/types";
 
 export type ChatCommandAction =

@@ -2,8 +2,8 @@
     import { onDestroy, onMount } from "svelte";
     import type { CodexPlugin, IngestProvider, IngestResult } from "$lib/types";
     import { getJSON } from "$lib/api";
-    import { project } from "$lib/projectStore";
-    import { runConnectorIngest } from "$lib/ingestRunner";
+    import { project } from "$lib/workspace/projectStore";
+    import { runConnectorIngest } from "$lib/ingest/runner";
     import ConnectorCard from "./ConnectorCard.svelte";
     import CodexBadge from "./CodexBadge.svelte";
     import ResultPanel from "../feedback/IngestResult.svelte";

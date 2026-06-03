@@ -1,4 +1,4 @@
-jest.mock("$lib/projectStore", () => ({
+jest.mock("$lib/workspace/projectStore", () => ({
   DEMO_WORKSPACE_PATH: "contextos-demo",
 }));
 
@@ -8,7 +8,7 @@ import {
   demoFindings,
   demoGraphData,
   demoWorkspaceStatus,
-} from "../demoWorkspace";
+} from "../chat/demoWorkspace";
 
 describe("demoWorkspaceStatus", () => {
   it("exposes a local-only demo workspace with ready source syncs", () => {

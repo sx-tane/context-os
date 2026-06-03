@@ -1,5 +1,5 @@
 jest.mock("$lib/api");
-jest.mock("$lib/projectStore", () => ({
+jest.mock("$lib/workspace/projectStore", () => ({
   DEMO_WORKSPACE_PATH: "contextos-demo",
 }));
 
@@ -14,7 +14,7 @@ import {
   localDBStatusLine,
   runChatQuery,
   userMsg,
-} from "../chatController";
+} from "../chat/controller";
 
 import { postChatQuery, streamChatQuery } from "$lib/api";
 import type { ChatQueryResult } from "$lib/types";

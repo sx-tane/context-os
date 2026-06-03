@@ -690,7 +690,7 @@ describe("deleteWorkspace", () => {
     await expect(deleteWorkspace("/proj")).resolves.toEqual({
       ok: false,
       status: 0,
-      message: "API is unreachable. Removed locally only.",
+      message: "API is unreachable. Nothing was removed.",
     });
   });
 });

@@ -13,6 +13,7 @@
     import {
         API_URL,
         apiFetch,
+        cleanupLiveEvidence,
         deleteWorkspace,
         getArtifacts,
         getGraphData,
@@ -34,7 +35,7 @@
         replaceMessage,
         removeWorkspace,
         workspaces,
-    } from "$lib/projectStore";
+    } from "$lib/workspace/projectStore";
     import ChatPanel from "$lib/components/chat/ChatPanel.svelte";
     import ConfirmModal from "$lib/components/ConfirmModal.svelte";
     import ActivityView from "$lib/components/insights/ActivityView.svelte";
@@ -47,15 +48,15 @@
         demoFindings,
         demoGraphData,
         demoWorkspaceStatus,
-    } from "$lib/demoWorkspace";
-    import { buildGraphLinks } from "$lib/graphViewModel";
-    import { runAnalysis } from "$lib/analysisRunner";
+    } from "$lib/chat/demoWorkspace";
+    import { buildGraphLinks } from "$lib/graph/viewModel";
+    import { runAnalysis } from "$lib/findings/analysisRunner";
     import {
         assistantMsg,
         classifyChatCommand,
         runChatQuery,
         userMsg,
-    } from "$lib/chatController";
+    } from "$lib/chat/controller";
 
     let apiStatus: ServiceStatus = "checking";
     let workerStatus: ServiceStatus = "checking";
@@ -198,12 +199,28 @@
             getGraphData(workspacePath),
             getArtifacts({
                 workspace_id: workspacePath,
-                limit: 12,
+                limit: 100,
             }),
         ]);
         if (runID !== workspaceRefreshRunID) return;
         graphData = nextGraphData;
         activityArtifacts = artifacts?.artifacts ?? [];
+    }
+
+    async function cleanNoisyLiveEvidence() {
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            return "Demo Activity is read-only.";
+        }
+        const result = await cleanupLiveEvidence(workspacePath);
+        if (!result.ok) {
+            throw new Error(
+                result.body.message ??
+                    result.body.error ??
+                    "Activity cleanup failed.",
+            );
+        }
+        await refreshWorkspace();
+        return `Removed ${result.body.deleted_count} noisy live evidence event${result.body.deleted_count === 1 ? "" : "s"}.`;
     }
 
     async function switchWorkspace(path: string) {
@@ -633,7 +650,10 @@
                         {hasSources}
                     />
                 {:else}
-                    <ActivityView {recentArtifacts} />
+                    <ActivityView
+                        {recentArtifacts}
+                        onCleanupNoisyLiveEvidence={cleanNoisyLiveEvidence}
+                    />
                 {/if}
             </section>
         </section>
@@ -663,7 +683,7 @@
         <ConfirmModal
             eyebrow="DELETE WORKSPACE"
             title="Remove this workspace?"
-            description="This clears local chat, selected sources, source readiness, graph state, and project state for "
+            description="This deletes database memory, analysis results, graph snapshots, parsed local JSON, chat, selected sources, and project state for "
             detail={workspacePendingRemoval}
             confirmLabel="Delete"
             busyLabel="Deleting"

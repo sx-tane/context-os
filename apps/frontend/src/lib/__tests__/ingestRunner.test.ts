@@ -1,4 +1,4 @@
-import { runConnectorIngest } from "../ingestRunner";
+import { runConnectorIngest } from "../ingest/runner";
 
 jest.mock("$lib/api");
 

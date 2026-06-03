@@ -11,7 +11,7 @@
         relationshipLabel,
         topGraphEntity,
         typeAccentStyle,
-    } from "$lib/graphViewModel";
+    } from "$lib/graph/viewModel";
 
     export let graphData: GraphData | null = null;
     export let selectedEntity: GraphEntity | null = null;

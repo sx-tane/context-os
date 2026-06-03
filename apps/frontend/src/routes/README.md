@@ -38,8 +38,8 @@ Controls should use the same restrained mono theme:
 
 - Define page-level data flow and actions.
 - Compose workspace switching, source setup, chat, graph, findings, and activity views.
-- Keep insight tab rendering in `$lib/components/insights` and pure display helpers in `$lib/*ViewModel.ts` so the route remains focused on orchestration.
-- Delegate chat command/query execution to `$lib/chatController.ts` and analysis source execution to `$lib/analysisRunner.ts`; the route should only wire Svelte state/store callbacks.
+- Keep insight tab rendering in `$lib/components/insights` and pure display helpers in `$lib/findings/viewModel` plus `$lib/graph/viewModel` so the route remains focused on orchestration.
+- Delegate chat command/query execution to `$lib/chat/controller` and analysis source execution to `$lib/findings/analysisRunner`; the route should only wire Svelte state/store callbacks.
 - Keep route state transitions understandable and testable.
 
 ## Maintenance Checklist

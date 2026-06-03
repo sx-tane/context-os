@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   ArtifactList,
+  ActivityCleanupResult,
   ChatQueryRequest,
   ChatQueryResult,
   CodexConnectorKind,
@@ -22,7 +23,7 @@ import {
   logAPIRequestError,
   logAPIRequestStart,
   prepareAPIRequest,
-} from "$lib/logger";
+} from "$lib/api/logger";
 
 export const API_URL = "/api";
 
@@ -422,7 +423,7 @@ export async function deleteWorkspace(path: string): Promise<DeleteWorkspaceResu
     return {
       ok: false,
       status: 0,
-      message: "API is unreachable. Removed locally only.",
+      message: "API is unreachable. Nothing was removed.",
     };
   }
 }
@@ -569,6 +570,43 @@ export async function getArtifacts(params: {
     return (await readJSON(res)) as unknown as ArtifactList;
   } catch {
     return null;
+  }
+}
+
+/** Delete explicitly selected old noisy live-chat evidence artifacts. */
+export async function cleanupLiveEvidence(
+  workspaceID: string,
+): Promise<
+  | { ok: true; status: number; body: ActivityCleanupResult }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  try {
+    const res = await apiFetch(
+      `${API_URL}/artifacts/live-evidence/cleanup?workspace_id=${encodeURIComponent(workspaceID)}`,
+      { method: "POST" },
+    );
+    const responseBody = await readJSON(res);
+    if (res.ok) {
+      return {
+        ok: true,
+        status: res.status,
+        body: responseBody as unknown as ActivityCleanupResult,
+      };
+    }
+    return {
+      ok: false,
+      status: res.status,
+      body: responseBody,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message: "API is unreachable. Activity cleanup did not run.",
+      },
+    };
   }
 }
 

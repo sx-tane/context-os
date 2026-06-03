@@ -8,7 +8,7 @@
         findingRecommendedAction,
         findingSummary,
         severityLabel,
-    } from "$lib/findingsViewModel";
+    } from "$lib/findings/viewModel";
 
     export let lastFindings: FindingsResult | null = null;
     export let lastAnalysisAt = "";

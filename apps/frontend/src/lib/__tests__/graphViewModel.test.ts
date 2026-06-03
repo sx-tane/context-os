@@ -6,7 +6,7 @@ import {
   linkedIdsForEntity,
   relationshipLabel,
   topGraphEntity,
-} from "../graphViewModel";
+} from "../graph/viewModel";
 
 import type { GraphEntity, GraphRelationship } from "../types";
 

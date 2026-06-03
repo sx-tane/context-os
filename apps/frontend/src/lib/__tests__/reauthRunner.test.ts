@@ -1,4 +1,4 @@
-import { runCodexReauth } from "../reauthRunner";
+import { runCodexReauth } from "../ingest/reauthRunner";
 
 jest.mock("$lib/api");
 

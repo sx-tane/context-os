@@ -1,7 +1,15 @@
 import type { Artifact, FindingsMismatch } from "$lib/types";
 
+export type ActivityTimeFilter = "24h" | "7d" | "30d" | "all";
+
+export type ActivitySourceGroup = {
+  key: string;
+  label: string;
+  artifacts: Artifact[];
+};
+
 export type MessageLine = {
-  kind: "heading" | "number" | "bullet" | "body" | "blank";
+  kind: "heading" | "section" | "number" | "bullet" | "body" | "blank";
   text: string;
 };
 
@@ -78,13 +86,26 @@ export function messageLines(text: string): MessageLine[] {
       return { kind: "number", text: trimmed };
     }
     if (/^[-*]\s+/.test(trimmed)) {
+      const bulletText = trimmed.replace(/^[-*]\s+/, "");
+      if (isSourceSectionLabel(bulletText)) {
+        return {
+          kind: "section",
+          text: bulletText,
+        };
+      }
       return {
         kind: "bullet",
-        text: trimmed.replace(/^[-*]\s+/, ""),
+        text: bulletText,
       };
     }
     return { kind: "body", text: trimmed };
   });
+}
+
+function isSourceSectionLabel(value: string) {
+  return /^(jira|slack|github|google drive|googledrive|notion|sharepoint|filesystem)$/i.test(
+    cleanMarkdown(value).trim(),
+  );
 }
 
 export function cleanMarkdown(value: string) {
@@ -107,6 +128,9 @@ export function artifactProvider(artifact: Artifact) {
 
 export function artifactSourceLabel(artifact: Artifact) {
   const metadata = artifact.metadata ?? {};
+  if (metadata.source_label) {
+    return metadata.source_label;
+  }
   if (artifact.connector === "slack") {
     return (
       metadata.slack_channel_id ||
@@ -139,4 +163,96 @@ export function artifactLink(artifact: Artifact) {
     if (match) return match[0].replace(/[.,;]+$/, "");
   }
   return "";
+}
+
+export function activityFilterLabel(filter: ActivityTimeFilter) {
+  switch (filter) {
+    case "24h":
+      return "Last 24h";
+    case "7d":
+      return "Last 7d";
+    case "30d":
+      return "Last 30d";
+    default:
+      return "All time";
+  }
+}
+
+export function normalizeActivityTimeFilter(
+  value: string | null | undefined,
+): ActivityTimeFilter {
+  if (value === "24h" || value === "7d" || value === "30d" || value === "all") {
+    return value;
+  }
+  return "7d";
+}
+
+export function filterArtifactsByTime(
+  artifacts: Artifact[],
+  filter: ActivityTimeFilter,
+  now = new Date(),
+) {
+  if (filter === "all") return [...artifacts];
+  const windowMs = activityFilterWindowMs(filter);
+  const cutoff = now.getTime() - windowMs;
+  return artifacts.filter((artifact) => {
+    const time = Date.parse(artifact.ingested_at);
+    return Number.isFinite(time) && time >= cutoff;
+  });
+}
+
+export function groupArtifactsBySource(
+  artifacts: Artifact[],
+): ActivitySourceGroup[] {
+  const groups = new Map<string, ActivitySourceGroup>();
+  for (const artifact of artifacts) {
+    const label = artifactSourceLabel(artifact);
+    const key = `${artifact.connector}:${label}`;
+    const group = groups.get(key) ?? {
+      key,
+      label,
+      artifacts: [],
+    };
+    group.artifacts.push(artifact);
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((left, right) => {
+    const leftTime = latestArtifactTime(left.artifacts);
+    const rightTime = latestArtifactTime(right.artifacts);
+    return rightTime - leftTime || left.label.localeCompare(right.label);
+  });
+}
+
+export function artifactDetailRows(artifact: Artifact) {
+  const rows = [
+    ["Connector", artifact.connector],
+    ["Event", artifact.event_type],
+    ["Source", artifact.source_uri],
+    ["Ingested", formatTime(artifact.ingested_at)],
+    ["Schema", artifact.schema_version],
+    ["Hash", artifact.content_hash],
+  ];
+  const metadataRows = Object.entries(artifact.metadata ?? {})
+    .filter(([, value]) => value)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => [`metadata.${key}`, value]);
+  return [...rows, ...metadataRows].filter(([, value]) => value);
+}
+
+function activityFilterWindowMs(filter: ActivityTimeFilter) {
+  switch (filter) {
+    case "24h":
+      return 24 * 60 * 60 * 1000;
+    case "30d":
+      return 30 * 24 * 60 * 60 * 1000;
+    default:
+      return 7 * 24 * 60 * 60 * 1000;
+  }
+}
+
+function latestArtifactTime(artifacts: Artifact[]) {
+  return artifacts.reduce((latest, artifact) => {
+    const time = Date.parse(artifact.ingested_at);
+    return Number.isFinite(time) && time > latest ? time : latest;
+  }, 0);
 }

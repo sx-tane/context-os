@@ -1,16 +1,21 @@
 import {
+  activityFilterLabel,
   artifactLink,
+  artifactDetailRows,
   artifactOrigin,
   artifactProvider,
   artifactSourceLabel,
+  filterArtifactsByTime,
   findingDescription,
   findingImpact,
   findingRecommendedAction,
   findingSummary,
+  groupArtifactsBySource,
   messageLines,
+  normalizeActivityTimeFilter,
   previewText,
   severityLabel,
-} from "../findingsViewModel";
+} from "../findings/viewModel";
 
 import type { Artifact } from "../types";
 
@@ -56,6 +61,14 @@ describe("messageLines", () => {
       { kind: "body", text: "中文" },
     ]);
   });
+
+  it("promotes connector bullets to section lines without changing content bullets", () => {
+    expect(messageLines("- Jira\n- Issue: BKGDEV-8096\n- 予約一覧")).toEqual([
+      { kind: "section", text: "Jira" },
+      { kind: "bullet", text: "Issue: BKGDEV-8096" },
+      { kind: "bullet", text: "予約一覧" },
+    ]);
+  });
 });
 
 describe("artifact display helpers", () => {
@@ -82,6 +95,47 @@ describe("artifact display helpers", () => {
 
     expect(artifactSourceLabel(artifact)).toBe("context-os/app");
     expect(artifactLink(artifact)).toBe("https://example.test/pr/1");
+  });
+});
+
+describe("activity display helpers", () => {
+  it("normalizes, labels, and applies local time filters", () => {
+    const now = new Date("2026-06-03T12:00:00.000Z");
+    const artifacts = [
+      makeArtifact({ id: "recent", ingested_at: "2026-06-03T10:00:00.000Z" }),
+      makeArtifact({ id: "old", ingested_at: "2026-05-01T10:00:00.000Z" }),
+    ];
+
+    expect(normalizeActivityTimeFilter("bad")).toBe("7d");
+    expect(activityFilterLabel("30d")).toBe("Last 30d");
+    expect(filterArtifactsByTime(artifacts, "24h", now).map((item) => item.id)).toEqual([
+      "recent",
+    ]);
+    expect(filterArtifactsByTime(artifacts, "all", now)).toHaveLength(2);
+  });
+
+  it("groups activity by source and exposes inspectable detail rows", () => {
+    const artifacts = [
+      makeArtifact({
+        id: "a1",
+        source_uri: "context-os/app#1",
+        metadata: { github_owner: "context-os", github_repo: "app", object_id: "1" },
+        ingested_at: "2026-06-03T10:00:00.000Z",
+      }),
+      makeArtifact({
+        id: "a2",
+        source_uri: "context-os/app#2",
+        metadata: { github_owner: "context-os", github_repo: "app" },
+        ingested_at: "2026-06-03T11:00:00.000Z",
+      }),
+    ];
+
+    const groups = groupArtifactsBySource(artifacts);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe("context-os/app");
+    expect(groups[0].artifacts).toHaveLength(2);
+    expect(artifactDetailRows(artifacts[0])).toContainEqual(["metadata.object_id", "1"]);
   });
 });
 

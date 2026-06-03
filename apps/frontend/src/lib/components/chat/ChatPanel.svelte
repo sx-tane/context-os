@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { isNearBottom, localDBStatusLine } from "$lib/chatController";
+    import { isNearBottom, localDBStatusLine } from "$lib/chat/controller";
     import type { ChatMessage, ChatQueryResult } from "$lib/types";
     import InlineText from "$lib/components/chat/InlineText.svelte";
     import {
@@ -12,7 +12,7 @@
         formatTime,
         messageLines,
         severityLabel,
-    } from "$lib/findingsViewModel";
+    } from "$lib/findings/viewModel";
 
     export let messages: ChatMessage[] = [];
     export let hasSources = false;
@@ -27,6 +27,7 @@
     let stickToBottom = true;
     let expandedStreams: Record<string, boolean> = {};
     let lastMessageSignature = "";
+    const expandedStreamLineLimit = 80;
 
     $: messageSignature = messages
         .map((message) => [
@@ -76,6 +77,16 @@
         };
     }
 
+    function visibleStreamLines(message: ChatMessage) {
+        const lines = message.stream?.lines ?? [];
+        return lines.slice(-expandedStreamLineLimit);
+    }
+
+    function hiddenStreamLineCount(message: ChatMessage) {
+        const lines = message.stream?.lines ?? [];
+        return Math.max(0, lines.length - expandedStreamLineLimit);
+    }
+
     function traceSummary(result: ChatQueryResult, message: ChatMessage) {
         const pieces = [
             `Provider: ${queryProviderLabel(result.provider)}`,
@@ -98,6 +109,36 @@
         if (result.artifacts?.length) return "Source trace";
         if (result.provider === "codex") return "Live source trace";
         return "Source trace";
+    }
+
+    function answerSections(result?: ChatQueryResult) {
+        return result?.answer_sections?.filter((section) =>
+            Boolean(
+                section.source_label ||
+                    section.source_uri ||
+                    section.summary ||
+                    section.facts?.length ||
+                    section.open_items?.length ||
+                    section.coding_notes?.length ||
+                    section.links?.length,
+            ),
+        ) ?? [];
+    }
+
+    function sectionLabel(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+        return section.source_label || section.source_uri || section.connector || "Source";
+    }
+
+    function sectionMeta(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+        return [section.connector, section.status, section.confidence ? `${Math.round(section.confidence * 100)}%` : ""]
+            .filter(Boolean)
+            .join(" · ");
+    }
+
+    function sectionLink(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+        const link = section.links?.find((item) => /^https?:\/\//i.test(item));
+        if (link) return link;
+        return /^https?:\/\//i.test(section.source_uri ?? "") ? section.source_uri ?? "" : "";
     }
 
     function handleMessagesScroll() {
@@ -153,7 +194,11 @@
             </article>
         {:else}
             {#each messages as message (message.id)}
-                <article class="message" class:user={message.role === "user"}>
+                <article
+                    class="message"
+                    class:user={message.role === "user"}
+                    class:assistant={message.role !== "user"}
+                >
                     <span>{message.role === "user" ? "YOU" : "CONTEXT-OS"}</span>
                     <div class="message-body">
                         {#each messageLines(message.text || (message.loading && !message.stream ? "Working..." : "")) as line}
@@ -161,6 +206,8 @@
                                 <div class="message-gap"></div>
                             {:else if line.kind === "heading"}
                                 <h4><InlineText text={line.text} /></h4>
+                            {:else if line.kind === "section"}
+                                <h4 class="section-line"><InlineText text={line.text} /></h4>
                             {:else if line.kind === "number"}
                                 <p class="number-line"><InlineText text={line.text} /></p>
                             {:else if line.kind === "bullet"}
@@ -193,7 +240,10 @@
                                 {/if}
                             {:else}
                                 <div class="stream-lines">
-                                    {#each message.stream.lines as line, index (`${message.id}-${index}`)}
+                                    {#if hiddenStreamLineCount(message) > 0}
+                                        <small>{hiddenStreamLineCount(message)} earlier stream lines hidden</small>
+                                    {/if}
+                                    {#each visibleStreamLines(message) as line, index (`${message.id}-${index}`)}
                                         <p>{line}</p>
                                     {/each}
                                 </div>
@@ -201,6 +251,65 @@
                         </section>
                     {/if}
                     {#if message.card?.kind === "query" && message.card.chatResult}
+                        {#if answerSections(message.card.chatResult).length}
+                            <div class="answer-sections" aria-label="Structured source answer">
+                                {#each answerSections(message.card.chatResult) as section, index (`${message.id}-section-${index}`)}
+                                    {@const link = sectionLink(section)}
+                                    <section class="answer-section">
+                                        <div class="answer-section-head">
+                                            <div>
+                                                <strong>{sectionLabel(section)}</strong>
+                                                {#if sectionMeta(section)}
+                                                    <span>{sectionMeta(section)}</span>
+                                                {/if}
+                                            </div>
+                                            {#if link}
+                                                <a href={link} target="_blank" rel="noreferrer">Open</a>
+                                            {/if}
+                                        </div>
+                                        {#if section.summary}
+                                            <p>{section.summary}</p>
+                                        {/if}
+                                        {#if section.facts?.length}
+                                            <div class="answer-section-list">
+                                                <strong>Facts</strong>
+                                                {#each section.facts as item}
+                                                    <p>{item}</p>
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                        {#if section.open_items?.length}
+                                            <div class="answer-section-list">
+                                                <strong>Open items</strong>
+                                                {#each section.open_items as item}
+                                                    <p>{item}</p>
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                        {#if section.coding_notes?.length}
+                                            <div class="answer-section-list">
+                                                <strong>Coding notes</strong>
+                                                {#each section.coding_notes as item}
+                                                    <p>{item}</p>
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                        {#if section.links?.length}
+                                            <div class="answer-section-list">
+                                                <strong>Links</strong>
+                                                {#each section.links as item}
+                                                    {#if /^https?:\/\//i.test(item)}
+                                                        <a href={item} target="_blank" rel="noreferrer">{item}</a>
+                                                    {:else}
+                                                        <p>{item}</p>
+                                                    {/if}
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                    </section>
+                                {/each}
+                            </div>
+                        {/if}
                         <div
                             class="query-meta"
                             class:live={message.card.chatResult.provider === "codex"}
@@ -413,17 +522,53 @@
 
     .message-body {
         display: grid;
-        gap: 6px;
+        gap: 7px;
     }
 
     .message-body h4 {
-        margin: 10px 0 2px;
+        margin: 12px 0 2px;
         font-size: 13px;
         color: #28261f;
     }
 
     .message-body h4:first-child {
         margin-top: 0;
+    }
+
+    .message-body .section-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0 3px;
+        border-top: 1px solid #d7d2c8;
+        border-bottom: 1px solid #e4ded2;
+        padding: 9px 10px 8px;
+        color: #1c1b18;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .message-body .section-line:first-child {
+        margin-top: 0;
+    }
+
+    .message-body .section-line::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #8a6a20;
+        flex: 0 0 auto;
+    }
+
+    .message.assistant .message-body > p {
+        border-left: 2px solid #d7d2c8;
+        padding: 3px 0 3px 12px;
+    }
+
+    .message.assistant .message-body > p + p {
+        border-top: 1px solid rgba(215, 210, 200, 0.48);
+        padding-top: 8px;
     }
 
     .message-body .number-line {
@@ -433,13 +578,13 @@
 
     .message-body .bullet-line {
         position: relative;
-        padding-left: 14px;
+        padding-left: 24px;
     }
 
     .message-body .bullet-line::before {
         content: "";
         position: absolute;
-        left: 0;
+        left: 12px;
         top: 0.72em;
         width: 5px;
         height: 5px;
@@ -526,6 +671,66 @@
     .stream-lines p {
         color: #625f55;
         overflow-wrap: anywhere;
+    }
+
+    .answer-sections {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .answer-section {
+        border-top: 1px solid #d7d2c8;
+        padding: 11px 0 4px;
+    }
+
+    .answer-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .answer-section-head strong,
+    .answer-section-list strong {
+        display: block;
+        color: #1c1b18;
+        overflow-wrap: anywhere;
+    }
+
+    .answer-section-head span {
+        display: block;
+        margin-top: 3px;
+        color: #8a8678;
+        font-size: 11px;
+        text-transform: uppercase;
+    }
+
+    .answer-section a,
+    .answer-section-head a {
+        width: max-content;
+        max-width: 100%;
+        border-bottom: 1px solid #bdb7a8;
+        color: #1f5f8b;
+        font-size: 12px;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+        text-decoration: none;
+    }
+
+    .answer-section > p,
+    .answer-section-list p {
+        margin-top: 7px;
+        color: #5f5b50;
+        overflow-wrap: anywhere;
+    }
+
+    .answer-section-list {
+        display: grid;
+        gap: 4px;
+        margin-top: 10px;
+        border-top: 1px solid #e4ded2;
+        padding-top: 8px;
     }
 
     .query-meta {

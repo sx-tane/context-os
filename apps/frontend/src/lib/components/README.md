@@ -28,8 +28,8 @@ components/
 ```
 +page.svelte
   └─ ConnectorCard / GitHubConnector / SourceConnector   (input & trigger)
-       └─ ingestRunner / reauthRunner                     (orchestration)
-            └─ api.ts                                     (network)
+       └─ ingest/runner / ingest/reauthRunner             (orchestration)
+            └─ api/index.ts                               (network)
   └─ StatusSection                                        (health probes)
   └─ WorkspaceSummary / FindingsView / GraphView / ActivityView
                                                            (homepage right pane)
