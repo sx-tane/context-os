@@ -17,6 +17,18 @@ uv sync
 uv run python health.py
 ```
 
+## Files
+
+| File | Responsibility | Update when |
+| --- | --- | --- |
+| [`pyproject.toml`](pyproject.toml) | Python package metadata and worker dependencies. | Worker dependencies or Python version assumptions change. |
+| [`uv.lock`](uv.lock) | Locked Python dependency graph for reproducible local setup. | `uv sync` resolves dependency updates. |
+| [`health.py`](health.py) | Minimal worker health endpoint. | Health contract or worker service metadata changes. |
+| [`embed.py`](embed.py) | Deterministic local embedding endpoint and hashing model. | Embedding request/response, dimensions, or model behavior changes. |
+| [`test_embed.py`](test_embed.py) | Unit tests for deterministic embedding behavior. | Embed contract or edge cases change. |
+
+`.venv/` and `__pycache__/` are runtime artifacts and should stay ignored.
+
 ## Endpoints
 
 | Method | Path      | Purpose                                                  |

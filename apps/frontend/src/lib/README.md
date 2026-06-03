@@ -31,7 +31,7 @@ Single source of truth for all communication with the Go API (`/api`).
 | `API_URL`                                            | Base path constant (`/api`).                                                                                                                     |
 | `probeService(url)`                                  | `GET /health` with a 3 s timeout; returns `"ok"` or `"unreachable"`.                                                                             |
 | `getJSON<T>(path)`                                   | Generic `GET` that deserialises JSON or returns `null` on any error.                                                                             |
-| `postIngest(connector, body, opts)`                  | `POST /<connector>/ingest` with a JSON body; returns a typed discriminated union `{ ok: true, body: IngestResult }                               | { ok: false, body: ApiErrorBody }`. |
+| `postIngest(connector, body, opts)`                  | `POST /<connector>/ingest` with a JSON body; returns `{ ok: true, body: IngestResult }` or `{ ok: false, body: ApiErrorBody }`. |
 | `postFindings(body, opts)`                           | `POST /presentation/findings`; preserves backend JSON errors and converts network fetch failures into `{ ok: false, status: 0, body: { error: "api_unreachable", message } }`. |
 | `postFilesystemUpload(formData, opts)`               | `POST /filesystem/upload` with `multipart/form-data`; callers include `workspace_id` plus browser-selected `files` and folder-relative `paths` so local uploads are copied into ContextOS storage and ingested locally. |
 | `getCodexSources(connector)`                         | `GET /codex/sources?connector=...` for Codex-discoverable live sources: GitHub repos, Jira projects, Slack channels, Notion pages/databases, Google Drive folders/docs, and SharePoint/OneDrive locations. |
@@ -41,8 +41,8 @@ Single source of truth for all communication with the Go API (`/api`).
 | `deleteWorkspace(path)`                              | Calls `DELETE /workspace?path=...` and returns structured `{ ok, status, message? }` details so the route can remove local state while reporting backend/API failures. |
 | `getWorkspaceStatus(path)`                           | Fetches workspace event/entity/mismatch counts and connector sync state.                                                                          |
 | `getArtifacts(params)`                               | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit.                            |
-| `postChatQuery(body, opts)`                          | Sends chat questions to `POST /chat/query`; plugin-backed source links or saved sources use live Codex first, then local artifact fallback. Network failures return a structured `api_unreachable` error instead of throwing raw `Failed to fetch`. |
-| `streamChatQuery(body, handlers, opts)`              | Opens an SSE stream to `POST /chat/query/stream`; dispatches live Codex `onLog`, heartbeat `onStatus`, final `onResult`, and `onError` events for the pending chat transcript. |
+| `postChatQuery(body, opts)`                          | Sends chat questions to `POST /chat/query`; plugin-backed concrete source links use live Codex first, start eligible Local DB live-answer evidence saves asynchronously, then fall back to local artifacts when needed. Network failures return a structured `api_unreachable` error instead of throwing raw `Failed to fetch`. |
+| `streamChatQuery(body, handlers, opts)`              | Opens an SSE stream to `POST /chat/query/stream`; dispatches live Codex `onLog`, heartbeat `onStatus`, early `onAnswer`, final `onResult` with evidence-save status, and `onError` events for the pending chat transcript. |
 | `streamCodexIngest(connector, body, handlers, opts)` | Opens an SSE stream to `POST /<connector>/ingest` for Codex-backed connectors; dispatches `onLog`, `onStatus`, `onResult`, and `onError` events. |
 | `streamCodexReauth(plugin, onLog, opts)`             | Opens an SSE stream to `POST /codex/plugin-reauth?plugin=…`; forwards each log line to `onLog`.                                                  |
 | `streamCodexLogin(onLog, opts)`                      | Opens an SSE stream to `POST /codex/login`; forwards each log line to `onLog`.                                                                   |
@@ -83,6 +83,7 @@ Central type registry for the frontend.
 | `ArtifactList`              | API response for local ingested source artifacts.                                    |
 | `ChatQueryRequest`          | Request body for source chat queries.                                                |
 | `ChatQueryResult`           | Chat answer with intent, provider, answer text, artifact evidence, range, and sync state. |
+| `ChatStreamState`           | Frontend-only live query stream transcript with latest line, status, optional summary, and collapsed/expanded preference. |
 | `GraphRelationship`         | Persisted graph edge exposed by `/graph`, including source and evidence identifiers. |
 | `GraphData`                 | Graph response with flattened entities, relationships, and summary stats.            |
 
@@ -104,7 +105,7 @@ Owns the homepage analysis execution loop. It runs ready sources one at a time, 
 
 Owns homepage chat command routing and source query execution. The route passes callbacks for Svelte state/store updates, while this module handles command classification, chat message construction, demo query answers, backend `streamChatQuery`, non-streaming `postChatQuery` fallback, and source-query error messages.
 
-The loading message intentionally names both live Codex sources and the local DB because plugin-backed source questions ask live context first, then use persisted artifacts as fallback and evidence history. During `/chat/query/stream`, the same pending message appends Codex-style `›` and `•` lines so users can see what live lookup is running instead of waiting silently for a timeout.
+The loading stream intentionally names both live Codex sources and the local DB because plugin-backed source questions ask live context first, then use persisted artifacts as fallback and evidence history. `runChatQuery` reuses that inferred route for the request body, so concrete prompts such as `BKGDEV-8466 check this` send `connector: "jira"` and `source_uri: "BKGDEV-8466"` to both stream and fallback routes. During `/chat/query/stream`, Codex-style `›` and `•` progress lines update `ChatMessage.stream` while `ChatMessage.text` remains reserved for the answer. Final streamed results attach the `ChatQueryResult`, mark the stream complete, and keep a compact Local DB save summary for the chat panel. If the stream fails after an early answer, the answer remains visible and the UI reports the Local DB save failure instead of marking the live lookup failed. Saved evidence refreshes workspace Activity immediately; Graph and Findings stay unchanged until analysis runs.
 
 ---
 
@@ -203,4 +204,4 @@ Each config is consumed by the route page to render a `SourceConnector` card wit
 
 ## generated/
 
-Contains `api.d.ts`, which is auto-generated from `apps/api/_docs/swagger.json`. Do **not** edit it by hand. See [Type generation](../../../README.md#type-generation).
+Contains `api.d.ts`, which is auto-generated from `apps/api/docs/swagger.json`. Do **not** edit it by hand. See [Type generation](../../../README.md#type-generation).

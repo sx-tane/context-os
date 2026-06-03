@@ -4,8 +4,6 @@ This folder stores local runtime files and derived artifacts used by ingestion a
 
 Important: `storage/` is not the product source of truth today. The frontend reads most product state from PostgreSQL (`workspaces`, `ingest_events`, `entities`, `relationships`, `mismatches`, and `connector_syncs`). Files in `storage/` are staging files, caches, parsed side outputs, or graph snapshots unless a future storage contract says otherwise.
 
-For the current storage/database audit and reset plan, see [docs/STORAGE_DB_REPLAN.md](../docs/STORAGE_DB_REPLAN.md).
-
 ## Layout
 
 ```mermaid
@@ -20,10 +18,15 @@ flowchart TD
 	SNAP --> REGRESSION[comparison baselines]
 ```
 
-- `raw/`: currently browser upload staging; not yet a complete durable raw source store.
-- `parsed/`: normalized document side outputs for debug/replay inspection.
-- `embeddings/`: disposable local embedding cache.
-- `snapshots/`: generated graph snapshots and baseline outputs; currently not read by the UI.
+| Path | Responsibility | Update when |
+| --- | --- | --- |
+| [`raw/`](raw/README.md) | Browser upload staging and future raw replay store. | Upload staging, raw retention, or replay contracts change. |
+| [`parsed/`](parsed/README.md) | Normalized side outputs for debug and replay inspection. | Normalization writer output or parsed artifact layout changes. |
+| [`embeddings/`](embeddings/README.md) | Disposable local embedding cache. | Cache format, retention, or embedding model assumptions change. |
+| [`snapshots/`](snapshots/README.md) | Generated graph snapshots and regression/debug output. | Snapshot format, comparison rules, or retention changes. |
+| [`db/`](db/README.md) | PostgreSQL open/migration helpers used by the API. | DB bootstrap, migration application, or connection behavior changes. |
+
+Runtime subtrees under `storage/raw/uploads/`, `storage/parsed/*`, `storage/embeddings/`, and `storage/snapshots/*` are generated artifacts. Do not document their contents file-by-file; document the owning folder contract instead.
 
 ## Current Product Source Of Truth
 

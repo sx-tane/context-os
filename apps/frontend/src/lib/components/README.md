@@ -41,4 +41,4 @@ components/
 
 ## Design Pattern
 
-Component visual changes should apply the [`contextos-frontend-design`](../../../../.codex/skills/contextos-frontend-design/) skill. Keep components aligned with the current app: warm neutral surfaces, separator-based rows, explicit left/right padding, padded underline-fill buttons, and local scroll behavior that avoids distracting nested visible scrollbars.
+Component visual changes should apply the [`contextos-frontend-design`](../../../../../.codex/skills/contextos-frontend-design/) skill. Keep components aligned with the current app: warm neutral surfaces, separator-based rows, explicit left/right padding, padded underline-fill buttons, and local scroll behavior that avoids distracting nested visible scrollbars.

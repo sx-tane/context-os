@@ -1,26 +1,28 @@
 # Apps
 
-This directory contains runnable ContextOS applications.
+Runnable ContextOS applications live here. Each app owns its runtime entrypoints, dependency files, and local tests; shared contracts stay in `domain/`, and shared implementations stay in `internal/`.
 
-## Overview
-
-- `api/`: HTTP API service, handlers, middleware, and generated API docs.
-- `frontend/`: Svelte frontend for connector operations and ingest workflows.
-- `ai-worker/`: Python worker utilities used by local development workflows.
-
-## Directory Map
+## Runtime Map
 
 ```mermaid
 flowchart LR
-	APPS[apps/] --> API[api/]
-	APPS --> FE[frontend/]
-	APPS --> AI[ai-worker/]
-	FE --> UI[Connector UI]
-	API --> HTTP[Ingest and status endpoints]
+  FE[frontend/] -->|HTTP/SSE| API[api/]
+  API -->|optional embed calls| AI[ai-worker/]
+  API --> DB[(Postgres)]
+  API --> STORE[storage/]
+  FE --> USER[Workspace UI]
 ```
+
+## Folder Jobs
+
+| Folder | Responsibility | Update when |
+| --- | --- | --- |
+| [`api/`](api/README.md) | Go HTTP API, route wiring, generated OpenAPI artifacts, and backend runtime composition. | Routes, request/response contracts, persistence wiring, or generated docs change. |
+| [`frontend/`](frontend/README.md) | SvelteKit workspace UI for source setup, chat, activity, graph, and findings. | UI behavior, API type generation, route shape, or frontend commands change. |
+| [`ai-worker/`](ai-worker/README.md) | Optional Python worker utilities for deterministic local embeddings and future assistive AI tasks. | Worker endpoints, Python dependencies, or Go worker client contracts change. |
 
 ## Maintenance Checklist
 
 - Keep app-level commands documented in each subfolder README.
 - Update this file when a new application folder is introduced.
-- Ensure app contracts and route changes are reflected in sibling docs.
+- Reflect cross-app contract changes in both the API and frontend READMEs.

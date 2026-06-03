@@ -175,4 +175,4 @@ CI passes the pull request base and head SHA range so committed changes are chec
 
 ## CI Enforcement
 
-These same six checks run automatically on every pull request through [`.github/workflows/authoring-benchmarks.yml`](.github/workflows/authoring-benchmarks.yml). You can also run the workflow manually with `workflow_dispatch` from the Actions tab.
+These same six checks run automatically on every pull request through [`workflows/authoring-benchmarks.yml`](workflows/authoring-benchmarks.yml). You can also run the workflow manually with `workflow_dispatch` from the Actions tab.
