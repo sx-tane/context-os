@@ -1031,7 +1031,7 @@
 
     function messageLines(text: string): MessageLine[] {
         return text.split("\n").map((line) => {
-            const trimmed = line.trim();
+            const trimmed = preferEnglishLine(line).trim();
             if (trimmed === "") return { kind: "blank", text: "" };
             if (/^\*\*[^*]+\*\*$/.test(trimmed)) {
                 return { kind: "heading", text: cleanMarkdown(trimmed) };
@@ -1044,6 +1044,20 @@
             }
             return { kind: "body", text: cleanMarkdown(trimmed) };
         });
+    }
+
+    function preferEnglishLine(line: string) {
+        const cleaned = line.replace(/\r/g, "");
+        const delimiterIndex = cleaned.indexOf(" / ");
+        if (delimiterIndex >= 0) {
+            return cleaned.slice(0, delimiterIndex).trim();
+        }
+        const containsHan = /[\u4e00-\u9fff]/.test(cleaned);
+        const hasAsciiAlpha = /[A-Za-z]/.test(cleaned);
+        if (containsHan && !hasAsciiAlpha) {
+            return "";
+        }
+        return cleaned;
     }
 
     function cleanMarkdown(value: string) {
