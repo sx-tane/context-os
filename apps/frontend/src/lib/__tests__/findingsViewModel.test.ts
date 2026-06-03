@@ -96,6 +96,20 @@ describe("artifact display helpers", () => {
     expect(artifactSourceLabel(artifact)).toBe("context-os/app");
     expect(artifactLink(artifact)).toBe("https://example.test/pr/1");
   });
+
+  it("prefers structured source labels saved on live evidence", () => {
+    const artifact = makeArtifact({
+      connector: "googledrive",
+      source_uri: "https://docs.google.com/spreadsheets/d/abc/edit",
+      metadata: {
+        source_label: "Google Drive · BKGDEV-8096_帳票項目のマッピング確認.xlsx",
+      },
+    });
+
+    expect(artifactSourceLabel(artifact)).toBe(
+      "Google Drive · BKGDEV-8096_帳票項目のマッピング確認.xlsx",
+    );
+  });
 });
 
 describe("activity display helpers", () => {

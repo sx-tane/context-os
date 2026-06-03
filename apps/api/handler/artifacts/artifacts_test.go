@@ -190,11 +190,11 @@ func TestResolveWorkspace(t *testing.T) {
 
 	ws := repository.Workspace{ID: "ws-1", Path: "/tmp/context-os"}
 	tests := []struct {
-		name       string
-		repo       fakeWorkspaceRepo
-		ref        string
-		wantID     string
-		wantErrIs  error
+		name      string
+		repo      fakeWorkspaceRepo
+		ref       string
+		wantID    string
+		wantErrIs error
 	}{
 		{
 			name: "get by path",
@@ -260,6 +260,7 @@ func TestBuildEventQueryIgnoresWhitespace(t *testing.T) {
 		Connector: "slack",
 		SourceURI: "/rooms/123",
 		Text:      "hello world",
+		Limit:     20,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("buildEventQuery() = %#v, want %#v", got, want)

@@ -201,6 +201,7 @@ Rules:
 - Prefer exact source facts over general repository or workspace summaries.
 - For GitHub only, if the plugin cannot answer and gh CLI is already authenticated, read-only gh commands are acceptable fallback context.
 - Include source names, timestamps, authors, commit hashes, issue or PR numbers, and links when available.
+- Structure the final answer by source so each artifact, thread, issue, PR, or document stays separately traceable.
 - Return only JSON with this shape: {"answer":"short plain-text summary","answer_sections":[{"source_label":"human source name","connector":"github|jira|slack|googledrive|notion|sharepoint","source_uri":"exact source URI or key","summary":"short summary","facts":["fact"],"open_items":["open item"],"coding_notes":["coding note"],"links":["https://..."],"timestamps":["timestamp"],"confidence":0.0,"status":"optional status"}]}.
 - Use one answer_sections item per real source or artifact. Do not create sections from URL path fragments, enum values, generic terms, or prose tokens.
 - In each section, include factual summary, exact provenance fields available, and why that source is relevant to the question.

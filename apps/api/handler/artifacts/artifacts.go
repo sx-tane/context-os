@@ -266,6 +266,9 @@ func isNoisyLiveEvidence(event repository.IngestEvent) bool {
 	if sourceURI == "" || genericLiveEvidenceSourcePattern.MatchString(sourceURI) {
 		return true
 	}
+	if strings.Count(metadata["related_sources"], ",") > 0 && !strings.Contains(event.Body, "Source:") {
+		return true
+	}
 	if strings.Contains(sourceURI, "://") || strings.HasPrefix(sourceURI, "#") {
 		return false
 	}
@@ -279,9 +282,6 @@ func isNoisyLiveEvidence(event repository.IngestEvent) bool {
 		return true
 	}
 	if strings.Count(sourceURI, "/") > 0 && event.Connector != "github" {
-		return true
-	}
-	if strings.Count(metadata["related_sources"], ",") > 0 && !strings.Contains(event.Body, "Source:") {
 		return true
 	}
 	return false
