@@ -14,8 +14,6 @@ import (
 	internalchat "context-os/internal/chat"
 )
 
-const chatRequestTimeout = 5 * time.Minute
-
 // Handler holds the service dependency for local chat handlers.
 type Handler struct {
 	service       *internalchat.Service
@@ -122,8 +120,7 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), chatRequestTimeout)
-	defer cancel()
+	ctx := r.Context()
 
 	type streamResult struct {
 		result internalchat.Result

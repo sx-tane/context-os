@@ -10,10 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 )
-
-const liveAnswerTimeout = 5 * time.Minute
 
 var codexBinCandidates = []string{
 	"${HOME}/nvm/current/bin/codex",
@@ -43,9 +40,6 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	if sourceURI == "" {
 		return "", errors.New("source_uri is required for live chat")
 	}
-
-	cmdCtx, cancel := context.WithTimeout(ctx, liveAnswerTimeout)
-	defer cancel()
 
 	out, err := os.CreateTemp("", "contextos-chat-codex-*.txt")
 	if err != nil {
@@ -85,13 +79,13 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 			}
 			return "", fmt.Errorf("codex live chat failed: %s", text)
 		}
-	case <-cmdCtx.Done():
+	case <-ctx.Done():
 		if cmd.Process != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 		<-done
 		progressLog.Flush()
-		return "", fmt.Errorf("codex live chat timed out after %s", liveAnswerTimeout)
+		return "", fmt.Errorf("codex live chat canceled: %w", ctx.Err())
 	}
 	emitProgress(query.Progress, "• Codex CLI completed; reading answer.")
 
