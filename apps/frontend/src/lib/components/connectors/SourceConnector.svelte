@@ -99,6 +99,7 @@
 
     try {
       const formData = new FormData();
+      formData.append("workspace_id", $project.workspacePath);
       for (const file of uploadFiles) {
         formData.append("files", file, file.name);
         formData.append("paths", uploadFilePath(file));

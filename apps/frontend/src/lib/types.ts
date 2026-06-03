@@ -225,6 +225,12 @@ export interface WorkspaceSyncState {
   status?: string;
 }
 
+export interface SourceRegistrationRequest {
+  workspace_id: string;
+  connector: ConnectorKind;
+  source_uri: string;
+}
+
 export interface WorkspaceStatus {
   workspace?: WorkspaceRecord;
   workspace_count?: number;

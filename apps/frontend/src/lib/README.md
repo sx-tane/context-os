@@ -33,13 +33,16 @@ Single source of truth for all communication with the Go API (`/api`).
 | `getJSON<T>(path)`                                   | Generic `GET` that deserialises JSON or returns `null` on any error.                                                                             |
 | `postIngest(connector, body, opts)`                  | `POST /<connector>/ingest` with a JSON body; returns a typed discriminated union `{ ok: true, body: IngestResult }                               | { ok: false, body: ApiErrorBody }`. |
 | `postFindings(body, opts)`                           | `POST /presentation/findings`; preserves backend JSON errors and converts network fetch failures into `{ ok: false, status: 0, body: { error: "api_unreachable", message } }`. |
-| `postFilesystemUpload(formData, opts)`               | `POST /filesystem/upload` with `multipart/form-data`; same discriminated-union return.                                                           |
+| `postFilesystemUpload(formData, opts)`               | `POST /filesystem/upload` with `multipart/form-data`; callers include `workspace_id` plus browser-selected `files` and folder-relative `paths` so local uploads are copied into ContextOS storage and ingested locally. |
+| `getCodexSources(connector)`                         | `GET /codex/sources?connector=...` for Codex-discoverable live sources: GitHub repos, Jira projects, Slack channels, Notion pages/databases, Google Drive folders/docs, and SharePoint/OneDrive locations. |
 | `getWorkspaces()`                                    | Fetches registered API workspaces and returns an empty list when unavailable.                                                                     |
 | `upsertWorkspace(path, name)`                        | Registers or updates a local workspace path.                                                                                                     |
+| `postWorkspaceSource(body, opts)`                    | Saves an external connector/source URI as a connected source reference through `POST /workspace/source`; this does not ingest content.             |
 | `deleteWorkspace(path)`                              | Calls `DELETE /workspace?path=...` and returns structured `{ ok, status, message? }` details so the route can remove local state while reporting backend/API failures. |
 | `getWorkspaceStatus(path)`                           | Fetches workspace event/entity/mismatch counts and connector sync state.                                                                          |
 | `getArtifacts(params)`                               | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit.                            |
-| `postChatQuery(body, opts)`                          | Sends chat questions to `POST /chat/query`; source questions use local artifacts first and may return Codex-backed live answers for configured sources. Network failures return a structured `api_unreachable` error instead of throwing raw `Failed to fetch`. |
+| `postChatQuery(body, opts)`                          | Sends chat questions to `POST /chat/query`; plugin-backed source links or saved sources use live Codex first, then local artifact fallback. Network failures return a structured `api_unreachable` error instead of throwing raw `Failed to fetch`. |
+| `streamChatQuery(body, handlers, opts)`              | Opens an SSE stream to `POST /chat/query/stream`; dispatches live Codex `onLog`, heartbeat `onStatus`, final `onResult`, and `onError` events for the pending chat transcript. |
 | `streamCodexIngest(connector, body, handlers, opts)` | Opens an SSE stream to `POST /<connector>/ingest` for Codex-backed connectors; dispatches `onLog`, `onStatus`, `onResult`, and `onError` events. |
 | `streamCodexReauth(plugin, onLog, opts)`             | Opens an SSE stream to `POST /codex/plugin-reauth?plugin=…`; forwards each log line to `onLog`.                                                  |
 | `streamCodexLogin(onLog, opts)`                      | Opens an SSE stream to `POST /codex/login`; forwards each log line to `onLog`.                                                                   |
@@ -76,6 +79,7 @@ Central type registry for the frontend.
 | `SupportedFormat`           | One row in a supported-formats table (format name, extensions, extraction note).      |
 | `SourceConnectorConfig`     | Full static config that drives a `SourceConnector` card.                              |
 | `WorkspaceList`             | API response for registered local workspaces.                                        |
+| `WorkspaceSyncState`        | Connector sync or connected-source registry row; `status: "connected"` means setup saved a live external source without ingesting it locally. |
 | `ArtifactList`              | API response for local ingested source artifacts.                                    |
 | `ChatQueryRequest`          | Request body for source chat queries.                                                |
 | `ChatQueryResult`           | Chat answer with intent, provider, answer text, artifact evidence, range, and sync state. |
@@ -98,7 +102,9 @@ Owns the homepage analysis execution loop. It runs ready sources one at a time, 
 
 ## chatController.ts
 
-Owns homepage chat command routing and source query execution. The route passes callbacks for Svelte state/store updates, while this module handles command classification, chat message construction, demo query answers, backend `postChatQuery`, and source-query error messages.
+Owns homepage chat command routing and source query execution. The route passes callbacks for Svelte state/store updates, while this module handles command classification, chat message construction, demo query answers, backend `streamChatQuery`, non-streaming `postChatQuery` fallback, and source-query error messages.
+
+The loading message intentionally names both live Codex sources and the local DB because plugin-backed source questions ask live context first, then use persisted artifacts as fallback and evidence history. During `/chat/query/stream`, the same pending message appends Codex-style `›` and `•` lines so users can see what live lookup is running instead of waiting silently for a timeout.
 
 ---
 
@@ -122,7 +128,7 @@ Builds the focused graph model consumed by `GraphView.svelte`: explicit or infer
 
 ## projectStore.ts
 
-Maintains local workspace state in browser storage and registers user-created workspaces with the backend. The store always exposes the default workspace and a protected `contextos-demo` workspace; neither protected workspace is marked removed or deleted from local storage. The demo workspace is local-only and is not registered with the backend when opened.
+Maintains local workspace state in browser storage and registers user-created workspaces with the backend. The store keeps `status="connected"` sync rows ready without assigning ingest event counts, because those rows represent live external references rather than persisted artifacts. The store always exposes the default workspace and a protected `contextos-demo` workspace; neither protected workspace is marked removed or deleted from local storage. The demo workspace is local-only and is not registered with the backend when opened.
 
 ---
 

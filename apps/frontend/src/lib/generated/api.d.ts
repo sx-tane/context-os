@@ -82,6 +82,29 @@ export interface paths {
       };
     };
   };
+  "/chat/query/stream": {
+    /** Streams chat query progress, including live Codex logs, then emits the final chat result. */
+    post: {
+      parameters: {
+        body: {
+          /** Chat query */
+          body: definitions["request.ChatQuery"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: unknown;
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/codex/login": {
     /** Runs `codex login --device-auth` and streams log lines as SSE events. */
     post: {
@@ -113,6 +136,35 @@ export interface paths {
         };
         /** Method Not Allowed */
         405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/codex/sources": {
+    /** Uses Codex plugins to list readable sources for github, jira, slack, notion, googledrive, or sharepoint. */
+    get: {
+      parameters: {
+        query: {
+          /** Connector: github, jira, slack, notion, googledrive, or sharepoint */
+          connector: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["codex.sourceDiscoveryResponse"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
           schema: { [key: string]: string };
         };
       };
@@ -858,6 +910,39 @@ export interface paths {
       };
     };
   };
+  "/workspace/source": {
+    /** Saves a connector/source URI reference for live source lookup without ingesting source content. */
+    post: {
+      parameters: {
+        body: {
+          /** Connected source registration request */
+          body: definitions["workspace.sourceRequest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.WorkspaceSync"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/workspace/status": {
     /** Returns event counts and connector sync states for a workspace. */
     get: {
@@ -923,6 +1008,18 @@ export interface paths {
 }
 
 export interface definitions {
+  "codex.sourceCandidate": {
+    connector?: string;
+    id?: string;
+    kind?: string;
+    label?: string;
+    uri?: string;
+  };
+  "codex.sourceDiscoveryResponse": {
+    connector?: string;
+    provider?: string;
+    sources?: definitions["codex.sourceCandidate"][];
+  };
   "events.Event": {
     /** @example Issue body: Please update the connector README with setup steps. */
     content?: string;
@@ -966,7 +1063,7 @@ export interface definitions {
     lastSyncedAt?: string;
     /** @description SourceURI is the URI this sync record covers. */
     sourceURI?: string;
-    /** @description Status is the current sync state: idle | syncing | error. */
+    /** @description Status is the current sync state: connected | idle | syncing | error. */
     status?: string;
     /** @description WorkspaceID links the record to its workspace. */
     workspaceID?: string;
@@ -1309,6 +1406,16 @@ export interface definitions {
     summary?: string;
     /** @description stable category for the detection rule that produced this finding */
     type?: string;
+  };
+  "workspace.sourceRequest": {
+    /** @description Connector is the connector name, e.g. github or jira. */
+    connector?: string;
+    /** @description SourceURI is the external source URI to save. */
+    source_uri?: string;
+    /** @description URI is accepted for frontend compatibility with existing source forms. */
+    uri?: string;
+    /** @description WorkspaceID is a workspace path or ID. */
+    workspace_id?: string;
   };
   "workspace.upsertRequest": {
     /** @description Name is the optional human-readable workspace name. */

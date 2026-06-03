@@ -12,7 +12,9 @@ import {
   upsertWorkspace,
   deleteWorkspace,
   getWorkspaceStatus,
+  postWorkspaceSource,
   resetWorkspace,
+  streamChatQuery,
 } from "../api";
 
 // makeResponse builds a minimal fetch Response mock for readJSON (calls res.text()).
@@ -25,6 +27,23 @@ function makeResponse(body: unknown, ok: boolean, status = 200): Response {
       .mockResolvedValue(
         typeof body === "string" ? body : JSON.stringify(body),
       ),
+  } as unknown as Response;
+}
+
+function makeStreamResponse(chunks: string[], ok = true, status = 200): Response {
+  return {
+    ok,
+    status,
+    body: new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder();
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    }),
+    text: jest.fn().mockResolvedValue(""),
   } as unknown as Response;
 }
 
@@ -226,8 +245,8 @@ describe("getCodexSources", () => {
 
   it("fetches connector source list through /api/codex/sources", async () => {
     fetchMock.mockResolvedValue(makeResponse({ sources: [] }, true, 200));
-    await getCodexSources("slack");
-    expect(fetchMock).toHaveBeenCalledWith("/api/codex/sources?connector=slack");
+    await getCodexSources("jira");
+    expect(fetchMock).toHaveBeenCalledWith("/api/codex/sources?connector=jira");
   });
 
   it("returns null when source discovery fails", async () => {
@@ -328,6 +347,79 @@ describe("resetWorkspace", () => {
   });
 });
 
+// ---- postWorkspaceSource ----
+
+describe("postWorkspaceSource", () => {
+  it("returns normalized connected sync state when response is 2xx", async () => {
+    const body = {
+      workspace_id: "ws1",
+      connector: "github",
+      source_uri: "owner/repo",
+      status: "connected",
+      event_count: 0,
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "github",
+      source_uri: "owner/repo",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.body).toEqual({
+      connector: "github",
+      source_uri: "owner/repo",
+      status: "connected",
+      event_count: 0,
+    });
+  });
+
+  it("posts to /api/workspace/source with JSON body", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "jira",
+      source_uri: "https://acme.atlassian.net/browse/ABC-1",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace/source",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspace_id: "/proj",
+          connector: "jira",
+          source_uri: "https://acme.atlassian.net/browse/ABC-1",
+        }),
+      }),
+    );
+  });
+
+  it("returns ok:false with error body when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "connector is required" }, false, 400));
+    const result = await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "github",
+      source_uri: "",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.body.message).toBe("connector is required");
+  });
+
+  it("returns a structured API unreachable error when fetch fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "github",
+      source_uri: "owner/repo",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+    }
+  });
+});
+
 // ---- postChatQuery ----
 
 describe("postChatQuery", () => {
@@ -376,6 +468,60 @@ describe("postChatQuery", () => {
     await expect(postChatQuery({ workspace_id: "ws1", message: "status" })).rejects.toBe(
       abortError,
     );
+  });
+});
+
+// ---- streamChatQuery ----
+
+describe("streamChatQuery", () => {
+  it("streams log, status, and result events from /api/chat/query/stream", async () => {
+    const result = {
+      intent: "artifacts",
+      workspace_id: "ws1",
+      workspace_path: "ws1",
+      provider: "codex",
+      answer: "Live answer",
+      artifact_count: 0,
+      artifacts: [],
+    };
+    fetchMock.mockResolvedValue(
+      makeStreamResponse([
+        "event: log\ndata: › Live Codex: GitHub plugin lookup\n\n",
+        "event: log\ndata: • Starting Codex CLI exec.\n\n",
+        "event: status\ndata: {\"elapsed\":2,\"status\":\"running\"}\n\n",
+        `event: result\ndata: ${JSON.stringify(result)}\n\n`,
+      ]),
+    );
+    const logs: string[] = [];
+    const statuses: number[] = [];
+    const results: unknown[] = [];
+
+    await streamChatQuery(
+      { workspace_id: "ws1", message: "help me check sx-tane/context-os" },
+      {
+        onLog: (line) => logs.push(line),
+        onStatus: (elapsed) => statuses.push(elapsed),
+        onResult: (body) => results.push(body),
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat/query/stream",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspace_id: "ws1",
+          message: "help me check sx-tane/context-os",
+        }),
+      }),
+    );
+    expect(logs).toEqual([
+      "› Live Codex: GitHub plugin lookup",
+      "• Starting Codex CLI exec.",
+    ]);
+    expect(statuses).toEqual([2]);
+    expect(results).toEqual([result]);
   });
 });
 

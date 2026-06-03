@@ -1,12 +1,13 @@
 <script lang="ts">
     /**
-     * KnowledgeInstall — guided first-run flow to ingest all required connectors.
-     * Shows readiness per connector, streams ingest progress, marks knowledge ready.
+     * KnowledgeInstall — guided first-run flow to connect external sources and ingest filesystem sources.
+     * Shows readiness per connector, saves source references, marks knowledge ready.
      */
     import { createEventDispatcher } from "svelte";
     import ConfirmModal from "$lib/components/ConfirmModal.svelte";
     import type {
         CodexPlugin,
+        CodexConnectorKind,
         CodexSourceOption,
         ConnectorKind,
         ConnectorKnowledge,
@@ -15,7 +16,9 @@
         getCodexSources,
         getWorkspaceStatus,
         getWorkspaces,
+        postFilesystemUpload,
         postFindings,
+        postWorkspaceSource,
         resetWorkspace,
     } from "$lib/api";
     import {
@@ -134,10 +137,13 @@
         boolean
     >;
     let sourceOptions: Partial<Record<ConnectorKind, CodexSourceOption[]>> = {};
+    let sourceLoaded: Partial<Record<ConnectorKind, boolean>> = {};
     let sourceLoading: Partial<Record<ConnectorKind, boolean>> = {};
     let sourceErrors: Partial<Record<ConnectorKind, string>> = {};
     let selectedSources: Partial<Record<ConnectorKind, Record<string, boolean>>> =
         {};
+    let filesystemFiles: File[] = [];
+    let filesystemUploadLoading = false;
 
     for (const r of REQUIRED) {
         uris[r.connector] = "";
@@ -146,10 +152,16 @@
         enabled[r.connector] = false;
     }
 
-    function supportsDiscovery(
-        connector: ConnectorKind,
-    ): connector is "github" | "slack" {
-        return connector === "github" || connector === "slack";
+    function supportsDiscovery(connector: ConnectorKind): connector is CodexConnectorKind {
+        return connector !== "filesystem";
+    }
+
+    function defaultLiveSourceURI(connector: ConnectorKind) {
+        return connector;
+    }
+
+    function isInteractiveTarget(target: EventTarget | null) {
+        return target instanceof Element && Boolean(target.closest("button, input, label, details, summary"));
     }
 
     // Pre-fill URIs from already-ingested connectors in project store.
@@ -176,9 +188,29 @@
     async function toggleConnector(connector: ConnectorKind, checked: boolean) {
         enabled[connector] = checked;
         enabled = { ...enabled };
+        if (
+            checked &&
+            supportsDiscovery(connector) &&
+            !sourceLoading[connector] &&
+            !sourceLoaded[connector]
+        ) {
+            void loadSourceOptions(connector);
+        }
     }
 
-    async function loadSourceOptions(connector: "github" | "slack") {
+    function toggleConnectorFromRow(connector: ConnectorKind, disabled: boolean, event: MouseEvent) {
+        if (disabled || isInteractiveTarget(event.target)) return;
+        void toggleConnector(connector, !enabled[connector]);
+    }
+
+    function toggleConnectorFromKeyboard(connector: ConnectorKind, disabled: boolean, event: KeyboardEvent) {
+        if (disabled || isInteractiveTarget(event.target)) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        void toggleConnector(connector, !enabled[connector]);
+    }
+
+    async function loadSourceOptions(connector: CodexConnectorKind) {
         if (sourceLoading[connector]) return;
         sourceLoading = { ...sourceLoading, [connector]: true };
         sourceErrors = { ...sourceErrors, [connector]: "" };
@@ -192,6 +224,7 @@
                 return;
             }
             sourceOptions = { ...sourceOptions, [connector]: result.sources };
+            sourceLoaded = { ...sourceLoaded, [connector]: true };
             selectedSources = {
                 ...selectedSources,
                 [connector]: selectedSources[connector] ?? {},
@@ -211,6 +244,80 @@
         };
     }
 
+    function selectFilesystemFiles(event: Event) {
+        const input = event.currentTarget as HTMLInputElement;
+        filesystemFiles = Array.from(input.files ?? []);
+        logs.filesystem = "";
+        logs = { ...logs };
+    }
+
+    function uploadFilePath(file: File): string {
+        return file.webkitRelativePath || file.name;
+    }
+
+    $: filesystemUploadSummary =
+        filesystemFiles.length === 0
+            ? ""
+            : filesystemFiles.length === 1
+                ? uploadFilePath(filesystemFiles[0])
+                : `${filesystemFiles.length} files selected`;
+
+    async function uploadFilesystemSelection() {
+        if (filesystemFiles.length === 0 || filesystemUploadLoading) return;
+
+        filesystemUploadLoading = true;
+        statuses.filesystem = "running";
+        statuses = { ...statuses };
+        logs.filesystem = `Uploading ${filesystemUploadSummary} into local workspace storage...\n`;
+        logs = { ...logs };
+        setConnectorKnowledge("filesystem", filesystemUploadSummary, "ingesting");
+
+        try {
+            const formData = new FormData();
+            formData.append("workspace_id", $project.workspacePath);
+            for (const file of filesystemFiles) {
+                formData.append("files", file, file.name);
+                formData.append("paths", uploadFilePath(file));
+            }
+            const res = await postFilesystemUpload(formData);
+            if (!res.ok) {
+                const msg =
+                    res.body?.message ??
+                    res.body?.error ??
+                    `Request failed with status ${res.status}`;
+                logs.filesystem += "[error] " + msg + "\n";
+                statuses.filesystem = "error";
+                setConnectorKnowledge("filesystem", filesystemUploadSummary, "error", {
+                    error: msg,
+                });
+                return;
+            }
+
+            const sourceURI =
+                res.body.event?.source_id ??
+                res.body.metadata?.filesystem_upload_root ??
+                filesystemUploadSummary;
+            const eventCount = res.body.event_count ?? res.body.events?.length ?? 0;
+            statuses.filesystem = "done";
+            logs.filesystem += `Upload ingested locally. ${eventCount} event${eventCount === 1 ? "" : "s"} available for graph, findings, and local chat.\n`;
+            setConnectorKnowledge("filesystem", sourceURI, "ready", {
+                eventCount,
+            });
+            markKnowledgeInstalled();
+            dispatch("done");
+        } catch (error) {
+            logs.filesystem += "[error] " + String(error) + "\n";
+            statuses.filesystem = "error";
+            setConnectorKnowledge("filesystem", filesystemUploadSummary, "error", {
+                error: String(error),
+            });
+        } finally {
+            filesystemUploadLoading = false;
+            logs = { ...logs };
+            statuses = { ...statuses };
+        }
+    }
+
     function selectedTargets(
         enabledState = enabled,
         uriState = uris,
@@ -221,14 +328,27 @@
         for (const r of REQUIRED) {
             const manualURI = uriState[r.connector].trim();
             if (!enabledState[r.connector] && !manualURI) continue;
+            let hasSpecificTarget = false;
             const selected = selectedState[r.connector] ?? {};
             for (const option of optionState[r.connector] ?? []) {
                 if (selected[option.uri]) {
                     targets.push({ connector: r.connector, uri: option.uri });
+                    hasSpecificTarget = true;
                 }
             }
             if (manualURI) {
                 targets.push({ connector: r.connector, uri: manualURI });
+                hasSpecificTarget = true;
+            }
+            if (
+                enabledState[r.connector] &&
+                r.connector !== "filesystem" &&
+                !hasSpecificTarget
+            ) {
+                targets.push({
+                    connector: r.connector,
+                    uri: defaultLiveSourceURI(r.connector),
+                });
             }
         }
         const seen = new Set<string>();
@@ -252,10 +372,44 @@
             statuses[target.connector] = "running";
             logs[target.connector] =
                 (logs[target.connector] || "") +
-                `Persisting ${config.label} source ${target.uri} into the local workspace database...\n`;
-            setConnectorKnowledge(target.connector, target.uri, "ingesting");
+                (target.connector === "filesystem"
+                    ? `Ingesting ${config.label} source ${target.uri} into local workspace storage...\n`
+                    : `Saving ${config.label} source ${target.uri} for live Codex lookup...\n`);
+            setConnectorKnowledge(
+                target.connector,
+                target.uri,
+                target.connector === "filesystem" ? "ingesting" : "configuring",
+            );
 
             try {
+                if (target.connector !== "filesystem") {
+                    const res = await postWorkspaceSource({
+                        workspace_id: $project.workspacePath,
+                        connector: target.connector,
+                        source_uri: target.uri,
+                    });
+                    if (!res.ok) {
+                        const msg =
+                            res.body?.message ??
+                            res.body?.error ??
+                            `Request failed with status ${res.status}`;
+                        logs[target.connector] += "[error] " + msg + "\n";
+                        statuses[target.connector] = "error";
+                        setConnectorKnowledge(target.connector, target.uri, "error", {
+                            error: msg,
+                        });
+                        continue;
+                    }
+
+                    completed += 1;
+                    statuses[target.connector] = "done";
+                    logs[target.connector] += "Connected source saved. Chat will query this source live through Codex.\n";
+                    setConnectorKnowledge(target.connector, target.uri, "ready", {
+                        lastIngestedAt: undefined,
+                    });
+                    continue;
+                }
+
                 const res = await postFindings({
                     workspace_id: $project.workspacePath,
                     connector: target.connector,
@@ -358,6 +512,8 @@
             enabled = { ...enabled };
             selectedSources = {};
             sourceOptions = {};
+            sourceLoaded = {};
+            filesystemFiles = [];
             allDone = false;
             resetConfirmOpen = false;
             dispatch("done");
@@ -372,7 +528,9 @@
         selectedSources,
         sourceOptions,
     ).length;
-    $: anyEnabled = selectedCount > 0;
+    $: hasPendingFilesystemUpload =
+        enabled.filesystem && filesystemFiles.length > 0;
+    $: anyEnabled = selectedCount > 0 || hasPendingFilesystemUpload;
     $: connectedSources = $project.connectors.filter(
         (source) => source.status === "ready" || source.status === "ingesting" || source.status === "error",
     );
@@ -391,11 +549,22 @@
 
     function sourceStatusLabel(source: ConnectorKnowledge) {
         if (source.status === "ready") {
+            if (source.eventCount === undefined) return "connected";
             return `${source.eventCount ?? 0} event${source.eventCount === 1 ? "" : "s"}`;
         }
         if (source.status === "ingesting") return "ingesting";
         if (source.status === "error") return source.error ? `error: ${source.error}` : "error";
         return source.status;
+    }
+
+    function saveButtonLabel(count: number) {
+        if (filesystemUploadLoading) return "Uploading...";
+        if (installing) return "Saving...";
+        if (count > 0) {
+            return `Save ${count} live connector${count === 1 ? "" : "s"}`;
+        }
+        if (hasPendingFilesystemUpload) return "Upload selected local files";
+        return "Select a connector to save";
     }
 </script>
 
@@ -440,10 +609,15 @@
                 {@const pluginReady = isPluginReady(r.codexPlugin)}
                 {@const st = statuses[r.connector]}
                 {@const isDisabled = !pluginReady && r.codexPlugin !== ""}
-                <label
+                <div
                     class="connector-card"
                     class:disabled={isDisabled}
                     class:checked={enabled[r.connector]}
+                    role="button"
+                    tabindex={isDisabled ? -1 : 0}
+                    aria-pressed={enabled[r.connector]}
+                    on:click={(event) => toggleConnectorFromRow(r.connector, isDisabled, event)}
+                    on:keydown={(event) => toggleConnectorFromKeyboard(r.connector, isDisabled, event)}
                 >
                     <!-- brand icon -->
                     <div
@@ -477,10 +651,60 @@
                         </div>
 
                         {#if enabled[r.connector]}
-                            {#if supportsDiscovery(r.connector)}
+                            {#if r.connector === "filesystem"}
+                                <div class="filesystem-upload">
+                                    <div class="upload-actions">
+                                        <label class="mini-btn file-button">
+                                            Choose files
+                                            <input
+                                                class="file-input"
+                                                type="file"
+                                                multiple
+                                                on:change={selectFilesystemFiles}
+                                            />
+                                        </label>
+                                        <label class="mini-btn file-button">
+                                            Choose folder
+                                            <input
+                                                class="file-input"
+                                                type="file"
+                                                multiple
+                                                webkitdirectory
+                                                on:change={selectFilesystemFiles}
+                                            />
+                                        </label>
+                                        <button
+                                            class="mini-btn"
+                                            type="button"
+                                            disabled={filesystemUploadLoading || filesystemFiles.length === 0}
+                                            on:click|stopPropagation={uploadFilesystemSelection}
+                                        >
+                                            {filesystemUploadLoading ? "Uploading..." : "Upload and ingest"}
+                                        </button>
+                                    </div>
+                                    {#if filesystemUploadSummary}
+                                        <span class="hint">{filesystemUploadSummary}</span>
+                                    {:else}
+                                        <span class="hint">Choose local files or a folder to copy into ContextOS storage.</span>
+                                    {/if}
+                                </div>
+
+                                <details class="manual-source">
+                                    <summary>Use server path</summary>
+                                    <div class="uri-row">
+                                        <input
+                                            class="uri-input"
+                                            type="text"
+                                            placeholder={r.uriPlaceholder}
+                                            bind:value={uris[r.connector]}
+                                        />
+                                        <span class="hint">{r.uriHint}</span>
+                                    </div>
+                                </details>
+                            {:else if supportsDiscovery(r.connector)}
                                 <div class="source-picker">
                                     {#if sourceLoading[r.connector]}
-                                        <span class="hint">Loading sources from Codex...</span>
+                                        <span class="hint">Checking sources from the logged-in Codex plugin account...</span>
                                     {:else if sourceErrors[r.connector]}
                                         <span class="hint error-text">{sourceErrors[r.connector]}</span>
                                         <button
@@ -509,10 +733,24 @@
                                                 />
                                                 <span>
                                                     <strong>{option.label}</strong>
-                                                    <small>{option.kind}</small>
+                                                    <small>{option.kind} · {option.uri}</small>
                                                 </span>
                                             </label>
                                         {/each}
+                                    {:else if sourceLoaded[r.connector]}
+                                        <span class="hint">No sources were returned from Codex for this connector.</span>
+                                        <button
+                                            class="mini-btn"
+                                            type="button"
+                                            on:click|stopPropagation={() => {
+                                                if (supportsDiscovery(r.connector)) {
+                                                    sourceLoaded = { ...sourceLoaded, [r.connector]: false };
+                                                    loadSourceOptions(r.connector);
+                                                }
+                                            }}
+                                        >
+                                            Retry source list
+                                        </button>
                                     {:else}
                                         <button
                                             class="mini-btn"
@@ -523,31 +761,25 @@
                                                 }
                                             }}
                                         >
-                                            Load sources from Codex
+                                            Check plugin account
                                         </button>
-                                        <span class="hint">Optional. You can paste a source manually below.</span>
+                                        <span class="hint">Load repos, projects, channels, pages, folders, or sites visible to the current plugin login.</span>
                                     {/if}
+                                    <span class="hint">Two ways: save this connector for live chat now, or pick a listed source to narrow the default scope.</span>
                                 </div>
 
-                                <div class="uri-row">
-                                    <input
-                                        class="uri-input"
-                                        type="text"
-                                        placeholder={r.uriPlaceholder}
-                                        bind:value={uris[r.connector]}
-                                    />
-                                    <span class="hint">Or enter a source manually: {r.uriHint}</span>
-                                </div>
-                            {:else}
-                                <div class="uri-row">
-                                    <input
-                                        class="uri-input"
-                                        type="text"
-                                        placeholder={r.uriPlaceholder}
-                                        bind:value={uris[r.connector]}
-                                    />
-                                    <span class="hint">{r.uriHint}</span>
-                                </div>
+                                <details class="manual-source">
+                                    <summary>Enter source manually</summary>
+                                    <div class="uri-row">
+                                        <input
+                                            class="uri-input"
+                                            type="text"
+                                            placeholder={r.uriPlaceholder}
+                                            bind:value={uris[r.connector]}
+                                        />
+                                        <span class="hint">{r.uriHint}</span>
+                                    </div>
+                                </details>
                             {/if}
 
                             {#if logs[r.connector]}
@@ -568,7 +800,7 @@
                             )}
                         disabled={isDisabled}
                     />
-                </label>
+                </div>
             {/each}
         </div>
 
@@ -583,10 +815,10 @@
             {:else}
                 <button
                     class="btn primary"
-                    on:click={installAll}
-                    disabled={installing || !anyEnabled}
+                    on:click={selectedCount === 0 && hasPendingFilesystemUpload ? uploadFilesystemSelection : installAll}
+                    disabled={installing || filesystemUploadLoading || !anyEnabled}
                 >
-                    {installing ? "Saving..." : selectedCount > 0 ? `Save ${selectedCount} selected source${selectedCount === 1 ? "" : "s"}` : "Select a source to save"}
+                    {saveButtonLabel(selectedCount)}
                 </button>
                 <span class="footer-note">
                     {connectedCount} already connected in this workspace.
@@ -917,6 +1149,48 @@
         margin-top: 0.5rem;
     }
 
+    .filesystem-upload {
+        display: grid;
+        gap: 0.35rem;
+        margin-top: 0.6rem;
+        border-top: 1px solid #d7d2c8;
+        padding-top: 0.45rem;
+    }
+
+    .upload-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        align-items: center;
+    }
+
+    .file-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .file-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .manual-source {
+        margin-top: 0.45rem;
+    }
+
+    .manual-source summary {
+        width: max-content;
+        cursor: pointer;
+        color: #625f55;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
     .source-picker {
         margin-top: 0.6rem;
         display: grid;
@@ -961,7 +1235,9 @@
     .source-option small {
         color: #9ca3af;
         font-size: 0.68rem;
-        text-transform: uppercase;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .mini-btn {
@@ -989,6 +1265,17 @@
         border-bottom-color: #1c1b18;
         background-position: 0 0;
         color: #f8f6ef;
+    }
+
+    .mini-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+    }
+
+    .mini-btn:disabled:hover {
+        border-bottom-color: #d1d5db;
+        background-position: 100% 0;
+        color: #111827;
     }
 
     .error-text {

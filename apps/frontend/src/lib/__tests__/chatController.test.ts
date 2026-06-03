@@ -5,15 +5,22 @@ jest.mock("$lib/projectStore", () => ({
 
 import {
   assistantMsg,
+  buildChatLoadingText,
   classifyChatCommand,
   localDateString,
   runChatQuery,
   userMsg,
 } from "../chatController";
 
-import { postChatQuery } from "$lib/api";
+import { postChatQuery, streamChatQuery } from "$lib/api";
 
 const mockPostChatQuery = postChatQuery as jest.Mock;
+const mockStreamChatQuery = streamChatQuery as jest.Mock;
+
+beforeEach(() => {
+  mockPostChatQuery.mockReset();
+  mockStreamChatQuery.mockReset();
+});
 
 type ChatControllerTestState = {
   busyCalls: boolean[];
@@ -53,8 +60,27 @@ describe("localDateString", () => {
   });
 });
 
+describe("buildChatLoadingText", () => {
+  it("shows live Codex route for owner/repo prompts", () => {
+    const text = buildChatLoadingText("help me check sx-tane/context-os");
+
+    expect(text).toContain("Live Codex");
+    expect(text).toContain("GitHub plugin lookup: sx-tane/context-os");
+    expect(text).toContain("Codex CLI");
+    expect(text).toContain("Local DB");
+  });
+
+  it("shows local DB route for local file prompts", () => {
+    const text = buildChatLoadingText("summarize local file docs/plan.md");
+
+    expect(text).toContain("Local DB");
+    expect(text).not.toContain("Live Codex");
+  });
+});
+
 describe("runChatQuery", () => {
-  it("posts source queries and updates chat state on success", async () => {
+  it("falls back to standard source queries when streaming is unavailable", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
     mockPostChatQuery.mockResolvedValue({
       ok: true,
       body: {
@@ -81,13 +107,89 @@ describe("runChatQuery", () => {
       refreshWorkspace: state.refreshWorkspace,
     });
 
+    expect(mockStreamChatQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ workspace_id: "workspace", message: "status" }),
+      expect.objectContaining({
+        onLog: expect.any(Function),
+        onStatus: expect.any(Function),
+        onResult: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
     expect(mockPostChatQuery).toHaveBeenCalledWith(
       expect.objectContaining({ workspace_id: "workspace", message: "status" }),
     );
     expect(state.busyCalls).toEqual([true, false]);
+    expect(state.addMessage.mock.calls[0][0].text).toContain("Local DB");
+    expect(state.replacements[0].text).toContain("Streaming unavailable");
+    expect(state.replacements[0].text).toContain("standard chat query");
     expect(state.lastChatResult?.answer).toBe("Answer");
     expect(state.replacements.at(-1)?.text).toBe("Answer");
     expect(state.refreshWorkspace).toHaveBeenCalled();
+  });
+
+  it("streams Codex progress and uses the streamed result", async () => {
+    mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
+      handlers.onLog("› Live Codex: GitHub plugin lookup");
+      handlers.onLog("• Starting Codex CLI exec.");
+      handlers.onStatus(2);
+      handlers.onResult({
+        intent: "artifacts",
+        workspace_id: "workspace",
+        workspace_path: "workspace",
+        connector: "github",
+        source_uri: "sx-tane/context-os",
+        provider: "codex",
+        answer: "Live answer",
+        summary: "Live summary",
+        artifact_count: 0,
+        artifacts: [],
+      });
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "help me check sx-tane/context-os",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockPostChatQuery).not.toHaveBeenCalled();
+    expect(state.addMessage.mock.calls[0][0].text).toContain("GitHub plugin lookup");
+    expect(state.replacements[0].text).toContain("› Live Codex");
+    expect(state.replacements.at(-2)?.text).toContain("• Codex still running... 2s");
+    expect(state.lastChatResult?.answer).toBe("Live answer");
+    expect(state.replacements.at(-1)?.text).toBe("Live answer");
+  });
+
+  it("keeps streamed Codex transcript when live lookup fails", async () => {
+    mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
+      handlers.onLog("› Live Codex: GitHub plugin lookup");
+      handlers.onLog("• Starting Codex CLI exec.");
+      handlers.onError("codex live chat timed out after 5m0s");
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "help me check sx-tane/context-os",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockPostChatQuery).not.toHaveBeenCalled();
+    expect(state.replacements.at(-1)?.text).toContain("› Live Codex");
+    expect(state.replacements.at(-1)?.text).toContain("Live Codex lookup failed");
+    expect(state.replacements.at(-1)?.text).toContain("timed out after 5m0s");
   });
 });
 

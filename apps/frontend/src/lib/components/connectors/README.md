@@ -39,7 +39,7 @@ Generic connector form for `DirectSourceConnectorKind` connectors (currently fil
 
 Internally calls `runConnectorIngest` for server-path ingest and `postFilesystemUpload` directly for file/folder uploads. Manages its own `AbortController` and cleans up on `onDestroy`.
 
-Server-path ingest forwards the active workspace path through `workspace_id`; file and folder uploads use the upload endpoint directly.
+Server-path ingest forwards the active workspace path through `workspace_id`; file and folder uploads also append `workspace_id` to the multipart body before calling the upload endpoint directly. This keeps browser-selected local uploads scoped to the active workspace just like path ingest.
 
 ---
 

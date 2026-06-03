@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { ChatMessage } from "$lib/types";
+    import type { ChatMessage, ChatQueryResult } from "$lib/types";
     import {
         artifactLink,
         artifactSourceLabel,
@@ -18,6 +18,18 @@
     export let command = "";
     export let onClear: () => void = () => {};
     export let onSubmit: () => void | Promise<void> = () => {};
+
+    function queryProviderLabel(provider?: string) {
+        return provider === "codex" ? "Live Codex" : "Local DB";
+    }
+
+    function querySourceLabel(result?: ChatQueryResult) {
+        if (!result) return "";
+        const parts = [];
+        if (result.connector) parts.push(result.connector);
+        if (result.source_uri) parts.push(result.source_uri);
+        return parts.join(" · ");
+    }
 </script>
 
 <section class="chat-card">
@@ -54,6 +66,17 @@
                             {/if}
                         {/each}
                     </div>
+                    {#if message.card?.kind === "query" && message.card.chatResult}
+                        <div
+                            class="query-meta"
+                            class:live={message.card.chatResult.provider === "codex"}
+                        >
+                            <span>{queryProviderLabel(message.card.chatResult.provider)}</span>
+                            {#if querySourceLabel(message.card.chatResult)}
+                                <small>{querySourceLabel(message.card.chatResult)}</small>
+                            {/if}
+                        </div>
+                    {/if}
                     {#if message.card?.chatResult?.artifacts?.length}
                         <details>
                             <summary>{message.card.chatResult.artifact_count} evidence items</summary>
@@ -274,6 +297,34 @@
         margin-top: 12px;
         border-top: 1px solid #d7d2c8;
         padding-top: 10px;
+    }
+
+    .query-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        margin-top: 10px;
+        color: #625f55;
+        font-size: 11px;
+    }
+
+    .query-meta span {
+        flex: 0 0 auto;
+        color: #8a6a20;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .query-meta.live span {
+        color: #1f5f8b;
+    }
+
+    .query-meta small {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     summary {

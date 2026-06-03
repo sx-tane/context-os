@@ -12,6 +12,7 @@ import type {
   IngestRequest,
   IngestResult,
   ServiceStatus,
+  SourceRegistrationRequest,
   WorkspaceRecord,
   WorkspaceSyncState,
   WorkspaceStatus,
@@ -23,6 +24,13 @@ interface StreamHandlers {
   onLog?: (line: string) => void;
   onStatus?: (elapsed: number) => void;
   onResult?: (result: IngestResult) => void;
+  onError?: (message: string) => void;
+}
+
+interface ChatStreamHandlers {
+  onLog?: (line: string) => void;
+  onStatus?: (elapsed: number) => void;
+  onResult?: (result: ChatQueryResult) => void;
   onError?: (message: string) => void;
 }
 
@@ -224,7 +232,7 @@ export async function streamCodexLogin(
 }
 
 export async function getCodexSources(
-  connector: Extract<ConnectorKind, "github" | "slack">,
+  connector: CodexConnectorKind,
 ): Promise<CodexSourceList | null> {
   try {
     const res = await fetch(
@@ -297,6 +305,50 @@ export async function resetWorkspace(
   } catch {
     return null;
   }
+}
+
+export async function postWorkspaceSource(
+  body: SourceRegistrationRequest,
+  options: RequestOptions = {},
+): Promise<
+  | { ok: true; status: number; body: WorkspaceSyncState }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/workspace/source`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message:
+          "API is unreachable. Start the API with scripts/start-all.sh or check the frontend /api proxy.",
+      },
+    };
+  }
+
+  const responseBody = await readJSON(res);
+  if (res.ok) {
+    const sync = normalizeWorkspaceSync(responseBody);
+    return {
+      ok: true,
+      status: res.status,
+      body: sync ?? (responseBody as unknown as WorkspaceSyncState),
+    };
+  }
+  return {
+    ok: false,
+    status: res.status,
+    body: responseBody,
+  };
 }
 
 export async function deleteWorkspace(path: string): Promise<DeleteWorkspaceResult> {
@@ -507,6 +559,34 @@ export async function postChatQuery(
     status: res.status,
     body: responseBody,
   };
+}
+
+export async function streamChatQuery(
+  body: ChatQueryRequest,
+  handlers: ChatStreamHandlers,
+  options: RequestOptions = {},
+): Promise<void> {
+  const res = await fetch(`${API_URL}/chat/query/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  await assertStreamResponse(res);
+  await readEventStream(res, (message) => {
+    if (message.event === "log") {
+      handlers.onLog?.(message.data);
+    } else if (message.event === "status") {
+      const status = parseJSON<{ elapsed?: number }>(message.data);
+      if (status?.elapsed !== undefined) handlers.onStatus?.(status.elapsed);
+    } else if (message.event === "result") {
+      const result = parseJSON<ChatQueryResult>(message.data);
+      if (result) handlers.onResult?.(result);
+    } else if (message.event === "error") {
+      const parsed = parseJSON<{ message?: string }>(message.data);
+      handlers.onError?.(parsed?.message ?? message.data);
+    }
+  });
 }
 
 /** Fetch entity graph data for a workspace, optionally filtered by entity type. */

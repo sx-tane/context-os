@@ -407,13 +407,16 @@ export async function loadWorkspaceStatus(workspacePath: string): Promise<void> 
           (s) =>
             s.connector === ck.connector &&
             (s.source_uri === ck.uri || s.source_uri === "" || !s.source_uri) &&
-            (s.event_count ?? 0) > 0,
+            (s.status === "connected" || (s.event_count ?? 0) > 0),
         );
         if (sync) {
           return {
             ...ck,
             status: "ready" as KnowledgeStatus,
-            eventCount: sync.event_count ?? ck.eventCount,
+            eventCount:
+              sync.status === "connected"
+                ? undefined
+                : sync.event_count ?? ck.eventCount,
             error: undefined,
           };
         }

@@ -13,7 +13,7 @@ Svelte components for the main local chat thread.
 
 ## Usage
 
-These components are presentation-only. API calls, workspace state, and message orchestration should stay in the route or shared frontend helpers such as `$lib/chatController.ts`.
+These components are presentation-only. API calls, workspace state, and message orchestration should stay in the route or shared frontend helpers such as `$lib/chatController.ts`. Query answer metadata renders `ChatQueryResult.provider` so users can distinguish live Codex lookup from local DB evidence. Pending query copy shows the predicted Live Codex connector/source route, streams Codex-style `›` and `•` progress lines from `/chat/query/stream`, and keeps Local DB visible as the fallback and double-check path.
 
 ## Maintenance Notes
 

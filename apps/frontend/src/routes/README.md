@@ -23,7 +23,7 @@ Controls should use the same restrained mono theme:
 - The Codex account is shown once under `CODEX`; do not repeat the connected status line or label it as a generic profile unless it is actually a user profile surface.
 - The insight summary shows the active workspace name once under `WORKSPACE`; do not repeat the workspace path below it.
 - Activity rows show whether each artifact came from `LOCAL` filesystem ingest or a plugin-backed `SOURCE`, then show connector, source URI, and ingest time.
-- Chat source questions show a neutral source-context loading state; the backend uses local artifacts first and may return Codex-backed live source answers for configured plugin sources.
+- Chat source questions show a neutral source-context loading state; plugin-backed source links and saved sources use Codex-backed live lookup first, while filesystem questions remain local DB first.
 - Graph view renders a readable typed relationship map, not a full always-on hairball network: the left index shows selected, linked, and top entities as compact flat rows with optional filtering, while the selected entity is drawn as a focused graph with incoming/outgoing relationship lines.
 - The graph entity type summary is API-driven and lives in the right detail panel with counts and stable generated colors.
 - Relationship context is selective: the focused graph draws links for the selected entity instead of all graph links at once. The detail panel groups incoming and outgoing relationships by relationship kind.

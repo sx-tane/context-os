@@ -16,8 +16,8 @@ On first visit:
 1. Pick or add a workspace from the left rail. Workspace state is local and path-scoped.
 2. Open **ADD SOURCE** to configure GitHub, Jira, Slack, Notion, SharePoint/OneDrive, Google Drive, or Filesystem.
 3. Source setup appears inline inside the product window instead of as a blocking modal.
-4. Ask local source questions in the command bar, for example `give me today slack messages`, `recent jira tickets`, or `latest drive docs`.
-5. The right truth panel shows the local answer, cited artifacts, analysis findings, and graph entities.
+4. Ask source questions in the command bar, for example `give me today slack messages`, `recent jira tickets`, or `latest drive docs`.
+5. The chat answer labels whether it came from live Codex lookup or local DB evidence. The truth panel shows local artifacts, analysis findings, and graph entities.
 
 ## Project Identity
 
@@ -27,22 +27,25 @@ Projects are keyed by **workspace folder path** (stored in `localStorage` and mi
 
 | Command | Behavior |
 |---|---|
-| source question | Calls `POST /chat/query` and answers from local ingested artifacts only |
+| source question | Calls `POST /chat/query`; plugin-backed source links and saved sources use live Codex first, then local DB fallback |
 | `show findings` | Runs analysis and shows mismatches for the latest ready connector |
 | `status` | Routed through local chat status handling |
 | `install knowledge` / `add source` | Opens the inline source setup panel |
 | `clear` | Clear chat history for current project |
 
-Natural language source questions do not fall back to findings. If no matching local artifact exists, the answer says no local data was found.
+Natural language source questions do not fall back to findings. If live Codex lookup fails, the answer says so before using local artifacts. If no matching local artifact exists, the answer says no local data was found.
 
 ## Initial Knowledge Installment
 
 The `KnowledgeInstall` component (`src/lib/components/knowledge/KnowledgeInstall.svelte`) is the core first-run flow:
 - Shows readiness per connector (Codex plugin installed + logged in).
-- Runs `runConnectorIngest` for each enabled + configured connector sequentially.
-- Streams live progress logs per connector.
+- Lets users save a live GitHub, Jira, Slack, Notion, SharePoint/OneDrive, or Google Drive connector by enabling the plugin row; **Check plugin account** discovery is optional and only narrows the default scope to selected repos, projects, channels, pages, folders, or sites visible to the current plugin login.
+- Saves external connectors and optional narrowed sources as connected source references via `POST /workspace/source`; manual URI entry is a collapsed fallback when discovery returns nothing or the user needs a specific pasted link.
+- Shows filesystem as a separate local upload area with **Choose files**, **Choose folder**, and **Upload and ingest** controls because filesystem content must live inside ContextOS storage.
 - Marks the project as knowledge-ready on completion.
 - Reopenable at any time via the sidebar button.
+
+External source setup does not bulk-ingest or analyze source content. Local DB artifacts, graph output, findings, evidence, and confidence remain the source of truth for double-checking after explicit ingest or Run Analysis.
 
 ## Design Rules
 
@@ -67,6 +70,7 @@ flowchart TD
     CHAT --> CMDS[Chat command router]
     CMDS --> QUERY[postChatQuery]
     CMDS --> INGEST[runConnectorIngest]
+    KI --> SOURCE[postWorkspaceSource]
     CMDS --> FINDINGS[postFindings]
     CHAT --> GRAPH[getGraphData]
     INGEST --> API[api.ts]
@@ -74,7 +78,8 @@ flowchart TD
     FINDINGS --> API
     GRAPH --> API
     STORE --> LS[(localStorage)]
-    KI[KnowledgeInstall.svelte] --> INGEST
+    KI[KnowledgeInstall.svelte] --> SOURCE
+    KI --> INGEST
     API --> BACKEND[Go API]
     CONNECTORS[/connectors debug page] --> API
     FINDINGS_PAGE[/findings page] --> API
@@ -86,7 +91,7 @@ All seven connectors are available in the knowledge install wizard:
 
 | Connector | Codex Plugin | Auth Fallback |
 |---|---|---|
-| GitHub | `github@openai-curated` | `GITHUB_TOKEN` env var |
+| GitHub | `github@openai-curated` | `GITHUB_TOKEN` env var; source discovery/chat prompts may use read-only `gh` when already authenticated and plugin listing is insufficient |
 | Jira | `atlassian-rovo@openai-curated` | `JIRA_TOKEN` + `JIRA_EMAIL` + `JIRA_BASE_URL` |
 | Slack | `slack@openai-curated` | `SLACK_BOT_TOKEN` env var |
 | Notion | `notion@openai-curated` | `NOTION_TOKEN` env var |
