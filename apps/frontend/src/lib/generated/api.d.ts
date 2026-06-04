@@ -449,6 +449,8 @@ export interface paths {
           workspace_id: string;
           /** Filter by entity type (e.g. feature, person, service) */
           entity_type?: string;
+          /** Include low-signal regex entities and co-occurrence-only relationships */
+          include_noise?: boolean;
         };
       };
       responses: {
@@ -1396,12 +1398,14 @@ export interface definitions {
   };
   "response.PresentationFindings": {
     connector?: string;
+    entity_count?: number;
     event_count?: number;
     execution?: definitions["response.ExecutionEvidence"];
     mismatch_count?: number;
     mismatch_ids?: string[];
     mismatches?: definitions["types.Mismatch"][];
     pmo?: definitions["response.PMOSummary"];
+    relationship_count?: number;
     role?: string;
     severity_count?: { [key: string]: number };
     summary?: string;

@@ -25,7 +25,8 @@ Last regenerated to include workspace-scoped source, chat, graph, presentation, 
 - `response.ChatQuery.answer_sections` documents structured source cards returned by live chat.
 - `response.ChatQuery.evidence_save_status`, `evidence_event_count`, and `evidence_save_error` document live-chat evidence persistence into the Local DB.
 - `/artifacts/live-evidence/cleanup` documents explicit cleanup of old noisy `live_chat_answer` rows.
-- `/graph` documents flattened graph entities and persisted relationship edges for frontend graph rendering.
+- `/graph` documents flattened graph entities, persisted relationship edges, and the `include_noise` query option for low-signal graph debugging.
+- `response.PresentationFindings` includes `entity_count` and `relationship_count` for presentation/finding summaries and generated frontend typings.
 - Google Drive connector docs include status and ingest endpoints for Docs, Sheets, and Slides sources.
 
 ## Verification

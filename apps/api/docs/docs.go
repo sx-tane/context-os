@@ -945,6 +945,12 @@ const docTemplate = `{
                         "description": "Filter by entity type (e.g. feature, person, service)",
                         "name": "entity_type",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include low-signal regex entities and co-occurrence-only relationships",
+                        "name": "include_noise",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3045,6 +3051,9 @@ const docTemplate = `{
                 "connector": {
                     "type": "string"
                 },
+                "entity_count": {
+                    "type": "integer"
+                },
                 "event_count": {
                     "type": "integer"
                 },
@@ -3068,6 +3077,9 @@ const docTemplate = `{
                 },
                 "pmo": {
                     "$ref": "#/definitions/response.PMOSummary"
+                },
+                "relationship_count": {
+                    "type": "integer"
                 },
                 "role": {
                     "type": "string"

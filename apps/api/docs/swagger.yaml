@@ -634,6 +634,8 @@ definitions:
     properties:
       connector:
         type: string
+      entity_count:
+        type: integer
       event_count:
         type: integer
       execution:
@@ -650,6 +652,8 @@ definitions:
         type: array
       pmo:
         $ref: '#/definitions/response.PMOSummary'
+      relationship_count:
+        type: integer
       role:
         type: string
       severity_count:
@@ -1451,6 +1455,10 @@ paths:
         in: query
         name: entity_type
         type: string
+      - description: Include low-signal regex entities and co-occurrence-only relationships
+        in: query
+        name: include_noise
+        type: boolean
       produces:
       - application/json
       responses:
