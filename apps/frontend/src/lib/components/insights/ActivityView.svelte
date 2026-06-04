@@ -397,7 +397,7 @@
     gap: 14px;
     border-bottom: 1px solid #d7d2c8;
     background: #ebe8e0;
-    padding: 4px 16px 8px;
+    padding: 4px 0 8px;
   }
 
   .filter-grid {

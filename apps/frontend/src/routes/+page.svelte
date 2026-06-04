@@ -109,7 +109,7 @@
     let graphCleanupRunning = false;
     let graphCleanupMessage = "";
     let walkthroughOpen = false;
-    let paneSplit = 52;
+    let paneSplit = 32;
     let mainGrid: HTMLElement | null = null;
     let resizingPanes = false;
     let workspaceRefreshRunID = 0;
@@ -1314,7 +1314,7 @@
         height: 100%;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(360px, var(--pane-split, 52%)) 9px minmax(
+        grid-template-columns: minmax(360px, var(--pane-split, 32%)) 9px minmax(
                 360px,
                 1fr
             );

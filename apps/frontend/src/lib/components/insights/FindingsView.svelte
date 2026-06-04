@@ -209,7 +209,12 @@
         flex-direction: column;
         gap: 10px;
         overflow: auto;
+        scrollbar-width: none;
         padding: 14px 0;
+    }
+
+    .findings-view::-webkit-scrollbar {
+        display: none;
     }
 
     .findings-view article,

@@ -24,7 +24,7 @@ Controls should use the same restrained mono theme:
 - The topbar uses the same 16px horizontal inset as the main content panes so workspace controls, source setup, and status read as part of one layout.
 - The footer console strip reuses the shared insight status labels for Activity evidence, Graph availability, and manual Findings freshness. Keep idle route state static so the main page does not re-render every second while no analysis or ingest is running.
 - Workspace refreshes reuse the status response already loaded into the project store, ignore stale overlapping refreshes, and skip graph/artifact requests until the workspace has at least one ready source.
-- The chat and insight panes can be resized from the center divider on desktop; the layout returns to one column below the compact breakpoint.
+- The chat and insight panes default to a compact chat rail with a wider insight workspace and can be resized from the center divider on desktop; the layout returns to one column below the compact breakpoint.
 - The embedded source setup panel expands within the right pane without a nested visible scrollbar.
 - Findings / Graph / Activity uses the segmented tab style already defined in the route.
 - Switching between Findings, Graph, and Activity closes the analysis preview so stale preview context does not stay open above a different tab.
