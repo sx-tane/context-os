@@ -151,14 +151,9 @@
         return target instanceof Element && Boolean(target.closest("button, input, label, details, summary"));
     }
 
-    // Pre-fill URIs from already-ingested connectors in project store.
-    $: {
-        for (const ck of $project.connectors) {
-            if (ck.connector === "filesystem" && uris[ck.connector] === "" && ck.uri) {
-                uris[ck.connector] = ck.uri;
-            }
-        }
-    }
+    // Filesystem uploads are shown in the saved-source list. Keep the manual
+    // server-path field blank so uploaded files are not re-submitted through
+    // the footer's source-save flow on later visits.
 
     function isPluginReady(pluginName: string): boolean {
         if (!pluginName) return true; // filesystem has no plugin
@@ -267,6 +262,9 @@
         const targets: { connector: ConnectorKind; uri: string }[] = [];
         for (const r of REQUIRED) {
             const manualURI = uriState[r.connector].trim();
+            if (r.connector === "filesystem" && !manualURI) {
+                continue;
+            }
             const uri = sourceSetupURI(
                 r.connector,
                 manualURI,

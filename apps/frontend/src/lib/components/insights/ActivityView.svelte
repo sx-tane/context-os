@@ -127,84 +127,83 @@
 </script>
 
 <div class="activity-view">
-  <div class="activity-toolbar">
-    <div>
-      <strong>Activity</strong>
-      <span>{visibleArtifacts.length} of {recentArtifacts.length} events</span>
-    </div>
-    <label>
-      <span>Window</span>
-      <select
-        aria-label="Filter activity by time"
-        value={timeFilter}
-        on:change={(event) =>
-          changeTimeFilter((event.currentTarget as HTMLSelectElement).value)}
-      >
-        {#each filters as filter}
-          <option value={filter}>{activityFilterLabel(filter)}</option>
-        {/each}
-      </select>
-    </label>
-    <button
-      type="button"
-      class="cleanup-action"
-      on:click={() => {
-        cleanupConfirmOpen = true;
-        cleanupMessage = "";
-      }}
-    >
-      Clean noisy live evidence
-    </button>
-  </div>
-
   <div class="activity-filters" aria-label="Activity filters">
-    <label>
-      <span>Connector</span>
-      <select
-        aria-label="Filter activity by connector"
-        value={activityFilters.connector ?? ""}
-        on:change={(event) =>
-          updateActivityFilter("connector", (event.currentTarget as HTMLSelectElement).value)}
+    <div class="filter-grid">
+      <label>
+        <span>Window</span>
+        <select
+          aria-label="Filter activity by time"
+          value={timeFilter}
+          on:change={(event) =>
+            changeTimeFilter((event.currentTarget as HTMLSelectElement).value)}
+        >
+          {#each filters as filter}
+            <option value={filter}>{activityFilterLabel(filter)}</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        <span>Connector</span>
+        <select
+          aria-label="Filter activity by connector"
+          value={activityFilters.connector ?? ""}
+          on:change={(event) =>
+            updateActivityFilter("connector", (event.currentTarget as HTMLSelectElement).value)}
+        >
+          <option value="">All connectors</option>
+          {#each connectorOptions as connector}
+            <option value={connector}>{connector}</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        <span>Evidence Type</span>
+        <select
+          aria-label="Filter activity by evidence type"
+          value={activityFilters.evidenceType ?? ""}
+          on:change={(event) =>
+            updateActivityFilter("evidenceType", (event.currentTarget as HTMLSelectElement).value)}
+        >
+          <option value="">All types</option>
+          {#each evidenceTypeOptions as evidenceType}
+            <option value={evidenceType}>{evidenceType}</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        <span>Source URI</span>
+        <input
+          value={activityFilters.sourceURI ?? ""}
+          placeholder="Filter source URI"
+          on:input={(event) =>
+            updateActivityFilter("sourceURI", (event.currentTarget as HTMLInputElement).value)}
+        />
+      </label>
+      <label>
+        <span>Keyword</span>
+        <input
+          value={activityFilters.keyword ?? ""}
+          placeholder="Search activity"
+          on:input={(event) =>
+            updateActivityFilter("keyword", (event.currentTarget as HTMLInputElement).value)}
+        />
+      </label>
+    </div>
+    <div class="filter-actions">
+      <button
+        type="button"
+        class="cleanup-action"
+        aria-label="Clean noisy live evidence"
+        title="Clean noisy live evidence"
+        on:click={() => {
+          cleanupConfirmOpen = true;
+          cleanupMessage = "";
+        }}
       >
-        <option value="">All connectors</option>
-        {#each connectorOptions as connector}
-          <option value={connector}>{connector}</option>
-        {/each}
-      </select>
-    </label>
-    <label>
-      <span>Evidence Type</span>
-      <select
-        aria-label="Filter activity by evidence type"
-        value={activityFilters.evidenceType ?? ""}
-        on:change={(event) =>
-          updateActivityFilter("evidenceType", (event.currentTarget as HTMLSelectElement).value)}
-      >
-        <option value="">All types</option>
-        {#each evidenceTypeOptions as evidenceType}
-          <option value={evidenceType}>{evidenceType}</option>
-        {/each}
-      </select>
-    </label>
-    <label>
-      <span>Source URI</span>
-      <input
-        value={activityFilters.sourceURI ?? ""}
-        placeholder="Filter source URI"
-        on:input={(event) =>
-          updateActivityFilter("sourceURI", (event.currentTarget as HTMLInputElement).value)}
-      />
-    </label>
-    <label>
-      <span>Keyword</span>
-      <input
-        value={activityFilters.keyword ?? ""}
-        placeholder="Search activity"
-        on:input={(event) =>
-          updateActivityFilter("keyword", (event.currentTarget as HTMLInputElement).value)}
-      />
-    </label>
-    <button type="button" on:click={clearActivityFilters}>Clear Filters</button>
+        Clean Noise
+      </button>
+      <button type="button" on:click={clearActivityFilters}>Clear</button>
+    </div>
   </div>
 
   {#if cleanupConfirmOpen}
@@ -375,14 +374,13 @@
     gap: 0;
     overflow: auto;
     scrollbar-width: none;
-    padding: 14px 0;
+    padding: 0 0 14px;
   }
 
   .activity-view::-webkit-scrollbar {
     display: none;
   }
 
-  .activity-toolbar,
   .source-head {
     display: flex;
     align-items: center;
@@ -390,42 +388,34 @@
     gap: 12px;
   }
 
-  .activity-toolbar {
+  .activity-filters {
     position: sticky;
     top: 0;
     z-index: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
     border-bottom: 1px solid #d7d2c8;
     background: #ebe8e0;
-    padding: 10px 16px;
+    padding: 4px 16px 8px;
   }
 
-  .activity-toolbar strong,
-  .activity-toolbar span,
-  .activity-toolbar label {
-    display: block;
-  }
-
-  .activity-toolbar label {
-    min-width: 132px;
-  }
-
-  .activity-toolbar select {
-    width: 100%;
-    border: 0;
-    border-bottom: 1px solid #bdb7a8;
-    border-radius: 0;
-    background: transparent;
-    color: #1c1b18;
-    padding: 5px 0;
-    font-weight: 700;
-  }
-
-  .activity-filters {
+  .filter-grid {
+    flex: 1 1 auto;
     display: grid;
-    grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(160px, 1fr) minmax(160px, 1fr) auto;
-    gap: 10px;
-    border-bottom: 1px solid #d7d2c8;
-    padding: 10px 16px;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 10px 14px;
+    min-width: 0;
+  }
+
+  .filter-actions {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 14px;
+    flex: 0 0 auto;
+    padding-bottom: 1px;
+    white-space: nowrap;
   }
 
   .activity-filters label,
@@ -551,8 +541,7 @@
   }
 
   .source-head span,
-  .activity-toolbar span,
-  .activity-toolbar label > span {
+  .activity-filters label > span {
     color: #8a8678;
     font-size: 11px;
     text-transform: uppercase;
@@ -635,6 +624,16 @@
     padding: 16px;
   }
 
+  @media (max-width: 920px) {
+    .activity-filters {
+      flex-wrap: wrap;
+    }
+
+    .filter-actions {
+      flex: 1 1 100%;
+    }
+  }
+
   .detail-actions {
     display: flex;
     flex-wrap: wrap;
@@ -711,13 +710,12 @@
   }
 
   @media (max-width: 640px) {
-    .activity-toolbar {
-      align-items: stretch;
-      flex-direction: column;
+    .filter-grid {
+      grid-template-columns: 1fr;
     }
 
-    .activity-filters {
-      grid-template-columns: 1fr;
+    .filter-actions {
+      justify-content: flex-start;
     }
 
     .activity-detail dl > div {

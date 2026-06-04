@@ -76,4 +76,28 @@ describe("applyWorkspaceSyncsToConnectors", () => {
       error: "token expired",
     }));
   });
+
+  it("marks uploaded filesystem sources ready when the DB confirms events under a different stored URI", () => {
+    const result = applyWorkspaceSyncsToConnectors(
+      [{
+        connector: "filesystem",
+        uri: "20260604_FOOMA様.pdf",
+        status: "ingesting",
+      }],
+      [{
+        connector: "filesystem",
+        source_uri: "storage/raw/uploads/upload-id/20260604_FOOMA様.pdf",
+        status: "ready",
+        event_count: 1,
+      }],
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.connectors[0]).toEqual(expect.objectContaining({
+      connector: "filesystem",
+      status: "ready",
+      eventCount: 1,
+      error: undefined,
+    }));
+  });
 });

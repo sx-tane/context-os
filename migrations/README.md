@@ -12,15 +12,16 @@ and applied automatically on startup by `storage/db.Open()`.
 |------|---------|
 | `0001_enable_pgvector.sql` | Enables the `vector` extension for local Postgres instances. |
 | `0002_workspace_schema.sql` | Core persistence layer: workspaces, ingest_events, entities, relationships, mismatches, workspace_ui_state, connector_syncs, audit_log. |
+| `0003_workspace_ui_state.sql` | Idempotent backfill for existing local databases that recorded `0002_workspace_schema.sql` before durable workspace UI state was added. |
 
-## Schema overview (0002)
+## Schema overview
 
 - **workspaces** — one row per local project root; `path` is the unique key.
 - **ingest_events** — raw source events captured per workspace; `UNIQUE(id, workspace_id)` makes ingestion idempotent.
 - **entities** — identity-resolved entities per workspace; confidence is updated on re-ingestion.
 - **relationships** — typed edges between entities; confidence is merged upward on re-ingestion.
 - **mismatches** — reasoning findings per workspace with evidence and trace_id.
-- **workspace_ui_state** — durable JSON state per `(workspace_id, state_key)` for local frontend workflows such as analysis baskets and finding action checklists.
+- **workspace_ui_state** — durable JSON state per `(workspace_id, state_key)` for local frontend workflows such as analysis baskets and finding action checklists. `0003` creates it for older local databases where `0002` was already marked applied.
 - **connector_syncs** — replay cursor and last-sync timestamp per `(workspace_id, connector, source_uri)`.
 - **audit_log** — immutable append-only event log per workspace.
 
@@ -33,5 +34,6 @@ and applied automatically on startup by `storage/db.Open()`.
 ## Maintenance Checklist
 
 - Add migration notes when schema shape changes materially.
+- Add a new numbered migration for schema changes after a migration file has shipped; the migrator skips filenames already present in `schema_migrations`.
 - Keep migration filenames ordered and deterministic.
 - Update local setup or production readiness docs if migration prerequisites change.

@@ -60,7 +60,16 @@ function connectorSyncMatchesKnowledge(
   knowledge: ConnectorKnowledge,
 ): boolean {
   if (sync.connector !== knowledge.connector) return false;
-  return sync.source_uri === knowledge.uri || sync.source_uri === "" || !sync.source_uri;
+  if (sync.source_uri === knowledge.uri || sync.source_uri === "" || !sync.source_uri) {
+    return true;
+  }
+  if (knowledge.connector !== "filesystem") return false;
+  const syncURI = sync.source_uri.trim();
+  const knowledgeURI = knowledge.uri.trim();
+  if (!syncURI || !knowledgeURI) return false;
+  return syncURI.includes(knowledgeURI) ||
+    knowledgeURI.includes(syncURI) ||
+    (sync.event_count ?? 0) > 0;
 }
 
 function eventCountForSavedSource(sync: WorkspaceSyncState, fallback?: number): number | undefined {

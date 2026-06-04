@@ -1,4 +1,9 @@
-import type { Artifact, FindingsMismatch } from "$lib/types";
+import type {
+  Artifact,
+  ChatMessage,
+  FindingsMismatch,
+  FindingsResult,
+} from "$lib/types";
 
 export type ActivityTimeFilter = "24h" | "7d" | "30d" | "all";
 
@@ -19,6 +24,11 @@ export type ActivityEventSummary = {
 export type MessageLine = {
   kind: "heading" | "section" | "number" | "bullet" | "body" | "blank";
   text: string;
+};
+
+export type LatestFindingsRun = {
+  result: FindingsResult;
+  analyzedAt: string;
 };
 
 export function formatTime(value?: string) {
@@ -81,6 +91,21 @@ export function findingRecommendedAction(
 export function findingImpact(mismatch: FindingsMismatch | unknown) {
   const record = mismatch as Record<string, unknown>;
   return String(record.impact ?? "");
+}
+
+export function latestFindingsRunFromMessages(
+  messages: ChatMessage[],
+): LatestFindingsRun | null {
+  for (const message of [...messages].reverse()) {
+    if (message.card?.kind !== "findings" || !message.card.findingsResult) {
+      continue;
+    }
+    return {
+      result: message.card.findingsResult,
+      analyzedAt: message.createdAt || new Date().toISOString(),
+    };
+  }
+  return null;
 }
 
 export function messageLines(text: string): MessageLine[] {
@@ -155,12 +180,10 @@ export function artifactSourceLabel(artifact: Artifact) {
     return metadata.source_label;
   }
   if (artifact.connector === "slack") {
-    return (
-      metadata.slack_channel_id ||
-      artifact.source_uri ||
-      artifact.title ||
-      "Slack"
-    );
+    return slackSourceLabel(artifact, metadata);
+  }
+  if (artifact.connector === "googledrive") {
+    return googleDriveSourceLabel(artifact, metadata);
   }
   if (artifact.connector === "github") {
     const owner = metadata.github_owner;
@@ -170,6 +193,90 @@ export function artifactSourceLabel(artifact: Artifact) {
       : artifact.source_uri || artifact.title || "GitHub";
   }
   return artifact.source_uri || artifact.title || artifact.connector;
+}
+
+function slackSourceLabel(artifact: Artifact, metadata: Record<string, string>) {
+  const channelName =
+    metadata.slack_channel_name ||
+    metadata.channel_name ||
+    metadata.conversation_name;
+  if (channelName) {
+    return channelName.startsWith("#") ? channelName : `#${channelName}`;
+  }
+  const conversation = slackConversationFromText(
+    artifact.body || artifact.preview || artifact.title,
+  );
+  if (conversation) return conversation;
+  const channelID =
+    metadata.slack_channel_id ||
+    metadata.channel_id ||
+    slackChannelFromURL(artifact.source_uri);
+  if (channelID) return channelID.startsWith("#") ? channelID : `Slack ${channelID}`;
+  return readableSourceFallback(artifact, "Slack");
+}
+
+function googleDriveSourceLabel(
+  artifact: Artifact,
+  metadata: Record<string, string>,
+) {
+  const label =
+    metadata.drive_file_name ||
+    metadata.google_drive_file_name ||
+    metadata.file_name ||
+    metadata.filename ||
+    metadata.name;
+  if (label) return label;
+  const fromTitle = readableTitle(artifact.title);
+  if (fromTitle) return fromTitle;
+  const fromBody = fileNameFromText(artifact.body || artifact.preview);
+  if (fromBody) return fromBody;
+  return readableSourceFallback(artifact, "Google Drive");
+}
+
+function readableSourceFallback(artifact: Artifact, fallback: string) {
+  return readableTitle(artifact.title) ||
+    fileNameFromText(artifact.source_uri) ||
+    artifact.source_uri ||
+    fallback;
+}
+
+function readableTitle(value?: string) {
+  const clean = (value ?? "").trim();
+  if (!clean || /^https?:\/\//i.test(clean)) return "";
+  return clean;
+}
+
+function fileNameFromText(value?: string) {
+  const clean = (value ?? "").trim();
+  if (!clean) return "";
+  const pathMatch = clean.match(
+    /([^/\s?#]+?\.(?:pdf|pptx?|xlsx?|csv|docx?|html?|md|txt|json|ya?ml))(?:[?#][^\s]*)?/i,
+  );
+  return pathMatch?.[1]?.trim() ?? "";
+}
+
+function slackConversationFromText(value?: string) {
+  const clean = (value ?? "").trim();
+  const conversation = clean.match(
+    /\bConversation:\s*([^,\n.]+)(?:,\s*([A-Z0-9]+))?/i,
+  );
+  if (!conversation) return "";
+  const name = conversation[1]?.trim();
+  const id = conversation[2]?.trim();
+  if (name && name.toLowerCase() !== "dm") {
+    return name.startsWith("#") ? name : `#${name}`;
+  }
+  return id ? `Slack DM ${id}` : "Slack DM";
+}
+
+function slackChannelFromURL(value?: string) {
+  try {
+    const url = new URL(value ?? "");
+    const match = url.pathname.match(/\/archives\/([^/]+)/);
+    return match?.[1] ?? "";
+  } catch {
+    return "";
+  }
 }
 
 export function artifactLink(artifact: Artifact) {

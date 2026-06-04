@@ -12,6 +12,7 @@ import {
   findingRecommendedAction,
   findingSummary,
   groupArtifactsBySource,
+  latestFindingsRunFromMessages,
   markdownBulletList,
   messageLines,
   normalizeActivityTimeFilter,
@@ -20,7 +21,7 @@ import {
   severityLabel,
 } from "../findings/viewModel";
 
-import type { Artifact } from "../types";
+import type { Artifact, ChatMessage } from "../types";
 
 describe("severityLabel", () => {
   it("normalizes known severities and falls back to review", () => {
@@ -45,6 +46,26 @@ describe("finding display helpers", () => {
     expect(findingImpact(finding)).toBe("QA may test the wrong field");
     expect(findingRecommendedAction(finding)).toBe("Update the contract");
     expect(findingSummary({})).toBe("Finding");
+  });
+});
+
+describe("latestFindingsRunFromMessages", () => {
+  it("restores the newest findings result from cached chat cards", () => {
+    const messages: ChatMessage[] = [
+      makeMessage("old", "2026-06-04T09:00:00.000Z", 1),
+      {
+        id: "plain",
+        role: "assistant",
+        text: "No card",
+        createdAt: "2026-06-04T09:30:00.000Z",
+      },
+      makeMessage("new", "2026-06-04T10:00:00.000Z", 45),
+    ];
+
+    const restored = latestFindingsRunFromMessages(messages);
+
+    expect(restored?.analyzedAt).toBe("2026-06-04T10:00:00.000Z");
+    expect(restored?.result.mismatch_count).toBe(45);
   });
 });
 
@@ -119,6 +140,36 @@ describe("artifact display helpers", () => {
     expect(artifactSourceLabel(artifact)).toBe(
       "Google Drive · BKGDEV-8096_帳票項目のマッピング確認.xlsx",
     );
+  });
+
+  it("uses Google Drive file names instead of long document URLs", () => {
+    const artifact = makeArtifact({
+      connector: "googledrive",
+      source_uri: "https://drive.google.com/file/d/abc/view?usp=drivesdk",
+      title: "https://drive.google.com/file/d/abc/view?usp=drivesdk",
+      body: [
+        "The provided URL points to a file, not a folder: transaction_history.html.",
+        "I used its parent folder tables as the folder source.",
+      ].join(" "),
+    });
+
+    expect(artifactSourceLabel(artifact)).toBe("transaction_history.html");
+  });
+
+  it("uses Slack channel or conversation names instead of archive URLs", () => {
+    const channelArtifact = makeArtifact({
+      connector: "slack",
+      source_uri: "https://gxp.slack.com/archives/C07TEAMCHAT/p1780386781885339",
+      metadata: { channel_name: "payment-flow" },
+    });
+    const dmArtifact = makeArtifact({
+      connector: "slack",
+      source_uri: "https://gxp.slack.com/archives/D07E58E08SF/p1780386781885339",
+      body: "Read-only Slack context retrieved. Source - Conversation: DM, D07E58E08SF - Linked message: 1780386781.885339",
+    });
+
+    expect(artifactSourceLabel(channelArtifact)).toBe("#payment-flow");
+    expect(artifactSourceLabel(dmArtifact)).toBe("Slack DM D07E58E08SF");
   });
 });
 
@@ -240,5 +291,25 @@ function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
     schema_version: "v1",
     ingested_at: "2026-01-01T00:00:00.000Z",
     ...overrides,
+  };
+}
+
+function makeMessage(
+  id: string,
+  createdAt: string,
+  mismatchCount: number,
+): ChatMessage {
+  return {
+    id,
+    role: "assistant",
+    text: "Analysis complete",
+    createdAt,
+    card: {
+      kind: "findings",
+      findingsResult: {
+        mismatch_count: mismatchCount,
+        mismatches: [{ id: `${id}-finding`, summary: `${id} finding` }],
+      },
+    },
   };
 }

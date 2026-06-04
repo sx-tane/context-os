@@ -92,7 +92,7 @@ During `/chat/query/stream`, Codex-style `>` and `*` progress lines update `Chat
 
 ### chat/demoWorkspace.ts
 
-Provides the protected `contextos-demo` workspace records used by the homepage when users want to inspect the intended findings, graph, activity, and chat experience without connecting live sources.
+Provides the protected `contextos-demo` workspace records used by the homepage when users want to inspect the intended findings, graph, activity, workflow, and chat experience without connecting live sources. The demo seeds pinned basket evidence, finding action statuses, Activity evidence-type metadata, and chat answers for basket, preview, checklist, export, and workflow prompts so the route walkthrough can showcase the full frontend workflow without backend writes.
 
 ---
 

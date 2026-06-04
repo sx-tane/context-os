@@ -128,6 +128,7 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 	if message == "" {
 		return Result{}, ErrMessageRequired
 	}
+	query.ResponseLanguage = responseLanguageForMessage(query.ResponseLanguage, message)
 
 	workspace, err := s.resolveWorkspace(ctx, query)
 	if err != nil {
@@ -1066,6 +1067,77 @@ func responseLanguageCode(language string) string {
 	default:
 		return "en"
 	}
+}
+
+func responseLanguageForMessage(language, message string) string {
+	code := responseLanguageCode(language)
+	if code != "zh" {
+		return code
+	}
+	if shouldPreferEnglishForMixedPrompt(message) {
+		return "en"
+	}
+	return code
+}
+
+func shouldPreferEnglishForMixedPrompt(message string) bool {
+	if containsAnyRange(message, '\uac00', '\ud7af') {
+		return false
+	}
+	if containsAnyRange(message, '\u3040', '\u30ff') {
+		return false
+	}
+	cjkCount := countRunesInRange(message, '\u4e00', '\u9fff')
+	if cjkCount == 0 || cjkCount > 6 {
+		return false
+	}
+	if countEnglishWords(message) < 3 {
+		return false
+	}
+	return countChineseCueRunes(message) == 0
+}
+
+func containsAnyRange(value string, start, end rune) bool {
+	for _, r := range value {
+		if r >= start && r <= end {
+			return true
+		}
+	}
+	return false
+}
+
+func countRunesInRange(value string, start, end rune) int {
+	count := 0
+	for _, r := range value {
+		if r >= start && r <= end {
+			count++
+		}
+	}
+	return count
+}
+
+func countEnglishWords(value string) int {
+	count := 0
+	inWord := false
+	for _, r := range value {
+		isWord := (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (inWord && r >= '0' && r <= '9') || (inWord && (r == '_' || r == '-'))
+		if isWord && !inWord {
+			count++
+		}
+		inWord = isWord
+	}
+	return count
+}
+
+func countChineseCueRunes(value string) int {
+	count := 0
+	for _, r := range value {
+		switch r {
+		case '吗', '呢', '吧', '啊', '的', '了', '是', '有', '和', '在', '请', '问', '中', '文', '回', '答', '最', '近', '变', '化', '什', '么', '怎', '为':
+			count++
+		}
+	}
+	return count
 }
 
 func clampLimit(limit int) int {

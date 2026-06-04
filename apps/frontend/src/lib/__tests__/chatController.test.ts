@@ -17,6 +17,7 @@ import {
   runChatQuery,
   userMsg,
 } from "../chat/controller";
+import { demoChatQueryResult } from "../chat/demoWorkspace";
 
 import { postChatQuery, streamChatQuery } from "$lib/api";
 import type { ChatQueryResult } from "$lib/types";
@@ -163,6 +164,19 @@ describe("liveConnectorHint", () => {
       { connector: "filesystem", uri: "docs", status: "ready" },
       { connector: "slack", uri: "slack", status: "ingesting" },
     ])).toEqual({ connectors: ["jira", "github"] });
+  });
+});
+
+describe("demo workspace workflow showcase", () => {
+  it("answers basket, preview, checklist, and export prompts with workflow source sections", () => {
+    const result = demoChatQueryResult("show basket preview checklist export workflow");
+
+    expect(result.summary).toBe("Demo workflow showcase");
+    expect(result.answer_sections?.map((section) => section.source_label)).toEqual([
+      "Workflow · Evidence Basket",
+      "Workflow · Checklist and Export",
+    ]);
+    expect(result.answer).toContain("Evidence Basket");
   });
 });
 

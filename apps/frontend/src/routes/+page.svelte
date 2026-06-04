@@ -55,13 +55,16 @@
     import WorkspaceSummary from "$lib/components/insights/WorkspaceSummary.svelte";
     import {
         demoArtifacts,
+        demoAnalysisBasket,
         demoChatQueryResult,
+        demoFindingActions,
         demoFindings,
         demoGraphData,
         demoPlanningTourResult,
         demoWorkspaceStatus,
     } from "$lib/chat/demoWorkspace";
     import { runAnalysis } from "$lib/findings/analysisRunner";
+    import { latestFindingsRunFromMessages } from "$lib/findings/viewModel";
     import { buildInsightStatus } from "$lib/insights/status";
     import {
         buildAnalysisPreview,
@@ -159,6 +162,13 @@
     $: protectedWorkspace =
         workspacePath === DEFAULT_WORKSPACE_PATH ||
         workspacePath === DEMO_WORKSPACE_PATH;
+    $: if (!lastFindings && $chatMessages.length > 0) {
+        const restoredFindings = latestFindingsRunFromMessages($chatMessages);
+        if (restoredFindings) {
+            lastFindings = restoredFindings.result;
+            lastAnalysisAt = restoredFindings.analyzedAt;
+        }
+    }
 
     onMount(() => {
         const savedPath = localStorage.getItem("contextos_workspace_path");
@@ -264,8 +274,8 @@
         const runID = ++workflowStateRunID;
         workflowMessage = "";
         if (workspacePath === DEMO_WORKSPACE_PATH) {
-            analysisBasket = [];
-            findingActions = [];
+            analysisBasket = demoAnalysisBasket();
+            findingActions = demoFindingActions();
             return;
         }
         const [basket, actions] = await Promise.all([
@@ -351,6 +361,7 @@
         sourcePanelOpen = false;
         activeInsightTab = "findings";
         await switchWorkspace(DEMO_WORKSPACE_PATH);
+        analysisPreviewOpen = true;
         if ($chatMessages.length === 0) {
             const result = demoPlanningTourResult();
             lastChatResult = result;
@@ -361,6 +372,14 @@
                 }),
             );
         }
+    }
+
+    async function openDemoWorkflowShowcase() {
+        await openDemoWorkspace();
+        activeInsightTab = "findings";
+        analysisPreviewOpen = true;
+        workflowMessage =
+            "Demo workflow loaded: basket-only preview, source health, finding checklist, and Markdown export are ready to inspect.";
     }
 
     async function createWorkspace() {
@@ -519,11 +538,8 @@
             items: nextItems,
         });
         if (!result.ok) {
-            addMessage(
-                assistantMsg(
-                    `Evidence basket did not save: ${result.body.message ?? result.body.error ?? "unknown error"}`,
-                ),
-            );
+            workflowMessage =
+                `Evidence basket did not save: ${result.body.message ?? result.body.error ?? "unknown error"}`;
         }
     }
 
@@ -562,11 +578,8 @@
             actions: nextActions,
         });
         if (!result.ok) {
-            addMessage(
-                assistantMsg(
-                    `Finding action did not save: ${result.body.message ?? result.body.error ?? "unknown error"}`,
-                ),
-            );
+            workflowMessage =
+                `Finding action did not save: ${result.body.message ?? result.body.error ?? "unknown error"}`;
         }
     }
 
@@ -1061,6 +1074,10 @@
                 <button type="button" on:click={openDemoWorkspace}>
                     <strong>Open Demo</strong>
                     <p>Switch to seeded demo data.</p>
+                </button>
+                <button type="button" on:click={openDemoWorkflowShowcase}>
+                    <strong>Workflow Demo</strong>
+                    <p>Show basket, preview, checklist, and export.</p>
                 </button>
                 <button
                     type="button"

@@ -106,6 +106,40 @@ func TestQueryLocalAnswersUseResponseLanguage(t *testing.T) {
 	}
 }
 
+// TestQueryCorrectsWrongChineseHintForEnglishMixedPrompt verifies short CJK source terms do not force English questions into Chinese.
+func TestQueryCorrectsWrongChineseHintForEnglishMixedPrompt(t *testing.T) {
+	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, &fakeSyncRepository{})
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID:      "/workspace",
+		Message:          "status for kkg payment 決済GW linkedFlag",
+		ResponseLanguage: "zh",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if !strings.Contains(result.Answer, "Local source status") {
+		t.Fatalf("Answer = %q, want English local status answer", result.Answer)
+	}
+}
+
+// TestQueryKeepsChineseHintForChinesePrompt verifies Chinese question wording still receives Chinese local answers.
+func TestQueryKeepsChineseHintForChinesePrompt(t *testing.T) {
+	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, &fakeSyncRepository{})
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID:      "/workspace",
+		Message:          "请用中文回答最近有什么变化",
+		ResponseLanguage: "zh",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if !strings.Contains(result.Answer, "我可以回答本地来源问题") {
+		t.Fatalf("Answer = %q, want Chinese unsupported answer", result.Answer)
+	}
+}
+
 // TestQueryInfersGitHubSourceFromConfiguredRepoName verifies repo slugs in messages constrain GitHub artifact queries to the matching synced source.
 func TestQueryInfersGitHubSourceFromConfiguredRepoName(t *testing.T) {
 	events := &fakeEventRepository{events: []repository.IngestEvent{
@@ -220,6 +254,28 @@ func TestQueryUsesLiveAnswererForGitHubCommitQuestions(t *testing.T) {
 	}
 	if live.query.SourceURI != "sx-tane/tourii-backend" {
 		t.Fatalf("live SourceURI = %q, want sx-tane/tourii-backend", live.query.SourceURI)
+	}
+}
+
+// TestQueryCorrectedLanguageReachesLiveAnswerer verifies live Codex prompts receive the guarded response language.
+func TestQueryCorrectedLanguageReachesLiveAnswerer(t *testing.T) {
+	events := &fakeEventRepository{}
+	live := &fakeLiveAnswerer{answer: "BKGDEV-8236 should be checked in English."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, &fakeSyncRepository{}, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID:      "/workspace",
+		Message:          "what about kkg payment 決済GW linkedFlag BKGDEV-8236",
+		ResponseLanguage: "zh",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if live.query.ResponseLanguage != "en" {
+		t.Fatalf("live ResponseLanguage = %q, want en", live.query.ResponseLanguage)
 	}
 }
 

@@ -2,6 +2,8 @@ import type {
   AnswerSection,
   Artifact,
   ChatQueryResult,
+  EvidenceBasketItem,
+  FindingActionItem,
   FindingsResult,
   GraphData,
   WorkspaceStatus,
@@ -236,6 +238,7 @@ export function demoArtifacts(): Artifact[] {
       "Planning mode and agent chat tour",
       "Demo notes describe the planning-first workflow, source cards, Activity cleanup, stream transcript behavior, findings, graph, and agent chat mode.",
       "2026-01-01T09:10:00.000Z",
+      "tour_note",
     ),
     demoArtifact(
       "demo-artifact-1",
@@ -244,6 +247,7 @@ export function demoArtifacts(): Artifact[] {
       "Refund status acceptance criteria",
       "PMO asks for refund status in checkout before launch review.",
       "2026-01-01T09:25:00.000Z",
+      "requirement",
     ),
     demoArtifact(
       "demo-artifact-2",
@@ -252,6 +256,7 @@ export function demoArtifacts(): Artifact[] {
       "Payments API ownership question",
       "Backend PR covers API plumbing but does not assign a service owner.",
       "2026-01-01T09:15:00.000Z",
+      "pull_request",
     ),
     demoArtifact(
       "demo-artifact-3",
@@ -260,6 +265,7 @@ export function demoArtifacts(): Artifact[] {
       "Launch review decision thread",
       "Team agrees the UI is ready but backend ownership is still unresolved.",
       "2026-01-01T09:20:00.000Z",
+      "thread",
     ),
     demoArtifact(
       "demo-artifact-4",
@@ -268,6 +274,7 @@ export function demoArtifacts(): Artifact[] {
       "refundStatus naming drift",
       "Frontend uses refundStatus while service notes mention refund_state.",
       "2026-01-01T09:10:00.000Z",
+      "pull_request",
     ),
     demoArtifact(
       "demo-artifact-5",
@@ -276,14 +283,62 @@ export function demoArtifacts(): Artifact[] {
       "Activity cleanup example",
       "The demo keeps Activity read-only but shows how live evidence cleanup is exposed for old noisy local records.",
       "2026-01-01T09:29:00.000Z",
+      "workflow_note",
     ),
+  ];
+}
+
+export function demoAnalysisBasket(): EvidenceBasketItem[] {
+  return [
+    {
+      id: "jira:DEMO-42",
+      connector: "jira",
+      uri: "DEMO-42",
+      label: "Refund status acceptance criteria",
+      origin: "activity",
+      artifactId: "demo-artifact-1",
+      addedAt: "2026-01-01T09:32:00.000Z",
+    },
+    {
+      id: "github:context-os/demo-api#18",
+      connector: "github",
+      uri: "context-os/demo-api#18",
+      label: "Payments API ownership question",
+      origin: "activity",
+      artifactId: "demo-artifact-2",
+      addedAt: "2026-01-01T09:33:00.000Z",
+    },
+    {
+      id: "slack:#launch-review",
+      connector: "slack",
+      uri: "#launch-review",
+      label: "Launch review decision thread",
+      origin: "activity",
+      artifactId: "demo-artifact-3",
+      addedAt: "2026-01-01T09:34:00.000Z",
+    },
+  ];
+}
+
+export function demoFindingActions(): FindingActionItem[] {
+  return [
+    {
+      findingId: "demo-finding-1",
+      status: "checking",
+      updatedAt: "2026-01-01T09:35:00.000Z",
+    },
+    {
+      findingId: "demo-finding-2",
+      status: "open",
+      updatedAt: "2026-01-01T09:35:00.000Z",
+    },
   ];
 }
 
 export function demoPlanningTourResult(): ChatQueryResult {
   const artifacts = demoArtifacts();
   const answer =
-    "Demo planning mode starts here. Use the agent chat to inspect source cards, notes, findings, graph, Activity, stream progress, and cleanup behavior without connecting live sources.";
+    "Demo planning mode starts here. Use the agent chat to inspect source cards, evidence basket, analysis preview, finding checklist, Markdown export, graph, Activity filters, stream progress, and cleanup behavior without connecting live sources.";
   return {
     intent: "demo_tour",
     workspace_id: DEMO_WORKSPACE_PATH,
@@ -300,6 +355,8 @@ export function demoPlanningTourResult(): ChatQueryResult {
           "The demo opens with planning mode first so the available functions are visible before live setup.",
         facts: [
           "Agent chat can answer against demo Jira, GitHub, Slack, graph, findings, and Activity data.",
+          "The demo opens with three evidence items already pinned so Analysis Preview shows basket-only analysis.",
+          "Findings include checklist status so open/checking/done behavior is visible immediately.",
           "Structured source cards are rendered from answer_sections instead of parsing prose.",
           "The demo is local-only and does not require API, worker, or Codex availability.",
         ],
@@ -308,6 +365,7 @@ export function demoPlanningTourResult(): ChatQueryResult {
         ],
         coding_notes: [
           "Ask for planning mode, agent mode, functions, source cards, stream, cleanup, findings, graph, or sources.",
+          "Try asking for basket, preview, export, checklist, or Activity filters.",
         ],
         links: ["contextos-demo://planning-notes"],
         timestamps: ["2026-01-01T09:10:00.000Z"],
@@ -335,9 +393,25 @@ export function demoChatQueryResult(text: string): ChatQueryResult {
     lower.includes("plan mode") ||
     lower.includes("agent") ||
     lower.includes("function") ||
-    lower.includes("note")
+    lower.includes("note") ||
+    lower.includes("walkthrough")
   ) {
     return demoPlanningTourResult();
+  } else if (
+    lower.includes("basket") ||
+    lower.includes("bucket") ||
+    lower.includes("pinned") ||
+    lower.includes("pin") ||
+    lower.includes("preview") ||
+    lower.includes("export") ||
+    lower.includes("checklist") ||
+    lower.includes("workflow")
+  ) {
+    intent = "status";
+    summary = "Demo workflow showcase";
+    answer =
+      "The demo has three pinned evidence sources in the Evidence Basket. Analysis Preview shows those as Included, keeps other concrete sources visible as available, and lets you export a Markdown snapshot. Findings also show action checklist status.";
+    answer_sections = demoWorkflowSections();
   } else if (
     lower.includes("finding") ||
     lower.includes("mismatch") ||
@@ -523,12 +597,51 @@ function demoActivitySections(): AnswerSection[] {
         "Activity uses one readable source record per seeded note, issue, PR, or thread.",
       facts: [
         "Demo Activity is read-only.",
+        "Connector, source URI, evidence type, and keyword filters can be tried against seeded demo rows.",
         "Live workspaces expose a confirmation-gated cleanup action.",
       ],
       open_items: [
         "Cleanup never runs automatically; the user must choose it from Activity.",
       ],
       links: ["contextos-demo://activity-cleanup"],
+      confidence: 1,
+      status: "demo",
+    },
+  ];
+}
+
+function demoWorkflowSections(): AnswerSection[] {
+  return [
+    {
+      source_label: "Workflow · Evidence Basket",
+      connector: "jira",
+      source_uri: "DEMO-42",
+      summary:
+        "The basket pins the concrete sources that should drive the next analysis run.",
+      facts: [
+        "Pinned demo sources are Jira DEMO-42, GitHub PR #18, and Slack #launch-review.",
+        "When basket has items, Run Analysis uses basket sources only.",
+        "Preview still shows other concrete sources as available but not selected.",
+      ],
+      open_items: [
+        "Remove a basket item from Preview to see the included source list change.",
+      ],
+      links: ["DEMO-42", "context-os/demo-api#18", "#launch-review"],
+      confidence: 1,
+      status: "demo",
+    },
+    {
+      source_label: "Workflow · Checklist and Export",
+      connector: "github",
+      source_uri: "context-os/demo-api#21",
+      summary:
+        "Findings keep action status beside the recommendation, and Export Markdown creates a handoff snapshot from loaded state.",
+      facts: [
+        "Finding 1 starts as checking; finding 2 starts as open.",
+        "The Copy action produces a share-ready finding summary.",
+        "Export Markdown includes source health, basket, findings, checklist, graph counts, and recent Activity.",
+      ],
+      links: ["context-os/demo-api#21"],
       confidence: 1,
       status: "demo",
     },
@@ -563,6 +676,7 @@ function demoArtifact(
   title: string,
   body: string,
   ingestedAt: string,
+  evidenceKind = "document",
 ): Artifact {
   return {
     id,
@@ -574,7 +688,7 @@ function demoArtifact(
     body,
     preview: body,
     content_hash: id,
-    metadata: {},
+    metadata: { evidence_kind: evidenceKind },
     schema_version: "demo.v1",
     ingested_at: ingestedAt,
   };

@@ -15,7 +15,7 @@ Findings analysis orchestration and display view-model helpers.
 | --- | --- |
 | `analysisRunner.ts` | Executes analysis for selected basket sources, concrete ready sources, and chat/Activity-derived evidence, applies provider-specific source timeouts, and updates chat progress. |
 | `aggregator.ts` | Combines per-source findings responses into one UI result. |
-| `viewModel.ts` | Pure display helpers for findings, Activity, artifacts, markdown-safe detail text, and chat text lines. |
+| `viewModel.ts` | Pure display helpers for findings, latest findings runs from chat cards, Activity, artifacts, markdown-safe detail text, and chat text lines. |
 
 ## Maintenance Notes
 
