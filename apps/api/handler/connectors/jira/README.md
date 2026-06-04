@@ -1,4 +1,4 @@
-# handler/jira
+# handler/connectors/jira
 
 HTTP handlers for the `/jira/*` routes.
 

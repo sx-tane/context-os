@@ -1,4 +1,4 @@
-# handler/filesystem
+# handler/connectors/filesystem
 
 HTTP handlers for the `/filesystem/*` routes.
 

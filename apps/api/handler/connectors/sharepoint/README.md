@@ -1,4 +1,4 @@
-# handler/sharepoint
+# handler/connectors/sharepoint
 
 HTTP handlers for the `/sharepoint/*` routes.
 

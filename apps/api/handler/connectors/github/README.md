@@ -1,4 +1,4 @@
-# handler/github
+# handler/connectors/github
 
 HTTP handlers for the `/github/*` routes.
 

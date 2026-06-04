@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"context-os/apps/api/handler/github"
+	"context-os/apps/api/handler/connectors/github"
 )
 
 // TestStatusMethodNotAllowed verifies that a non-GET request to Status returns 405.

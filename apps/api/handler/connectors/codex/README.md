@@ -1,4 +1,4 @@
-# handler/codex
+# handler/connectors/codex
 
 HTTP handlers for the `/codex/*` routes. Manages Codex CLI status checks,
 device-auth login, and plugin re-authentication flows.

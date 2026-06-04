@@ -9,7 +9,7 @@ Composes API route registration and DB-backed handler wiring for the local Conte
 
 ## Behavior
 
-Static connector, Codex, health, and Swagger routes are always registered. Workspace, artifact, graph, and chat routes are registered when `Routes` receives a database handle because those routes need persisted workspace state. The chat route uses the live Codex answerer and the shared persistent ingest service so concrete live source answers can save evidence into the Local DB.
+Static connector, Codex, health, and Swagger routes are always registered. Connector and Codex HTTP handlers are imported from `apps/api/handler/connectors/<name>` while their source implementations remain in `internal/source/<name>`. Workspace, artifact, graph, and chat routes are registered when `Routes` receives a database handle because those routes need persisted workspace state. The chat route uses the live Codex answerer and the shared persistent ingest service so concrete live source answers can save evidence into the Local DB.
 
 ```mermaid
 flowchart TD

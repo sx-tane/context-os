@@ -20,6 +20,7 @@ flowchart TD
   API --> RESPONSE[response/]
   API --> MIDDLEWARE[middleware/]
   API --> DOCS[docs/]
+  HANDLER --> CONNECTORS[connectors/ HTTP source handlers]
   HANDLER --> SHARED[shared ingest and SSE helpers]
   DOCS --> FRONTEND[frontend codegen]
 ```
@@ -29,16 +30,17 @@ apps/api/
   main.go          — entry point: addr config, DB open/migrations, ListenAndServe only
   bootstrap/       — API composition: handler dependency construction, route list, CORS registration
   handler/
+    connectors/           — HTTP handlers for source connector routes
+      github/             — GitHub status, direct/token ingest, and Codex stream ingest
+      googledrive/        — Google Drive status and folder ingest
+      jira/               — Jira status, direct/token ingest, and Codex/Rovo stream ingest
+      filesystem/         — filesystem path ingest and browser upload staging
+      notion/             — Notion status, page/database ingest, and Codex stream ingest
+      sharepoint/         — SharePoint/OneDrive status, Graph ingest, and Codex stream ingest
+      slack/              — Slack status, OAuth, direct/token ingest, and Codex stream ingest
+      codex/              — Codex CLI status, login, and plugin reauth streams
     shared/               — shared ingest plumbing + SSE infrastructure (used by all domain packages)
     health/               — GET /health
-    github/               — GitHub status, direct/token ingest, and Codex stream ingest
-    googledrive/          — Google Drive status and folder ingest
-    jira/                 — Jira status, direct/token ingest, and Codex/Rovo stream ingest
-    filesystem/           — filesystem path ingest and browser upload staging
-    notion/               — Notion status, page/database ingest, and Codex stream ingest
-    sharepoint/           — SharePoint/OneDrive status, Graph ingest, and Codex stream ingest
-    slack/                — Slack status, OAuth, direct/token ingest, and Codex stream ingest
-    codex/                — Codex CLI status, login, and plugin reauth streams
     README.md             — handler package docs, patterns, and new-connector checklist
   request/
     ingest.go      — inbound ingest request structs
@@ -62,7 +64,7 @@ apps/api/
 
 1. Add the inbound JSON struct to `request/ingest.go`.
 2. Reuse `response.Ingest` unless the connector needs a genuinely different response shape.
-3. Create a new `handler/<domain>/` package with a `<domain>.go` file and its own `README.md`; include full swag annotations (`@Summary`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`).
+3. Create a new `handler/connectors/<domain>/` package with a `<domain>.go` file and its own `README.md`; include full swag annotations (`@Summary`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`).
 4. Register the route in `main.go` — the `@Router` tag must exactly match.
 5. Regenerate docs (required before building): `swag init -g apps/api/main.go -o apps/api/docs`. Then refresh frontend TypeScript types: `cd apps/frontend && bun run codegen`. All steps run automatically via `start-local.sh` or `start-all.sh`.
 6. Update this README and the frontend connector config/component when the endpoint is user-facing.

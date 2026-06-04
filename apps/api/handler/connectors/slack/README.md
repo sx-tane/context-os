@@ -1,4 +1,4 @@
-# handler/slack
+# handler/connectors/slack
 
 HTTP handlers for the `/slack/*` routes, including OAuth 2.0 flow and
 local token persistence.

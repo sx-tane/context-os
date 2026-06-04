@@ -11,7 +11,7 @@ For a full step-by-step guide, skeletons, and a completion checklist, apply the 
 
 ## Package Layout
 
-Each connector is its own sub-package: `apps/api/handler/<name>/<name>.go`.
+Each connector is its own sub-package: `apps/api/handler/connectors/<name>/<name>.go`.
 Do **not** put handler files directly under `apps/api/handler/`.
 
 ## Handler Shape
@@ -27,13 +27,13 @@ Every exported handler must:
 
 ## New Route Checklist
 
-1. Create `apps/api/handler/<name>/<name>.go` with `Status`, `Ingest`, and `IngestStream` handlers.
-2. Create `apps/api/handler/<name>/<name>_test.go` — apply the **go-test-patterns** skill.
+1. Create `apps/api/handler/connectors/<name>/<name>.go` with `Status`, `Ingest`, and `IngestStream` handlers.
+2. Create `apps/api/handler/connectors/<name>/<name>_test.go` — apply the **go-test-patterns** skill.
 3. Add `<Name>Ingest` request struct to `apps/api/request/ingest.go`.
 4. Reuse `response.Ingest` from `apps/api/response/ingest.go`.
 5. Register all three routes in `apps/api/main.go` with `cors: true`.
 6. Update `apps/api/README.md` and nearest handler/source README when routes, env vars, metadata, or setup changes.
-7. Run `go build ./...` and `go test ./apps/api/handler/<name>/...`.
+7. Run `go build ./...` and `go test ./apps/api/handler/connectors/<name>/...`.
 
 ## Do Not
 

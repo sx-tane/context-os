@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"context-os/apps/api/handler/googledrive"
+	"context-os/apps/api/handler/connectors/googledrive"
 )
 
 // TestStatusMethodNotAllowed verifies that a non-GET request to Status returns 405.

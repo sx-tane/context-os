@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"context-os/apps/api/handler/codex"
+	"context-os/apps/api/handler/connectors/codex"
 )
 
 // TestStatusMethodNotAllowed verifies that a non-GET request to Status returns 405.

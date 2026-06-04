@@ -12,7 +12,7 @@ Use before merging any new handler or source connector change.
 
 ---
 
-## Handler Package (`apps/api/handler/<name>/`)
+## Handler Package (`apps/api/handler/connectors/<name>/`)
 
 - [ ] Package doc comment: `// Package <name> provides HTTP handlers for the /<name>/* routes.`
 - [ ] `Status` is GET-only; method guard is the **first statement**.
@@ -26,7 +26,7 @@ Use before merging any new handler or source connector change.
 
 ---
 
-## Handler Tests (`apps/api/handler/<name>/<name>_test.go`)
+## Handler Tests (`apps/api/handler/connectors/<name>/<name>_test.go`)
 
 - [ ] Package is `package <name>_test` (external).
 - [ ] Every `func Test*` has a doc comment.
@@ -53,7 +53,7 @@ Use before merging any new handler or source connector change.
 
 - [ ] `/status`, `/ingest`, and `/ingest/stream` routes all registered.
 - [ ] All three routes have `cors: true`.
-- [ ] Import alias matches other handlers (e.g., `<name> "context-os/apps/api/handler/<name>"`).
+- [ ] Import alias matches other handlers (e.g., `<name> "context-os/apps/api/handler/connectors/<name>"`).
 
 ---
 
@@ -68,6 +68,6 @@ Use before merging any new handler or source connector change.
 ## Build & Test
 
 - [ ] `go build ./...` passes with no errors.
-- [ ] `go test ./apps/api/handler/<name>/... ./internal/source/<name>/...` passes.
+- [ ] `go test ./apps/api/handler/connectors/<name>/... ./internal/source/<name>/...` passes.
 - [ ] `go vet ./...` produces no warnings.
 - [ ] `swag init` succeeds and regenerates `docs/` cleanly.

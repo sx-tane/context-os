@@ -19,7 +19,7 @@ flowchart TD
 
 | Instruction                        | `applyTo`                                         | When It Triggers                                 | Paired Skill                            |
 | ---------------------------------- | ------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
-| `api-handlers.instructions.md`     | `apps/api/**/*.go`                                | API handlers, request types, and response types. | `contextos-api-handler`                 |
+| `api-handlers.instructions.md`     | `apps/api/**/*.go`                                | API handlers, request types, and response types; connector handlers live under `apps/api/handler/connectors/<name>`. | `contextos-api-handler`                 |
 | `connectors.instructions.md`       | `internal/source/**/*.go`                         | Source connector implementations.                | `contextos-api-handler`                 |
 | `customization.instructions.md`    | `.github/{agents,instructions,skills}/**/*.md`, `.codex/{agents,instructions,skills}/**/*.md` | Agents, instruction files, and skill markdown.   | `contextos-authoring`                   |
 | `frontend-design.instructions.md`  | `apps/frontend/src/**/*.svelte`                   | Frontend Svelte UI layout and component visuals. | `contextos-frontend-design`             |

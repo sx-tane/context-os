@@ -18,7 +18,7 @@ type <Name>Ingest struct {
 
 ---
 
-## 2. `apps/api/handler/<name>/<name>.go`
+## 2. `apps/api/handler/connectors/<name>/<name>.go`
 
 ```go
 // Package <name> provides HTTP handlers for the /<name>/* routes.
@@ -128,7 +128,7 @@ func IngestStream(w http.ResponseWriter, r *http.Request) {
 
 ---
 
-## 3. `apps/api/handler/<name>/<name>_test.go`
+## 3. `apps/api/handler/connectors/<name>/<name>_test.go`
 
 ```go
 package <name>_test
@@ -139,7 +139,7 @@ import (
 	"strings"
 	"testing"
 
-	"context-os/apps/api/handler/<name>"
+	"context-os/apps/api/handler/connectors/<name>"
 )
 
 // TestStatusMethodNotAllowed verifies that a non-GET request to Status returns 405.
@@ -265,7 +265,7 @@ func cloneMetadata(m map[string]string) map[string]string {
 ```go
 import (
     // existing imports...
-    <name> "context-os/apps/api/handler/<name>"
+    <name> "context-os/apps/api/handler/connectors/<name>"
 )
 
 // inside registerRoutes slice:

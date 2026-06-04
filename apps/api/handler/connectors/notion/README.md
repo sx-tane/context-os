@@ -1,4 +1,4 @@
-# handler/notion
+# handler/connectors/notion
 
 HTTP handlers for the `/notion/*` routes.
 

@@ -1,4 +1,4 @@
-# handler/googledrive
+# handler/connectors/googledrive
 
 HTTP handlers for the `/googledrive/*` routes.
 

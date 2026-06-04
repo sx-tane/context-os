@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"context-os/apps/api/handler/filesystem"
+	"context-os/apps/api/handler/connectors/filesystem"
 	"context-os/apps/api/response"
 )
 
