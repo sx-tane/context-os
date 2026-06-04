@@ -1,0 +1,7 @@
+{
+  "connector": "github",
+  "source_uri": "repo://example/relationship-clean-assist",
+  "object_type": "issue",
+  "object_id": "relationship-clean-assist",
+  "event_id": "event:relationship-clean-assist"
+}

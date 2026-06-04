@@ -1,0 +1,7 @@
+{
+  "connector": "github",
+  "source_uri": "repo://example/relationship-noisy-assist",
+  "object_type": "issue",
+  "object_id": "relationship-noisy-assist",
+  "event_id": "event:relationship-noisy-assist"
+}

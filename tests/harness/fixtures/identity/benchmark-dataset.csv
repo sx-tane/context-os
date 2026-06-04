@@ -1,0 +1,8 @@
+alias,canonical,language,source,expected_match,notes
+refund_status,refund_status,en,api,true,baseline exact key
+refundStatus,refund_status,en,frontend,true,camelCase convention alias
+refund-status,refund_status,en,slack,true,kebab-case convention alias
+返金状態,refund_status,ja,jira,true,multilingual semantic alias
+reimbursement_status,refund_status,en,docs,true,english synonym semantic alias
+payment_status,payment_status,en,api,false,distinct concept negative
+invoice_total,invoice_total,en,api,false,distinct concept negative

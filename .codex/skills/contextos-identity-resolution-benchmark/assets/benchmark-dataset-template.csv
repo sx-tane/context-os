@@ -1,0 +1,6 @@
+alias,canonical,language,source,expected_match,notes
+refund_status,refund_status,en,api,true,baseline exact
+refundState,refund_status,en,frontend,true,camel alias
+refund flag,refund_status,en,slack,true,phrase alias
+返金状態,refund_status,ja,jira,true,multilingual alias
+payment_status,refund_status,en,api,false,negative case

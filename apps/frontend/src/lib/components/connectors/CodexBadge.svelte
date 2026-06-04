@@ -1,19 +1,11 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
   import type { CodexPlugin } from "$lib/types";
-  import Button from "../ui/Button.svelte";
 
   /** Full plugin identifier, e.g. "github@openai-curated" */
   export let pluginName: string;
   export let codexLoggedIn: boolean;
   export let codexAccount: string;
   export let codexPlugins: CodexPlugin[];
-  /** Short plugin key passed back in the reauth event, e.g. "github" */
-  export let reauthRunning: boolean;
-  export let reauthPlugin: string;
-  export let reauthLog: string;
-
-  const dispatch = createEventDispatcher<{ reauth: string }>();
 
   $: plugin = codexPlugins.find((p) => p.name === pluginName);
   $: shortName = pluginName.split("@")[0];
@@ -47,25 +39,15 @@
       ></span
     >
   {/if}
-
-  {#if plugin?.installed}
-    <span style="margin-left:auto">
-      <Button
-        variant="ghost"
-        disabled={reauthRunning && reauthPlugin === shortName}
-        on:click={() => dispatch("reauth", shortName)}
-        title="Remove and re-add the plugin to connect a different account"
-      >
-        {reauthRunning && reauthPlugin === shortName
-          ? "Re-authing…"
-          : `Re-auth ${shortName} plugin`}
-      </Button>
-    </span>
-  {/if}
 </div>
 
-{#if reauthLog && reauthPlugin === shortName}
-  <pre class="reauth-log">{reauthLog.trim()}</pre>
+{#if plugin?.installed}
+  <p class="reauth-note">
+    To reconnect to a different account, run in your terminal:<br />
+    <code
+      >codex plugin remove {shortName}@openai-curated && codex plugin add {shortName}@openai-curated</code
+    >
+  </p>
 {/if}
 
 <style>
@@ -73,13 +55,31 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.25rem;
     padding: 0.6rem 0.9rem;
     background: #f0fdf4;
     border: 1px solid #bbf7d0;
     border-radius: 6px;
     font-size: 0.85rem;
     flex-wrap: wrap;
+  }
+
+  .reauth-note {
+    margin: 0 0 0.75rem;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.78rem;
+    color: #6b7280;
+    line-height: 1.6;
+  }
+
+  .reauth-note code {
+    display: block;
+    margin-top: 0.3rem;
+    background: #f3f4f6;
+    padding: 0.3rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.76rem;
+    word-break: break-all;
   }
 
   .status-dot {
@@ -109,19 +109,6 @@
 
   .warn {
     color: #b45309;
-  }
-
-  .reauth-log {
-    margin: 0.4rem 0 0.75rem;
-    padding: 0.6rem 0.8rem;
-    background: #111827;
-    color: #d1fae5;
-    border-radius: 6px;
-    font-size: 0.78rem;
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 180px;
-    overflow-y: auto;
   }
 
   code {

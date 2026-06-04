@@ -1,4 +1,4 @@
-import { runConnectorIngest } from "../ingestRunner";
+import { runConnectorIngest } from "../ingest/runner";
 
 jest.mock("$lib/api");
 
@@ -32,6 +32,7 @@ describe("runConnectorIngest — token provider", () => {
 
     await runConnectorIngest({
       connector: "github",
+      workspace_id: "/workspace",
       uri: "github://owner/repo",
       provider: "token",
       token: "ghp_test",
@@ -42,6 +43,7 @@ describe("runConnectorIngest — token provider", () => {
       "github",
       expect.objectContaining({
         uri: "github://owner/repo",
+        workspace_id: "/workspace",
         token: "ghp_test",
       }),
       expect.any(Object),
@@ -81,6 +83,7 @@ describe("runConnectorIngest — token provider", () => {
 
     await runConnectorIngest({
       connector: "github",
+      workspace_id: "/workspace",
       uri: "github://owner/repo",
       provider: "token",
       ...s,
@@ -150,6 +153,7 @@ describe("runConnectorIngest — codex provider", () => {
 
     await runConnectorIngest({
       connector: "github",
+      workspace_id: "/workspace",
       uri: "github://owner/repo",
       provider: "codex",
       ...s,
@@ -159,6 +163,7 @@ describe("runConnectorIngest — codex provider", () => {
       "github",
       expect.objectContaining({
         uri: "github://owner/repo",
+        workspace_id: "/workspace",
         provider: "codex",
       }),
       expect.any(Object),
@@ -178,7 +183,7 @@ describe("runConnectorIngest — codex provider", () => {
     });
 
     expect(s.setError).toHaveBeenCalledWith(
-      expect.stringContaining("GitHub, Jira, and Slack"),
+      expect.stringContaining("not supported"),
     );
     expect(mockStreamCodexIngest).not.toHaveBeenCalled();
   });

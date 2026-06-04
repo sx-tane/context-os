@@ -1,0 +1,3 @@
+couponStatus and refundState are mentioned during triage.
+No source text maps couponStatus to refundState or any storage column.
+CONTEXTOS_LABELS_JSON: {"entities":{"requirement":[],"api_field":[{"name":"couponStatus","evidence":"couponStatus and refundState are mentioned during triage","confidence":0.86},{"name":"refundState","evidence":"couponStatus and refundState are mentioned during triage","confidence":0.86}],"service":[],"dependency":[],"enum":[],"db_column":[]},"risks":[],"decisions":[],"status":[]}

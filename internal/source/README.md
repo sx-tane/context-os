@@ -110,6 +110,25 @@ Additional enriched metadata keys:
 
 If request metadata already provides `object_type`, `object_id`, or `source_id`, the connector preserves those explicit values.
 
+### Google Drive Connector Metadata Mapping
+
+The Google Drive connector lists supported file types from a folder URI (`https://drive.google.com/drive/folders/<id>` or `googledrive://folder/<id>`) and emits one event per file.
+
+- `object_type=file`
+- `object_id=<drive-file-id>`
+- `source_id=googledrive:file:<drive-file-id>`
+- `event_id=event:sha256(<drive-file-id> + "\x00" + <modifiedTime>)`
+- `url=https://drive.google.com/file/d/<drive-file-id>/view`
+- `googledrive_folder_id`
+- `googledrive_file_id`
+- `googledrive_file_name`
+- `googledrive_mime_type`
+- `googledrive_modified_time`
+- `googledrive_export_format`
+- `googledrive_credential_type`
+
+Authentication accepts authorized-user OAuth JSON (`GOOGLE_DRIVE_OAUTH_CREDENTIALS_PATH`) or service-account JSON (`GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH`), with optional request metadata overrides. `GOOGLE_DRIVE_ACCESS_TOKEN` is available as a local override for already-issued access tokens. Docs export as plain text, Sheets export as CSV and are reformatted into tabular text, and Slides are read as per-slide text. Rate-limit and transient server errors back off before returning retryable connector errors.
+
 ### Jira Connector Metadata Mapping
 
 The Jira connector enriches issue and project URIs from Jira browse URLs, `jira://issue/<KEY>`, and `jira://project/<KEY>`.
@@ -183,7 +202,7 @@ flowchart TD
   source[internal/source]
   contracts[domain/contracts]
   events[domain/events]
-  ingestion[internal/ingestion]
+  ingestion[internal/stages/ingestion]
 
   source --> contracts
   source --> events

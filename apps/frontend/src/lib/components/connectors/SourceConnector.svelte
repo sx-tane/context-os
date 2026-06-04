@@ -7,7 +7,8 @@
     SupportedFormat,
   } from "$lib/types";
   import { postFilesystemUpload } from "$lib/api";
-  import { runConnectorIngest } from "$lib/ingestRunner";
+  import { project } from "$lib/workspace/projectStore";
+  import { runConnectorIngest } from "$lib/ingest/runner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import ResultPanel from "../feedback/IngestResult.svelte";
   import Button from "../ui/Button.svelte";
@@ -98,6 +99,7 @@
 
     try {
       const formData = new FormData();
+      formData.append("workspace_id", $project.workspacePath);
       for (const file of uploadFiles) {
         formData.append("files", file, file.name);
         formData.append("paths", uploadFilePath(file));
@@ -127,6 +129,7 @@
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector,
+      workspace_id: $project.workspacePath,
       uri,
       token,
       content,

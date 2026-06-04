@@ -18,14 +18,13 @@ import (
 	"context-os/internal/source"
 )
 
-// knownNvmPaths lists common nvm bin directories to check when "codex" is not
-// on the process PATH (common when the binary is installed via nvm and the API
-// server process inherits a stripped environment).
+// knownNvmPaths lists common user-relative nvm bin directories to check when
+// "codex" is not on PATH. CODEX_BIN still takes precedence for custom installs.
 var knownNvmPaths = []string{
-	// dev container default
-	"/home/codespace/nvm/current/bin/codex",
-	// generic nvm layout
 	"${HOME}/nvm/current/bin/codex",
+	"${HOME}/.nvm/current/bin/codex",
+	"${NVM_DIR}/current/bin/codex",
+	"${NVM_DIR}/versions/node/current/bin/codex",
 	"/usr/local/share/nvm/current/bin/codex",
 }
 
@@ -33,13 +32,22 @@ var knownNvmPaths = []string{
 // It first asks exec.LookPath so any PATH entry wins, then falls back to
 // the common nvm installation directories used in dev containers.
 func resolveCodexBinary() string {
+	if configured := strings.TrimSpace(os.Getenv("CODEX_BIN")); configured != "" {
+		return configured
+	}
 	if p, err := exec.LookPath(defaultCommand); err == nil {
 		return p
 	}
 	home := os.Getenv("HOME")
+	nvmDir := os.Getenv("NVM_DIR")
 	candidates := make([]string, 0, len(knownNvmPaths)+1)
 	for _, c := range knownNvmPaths {
-		candidates = append(candidates, strings.ReplaceAll(c, "${HOME}", home))
+		c = strings.ReplaceAll(c, "${HOME}", home)
+		c = strings.ReplaceAll(c, "${NVM_DIR}", nvmDir)
+		if strings.Contains(c, "${") {
+			continue
+		}
+		candidates = append(candidates, c)
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
@@ -72,6 +80,12 @@ const (
 	PluginSlack = "slack"
 	// PluginAtlassianRovo routes Jira requests through the Atlassian Rovo Codex plugin.
 	PluginAtlassianRovo = "atlassian-rovo"
+	// PluginGoogleDrive routes Google Drive requests through the Google Drive Codex plugin.
+	PluginGoogleDrive = "google-drive"
+	// PluginNotion routes Notion requests through the Notion Codex plugin.
+	PluginNotion = "notion"
+	// PluginSharePoint routes SharePoint / OneDrive requests through the SharePoint Codex plugin.
+	PluginSharePoint = "sharepoint"
 
 	defaultCommand = "codex"
 )
@@ -143,6 +157,10 @@ func (c connector) ingestWithProgress(ctx context.Context, req contracts.SourceR
 			envOverrides = append(envOverrides, "GITHUB_TOKEN="+tok)
 		case PluginSlack:
 			envOverrides = append(envOverrides, "SLACK_BOT_TOKEN="+tok)
+		case PluginNotion:
+			envOverrides = append(envOverrides, "NOTION_TOKEN="+tok)
+		case PluginSharePoint:
+			envOverrides = append(envOverrides, "SHAREPOINT_TOKEN="+tok)
 		}
 	}
 
@@ -272,21 +290,28 @@ func (c connector) commandError(err error, output string) error {
 }
 
 func promptFor(plugin, uri string) string {
+	labelRules := ` At the end, include one line starting with CONTEXTOS_LABELS_JSON: followed by compact JSON shaped as {"entities":{"requirement":[{"name":"...","evidence":"short quote or source fact","confidence":0.0}],"api_field":[],"service":[],"dependency":[],"enum":[],"db_column":[]},"risks":[],"decisions":[],"status":[]}. Only label items with explicit source evidence and provenance; omit generic prose tokens.`
 	switch plugin {
 	case PluginSlack:
-		return "Use the Slack Codex plugin to read the Slack context identified by " + uri + ". Return the relevant channel or message content with source identifiers, timestamps, participants, and links when available. Do not modify Slack."
+		return "Use the Slack Codex plugin to read the Slack context identified by " + uri + ". Return the relevant channel or message content with source identifiers, timestamps, participants, and links when available. Do not modify Slack." + labelRules
 	case PluginGitHub:
-		return "Use the GitHub Codex plugin to read the GitHub artifact identified by " + uri + ". Return the relevant repository, issue, pull request, or commit content with source identifiers, timestamps, authors, and links when available. Do not modify GitHub."
+		return "Use the GitHub Codex plugin to read the GitHub artifact identified by " + uri + ". Return the relevant repository, issue, pull request, or commit content with source identifiers, timestamps, authors, and links when available. Do not modify GitHub." + labelRules
 	case PluginAtlassianRovo:
-		return "Use the Atlassian Rovo Codex plugin to read the Jira context identified by " + uri + ". Return the relevant issue or project content with issue keys, summaries, statuses, descriptions, comments, links, fields, changelog entries, timestamps, authors, and source URLs when available. Do not modify Jira or Atlassian data."
+		return "Use the Atlassian Rovo Codex plugin to read the Jira context identified by " + uri + ". Return the relevant issue or project content with issue keys, summaries, statuses, descriptions, comments, links, fields, changelog entries, timestamps, authors, and source URLs when available. Do not modify Jira or Atlassian data." + labelRules
+	case PluginGoogleDrive:
+		return "Use the Google Drive Codex plugin to read files from the Google Drive folder identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, and links when available. Do not modify any files." + labelRules
+	case PluginNotion:
+		return "Use the Notion Codex plugin to read pages and database entries from " + uri + ". Return the relevant content with source identifiers, page IDs, titles, properties, and links when available. Do not modify Notion." + labelRules
+	case PluginSharePoint:
+		return "Use the SharePoint Codex plugin to read files and pages from the SharePoint or OneDrive location identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, authors, and links when available. Do not modify any files or pages." + labelRules
 	default:
-		return "Read source context for " + uri + " using the installed Codex plugin."
+		return "Read source context for " + uri + " using the installed Codex plugin." + labelRules
 	}
 }
 
 func isSupportedPlugin(plugin string) bool {
 	switch plugin {
-	case PluginGitHub, PluginSlack, PluginAtlassianRovo:
+	case PluginGitHub, PluginSlack, PluginAtlassianRovo, PluginGoogleDrive, PluginNotion, PluginSharePoint:
 		return true
 	default:
 		return false

@@ -3,6 +3,7 @@ module context-os
 go 1.24.13
 
 require (
+	github.com/lib/pq v1.10.9
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.4
 	gopkg.in/yaml.v2 v2.4.0

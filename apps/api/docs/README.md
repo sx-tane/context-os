@@ -12,8 +12,23 @@ This folder stores generated Swagger artifacts served or inspected with the API 
 ## Update Workflow
 
 - Regenerate after handler route or request/response schema changes.
-- Keep this folder in sync with `apps/api/_docs/` when generation output changes.
+- Treat this folder as the checked-in OpenAPI source for frontend codegen.
 - Validate generated docs compile in API tests.
+
+## Recent Regeneration
+
+Last regenerated to include workspace-scoped source, chat, graph, presentation, structured live-answer, and explicit live-evidence cleanup contracts:
+
+- Ingest request schemas include `workspace_id` so direct and Codex-backed sources persist into the active workspace.
+- `request.ChatQuery`, `repository.Workspace`, and `repository.ConnectorSync` are present for local chat, workspace status, and connector sync responses.
+- `request.ChatQuery.connectors` documents optional multi-connector live chat search while preserving single `connector` and `source_uri` routing.
+- `response.ChatQuery.provider` indicates whether chat answered from local artifacts or Codex-backed live source context.
+- `response.ChatQuery.answer_sections` documents structured source cards returned by live chat.
+- `response.ChatQuery.evidence_save_status`, `evidence_event_count`, and `evidence_save_error` document live-chat evidence persistence into the Local DB.
+- `/artifacts/live-evidence/cleanup` documents explicit cleanup of old noisy `live_chat_answer` rows.
+- `/graph` documents flattened graph entities, persisted relationship edges, and the `include_noise` query option for low-signal graph debugging.
+- `response.PresentationFindings` includes `entity_count` and `relationship_count` for presentation/finding summaries and generated frontend typings.
+- Google Drive connector docs include status and ingest endpoints for Docs, Sheets, and Slides sources.
 
 ## Verification
 

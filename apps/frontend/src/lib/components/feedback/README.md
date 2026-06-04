@@ -37,18 +37,21 @@ Scrollable `<pre>` block that displays live SSE log output during a Codex ingest
 
 ### IngestResult
 
-Renders the structured output of a completed ingest. Iterates over the `events` array inside an `IngestResult` and displays each event's type, URI, preview text, and metadata key/value pairs.
+Renders the structured output of a completed ingest. It supports both single-event and multi-event responses, so folder and upload ingest can show aggregate counts while still exposing the first event fields used by older callers.
 
-| Prop     | Type                   | Purpose                                                |
-| -------- | ---------------------- | ------------------------------------------------------ |
-| `result` | `IngestResult \| null` | The ingest response body; renders nothing when `null`. |
+| Prop       | Type           | Purpose                                                                 |
+| ---------- | -------------- | ----------------------------------------------------------------------- |
+| `result`   | `IngestResult` | The ingest response body, including single-event and aggregate fields.  |
+| `provider` | `string`       | Shows the Codex log panel when the provider is `codex` and metadata has `codex_log`. |
 
 Each event card shows:
 
 - event type badge
 - source URI
-- `preview` field when present
+- `preview` or `previews` field when present
 - metadata key/value table
+- persistence mode, workspace ID, persisted event count, relationship count, and event count when present
+- multi-event table rows for folder-style responses
 
 ---
 

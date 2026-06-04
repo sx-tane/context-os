@@ -2,8 +2,10 @@
 package shared
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"context-os/domain/contracts"
 )
@@ -88,5 +90,25 @@ func TestCapabilityStringsConverts(t *testing.T) {
 	got := CapabilityStrings([]contracts.Capability{"read", "write"})
 	if len(got) != 2 || got[0] != "read" || got[1] != "write" {
 		t.Fatalf("CapabilityStrings() = %v, want [read write]", got)
+	}
+}
+
+func TestPersistentWriteContextSurvivesCanceledParent(t *testing.T) {
+	parent, parentCancel := context.WithCancel(context.Background())
+	parentCancel()
+
+	service := &PersistentIngestService{}
+	ctx, cancel := service.writeContext(parent)
+	defer cancel()
+
+	if err := ctx.Err(); err != nil {
+		t.Fatalf("writeContext() error = %v, want active context", err)
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("writeContext() has no deadline")
+	}
+	if time.Until(deadline) <= 0 {
+		t.Fatalf("writeContext() deadline = %s, want future deadline", deadline)
 	}
 }

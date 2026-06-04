@@ -1,9 +1,33 @@
 import {
+  apiFetch,
   probeService,
   getJSON,
   postIngest,
+  postFindings,
   postFilesystemUpload,
+  getCodexSources,
+  getWorkspaces,
+  getArtifacts,
+  cleanupGraphNoise,
+  cleanupLiveEvidence,
+  getAnalysisBasket,
+  putAnalysisBasket,
+  getFindingActions,
+  putFindingActions,
+  postChatQuery,
+  getGraphData,
+  upsertWorkspace,
+  deleteWorkspace,
+  getWorkspaceStatus,
+  postWorkspaceSource,
+  resetChatSession,
+  resetWorkspace,
+  streamChatQuery,
 } from "../api";
+import type {
+  AnalysisBasketPayload,
+  FindingActionsPayload,
+} from "$lib/api/types";
 
 // makeResponse builds a minimal fetch Response mock for readJSON (calls res.text()).
 function makeResponse(body: unknown, ok: boolean, status = 200): Response {
@@ -18,6 +42,23 @@ function makeResponse(body: unknown, ok: boolean, status = 200): Response {
   } as unknown as Response;
 }
 
+function makeStreamResponse(chunks: string[], ok = true, status = 200): Response {
+  return {
+    ok,
+    status,
+    body: new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder();
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    }),
+    text: jest.fn().mockResolvedValue(""),
+  } as unknown as Response;
+}
+
 const fetchMock = jest.fn<
   Promise<Response>,
   [RequestInfo | URL, RequestInit?]
@@ -26,6 +67,79 @@ const fetchMock = jest.fn<
 
 beforeEach(() => {
   fetchMock.mockReset();
+  delete (globalThis as { localStorage?: Storage }).localStorage;
+  delete (globalThis as { window?: Window }).window;
+  jest.restoreAllMocks();
+});
+
+function enableDebugStorage(): void {
+  (globalThis as { localStorage?: Pick<Storage, "getItem"> }).localStorage = {
+    getItem: jest.fn((key: string) =>
+      key === "contextos_debug_api" ? "1" : null,
+    ),
+  };
+}
+
+// ---- apiFetch ----
+
+describe("apiFetch", () => {
+  it("adds a ContextOS request ID header", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await apiFetch("/api/health");
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toEqual(
+      expect.objectContaining({
+        "X-ContextOS-Request-ID": expect.stringMatching(/^web-/),
+      }),
+    );
+  });
+
+  it("does not log by default", async () => {
+    const debug = jest.spyOn(console, "debug").mockImplementation(() => {});
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+
+    await apiFetch("/api/health");
+
+    expect(debug).not.toHaveBeenCalled();
+  });
+
+  it("logs when browser debug storage is enabled", async () => {
+    enableDebugStorage();
+    const debug = jest.spyOn(console, "debug").mockImplementation(() => {});
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+
+    await apiFetch("/api/health");
+
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining("[api] -> GET /api/health id=web-"),
+    );
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining("[api] <- 200 GET /api/health id=web-"),
+    );
+  });
+
+  it("installs a browser console helper for toggling API request tracing", async () => {
+    const storage = {
+      getItem: jest.fn(() => null),
+      setItem: jest.fn(),
+      removeItem: jest.fn(),
+    };
+    (globalThis as { localStorage?: unknown }).localStorage = storage;
+    (globalThis as { window?: unknown }).window = {};
+    jest.spyOn(console, "info").mockImplementation(() => {});
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+
+    await apiFetch("/api/health");
+    const helper = (globalThis.window as { contextosAPITrace?: (enabled?: boolean) => void })
+      .contextosAPITrace;
+    helper?.(true);
+    helper?.(false);
+
+    expect(helper).toEqual(expect.any(Function));
+    expect(storage.setItem).toHaveBeenCalledWith("contextos_debug_api", "1");
+    expect(storage.removeItem).toHaveBeenCalledWith("contextos_debug_api");
+  });
 });
 
 // ---- probeService ----
@@ -110,6 +224,60 @@ describe("postIngest", () => {
   });
 });
 
+// ---- postFindings ----
+
+describe("postFindings", () => {
+  it("returns ok:true with body when response is 2xx", async () => {
+    const body = { role: "pmo", mismatch_count: 1 };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await postFindings({
+      connector: "filesystem",
+      uri: "inline.txt",
+      content: "frontend expects refundStatus but backend exposes missingRefundState",
+      role: "pmo",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.body).toEqual(body);
+  });
+
+  it("returns ok:false with error body when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse({ message: "invalid_request" }, false, 400),
+    );
+    const result = await postFindings({ connector: "filesystem" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.body.message).toBe("invalid_request");
+  });
+
+  it("posts to /api/presentation/findings", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await postFindings({ connector: "filesystem", uri: "inline.txt" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/presentation/findings",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns a structured API unreachable error when fetch fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await postFindings({ connector: "filesystem" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+      expect(result.body.message).toContain("Start the API");
+    }
+  });
+
+  it("preserves AbortError rejections", async () => {
+    const abortError = new DOMException("aborted", "AbortError");
+    fetchMock.mockRejectedValue(abortError);
+    await expect(postFindings({ connector: "filesystem" })).rejects.toBe(
+      abortError,
+    );
+  });
+});
+
 // ---- postFilesystemUpload ----
 
 describe("postFilesystemUpload", () => {
@@ -136,5 +304,650 @@ describe("postFilesystemUpload", () => {
       "/api/filesystem/upload",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+// ---- getCodexSources ----
+
+describe("getCodexSources", () => {
+  it("returns Codex source list when response is 2xx", async () => {
+    const body = {
+      connector: "github",
+      provider: "codex",
+      sources: [
+        {
+          id: "owner/repo",
+          label: "owner/repo",
+          uri: "owner/repo",
+          kind: "repository",
+          connector: "github",
+        },
+      ],
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    await expect(getCodexSources("github")).resolves.toEqual(body);
+  });
+
+  it("fetches connector source list through /api/codex/sources", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ sources: [] }, true, 200));
+    await getCodexSources("jira");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/codex/sources?connector=jira",
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
+
+  it("returns null when source discovery fails", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "failed" }, false, 502));
+    await expect(getCodexSources("github")).resolves.toBeNull();
+  });
+});
+
+// ---- getWorkspaces ----
+
+describe("getWorkspaces", () => {
+  it("returns workspace records when response is 2xx", async () => {
+    const body = { count: 1, workspaces: [{ id: "ws1", name: "Main", path: "/workspace" }] };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await getWorkspaces();
+    expect(result).toEqual(body.workspaces);
+  });
+
+  it("normalizes legacy PascalCase workspace records", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ count: 1, workspaces: [{ ID: "ws1", Name: "Main", Path: " /workspace " }] }, true, 200));
+    const result = await getWorkspaces();
+    expect(result).toEqual([{ id: "ws1", name: "Main", path: "/workspace" }]);
+  });
+
+  it("fetches /api/workspace", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ workspaces: [] }, true, 200));
+    await getWorkspaces();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace",
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
+
+  it("returns an empty list when fetch throws", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    expect(await getWorkspaces()).toEqual([]);
+  });
+});
+
+// ---- getArtifacts ----
+
+describe("getArtifacts", () => {
+  it("returns ArtifactList when response is 2xx", async () => {
+    const body = { workspace_id: "ws1", count: 1, artifacts: [{ id: "evt1", connector: "slack" }] };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await getArtifacts({ workspace_id: "ws1", connector: "slack", limit: 5 });
+    expect(result).toEqual(body);
+  });
+
+  it("encodes all query parameters", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ artifacts: [] }, true, 200));
+    await getArtifacts({
+      workspace_id: "/workspace",
+      connector: "slack",
+      source_uri: "slack://team/C123",
+      q: "today messages",
+      since: "2025-01-01T00:00:00Z",
+      until: "2025-01-02T00:00:00Z",
+      limit: 10,
+    });
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("workspace_id=%2Fworkspace");
+    expect(url).toContain("connector=slack");
+    expect(url).toContain("source_uri=slack%3A%2F%2Fteam%2FC123");
+    expect(url).toContain("q=today+messages");
+    expect(url).toContain("since=2025-01-01T00%3A00%3A00Z");
+    expect(url).toContain("until=2025-01-02T00%3A00%3A00Z");
+    expect(url).toContain("limit=10");
+  });
+
+  it("returns null when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    expect(await getArtifacts({ workspace_id: "ws1" })).toBeNull();
+  });
+});
+
+// ---- cleanupLiveEvidence ----
+
+describe("cleanupLiveEvidence", () => {
+  it("posts to the cleanup endpoint and returns the cleanup result", async () => {
+    const body = {
+      workspace_id: "ws1",
+      workspace_path: "/workspace",
+      matched_count: 2,
+      deleted_count: 2,
+      deleted_ids: ["a", "b"],
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+
+    const result = await cleanupLiveEvidence("/workspace");
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/artifacts/live-evidence/cleanup?workspace_id=%2Fworkspace",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns an API error body when cleanup fails", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ error: "store_error" }, false, 500));
+
+    const result = await cleanupLiveEvidence("ws1");
+
+    expect(result).toEqual({
+      ok: false,
+      status: 500,
+      body: { error: "store_error" },
+    });
+  });
+});
+
+// ---- workspace UI state ----
+
+describe("workspace UI state", () => {
+  it("gets and puts the analysis basket", async () => {
+    const body: AnalysisBasketPayload = {
+      workspace_id: "/workspace",
+      items: [
+        {
+          id: "github:repo",
+          connector: "github",
+          uri: "repo",
+          label: "Repo",
+          origin: "activity",
+          addedAt: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+    };
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+
+    expect(await getAnalysisBasket("/workspace")).toEqual(body);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/workspace/analysis-basket?workspace_id=%2Fworkspace",
+    );
+
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+    const result = await putAnalysisBasket(body);
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/workspace/analysis-basket");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  it("gets and puts finding actions", async () => {
+    const body: FindingActionsPayload = {
+      workspace_id: "/workspace",
+      actions: [
+        {
+          findingId: "finding-1",
+          status: "checking",
+          updatedAt: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+    };
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+
+    expect(await getFindingActions("/workspace")).toEqual(body);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/workspace/finding-actions?workspace_id=%2Fworkspace",
+    );
+
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+    const result = await putFindingActions(body);
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/workspace/finding-actions");
+  });
+
+  it("returns a structured error when saving workspace UI state fails before a response", async () => {
+    fetchMock.mockRejectedValue(new TypeError("network"));
+    const result = await putAnalysisBasket({ workspace_id: "/workspace", items: [] });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+    }
+  });
+});
+
+// ---- cleanupGraphNoise ----
+
+describe("cleanupGraphNoise", () => {
+  it("posts to the graph cleanup endpoint and returns the cleanup result", async () => {
+    const body = {
+      workspace_id: "ws1",
+      workspace_path: "/workspace",
+      matched_entity_count: 2,
+      deleted_entity_count: 2,
+      matched_relationship_count: 3,
+      deleted_relationship_count: 3,
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+
+    const result = await cleanupGraphNoise("/workspace");
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/graph/cleanup?workspace_id=%2Fworkspace",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns the backend error body when graph cleanup fails", async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse({ message: "graph cleanup is unavailable" }, false, 503),
+    );
+
+    const result = await cleanupGraphNoise("ws1");
+
+    expect(result).toEqual({
+      ok: false,
+      status: 503,
+      body: { message: "graph cleanup is unavailable" },
+    });
+  });
+
+  it("returns an API unreachable error when graph cleanup cannot reach the API", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const result = await cleanupGraphNoise("ws1");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+      expect(result.body.message).toContain("Graph cleanup did not run");
+    }
+  });
+});
+
+// ---- resetWorkspace ----
+
+describe("resetWorkspace", () => {
+  it("returns WorkspaceStatus when response is 2xx", async () => {
+    const body = { workspace_count: 0, event_count: 0 };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    expect(await resetWorkspace("/proj")).toEqual(body);
+  });
+
+  it("sends POST /api/workspace/reset with path and name", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ workspace_count: 0, event_count: 0 }, true, 200));
+    await resetWorkspace("/my/project", " My Project ");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace/reset",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ path: "/my/project", name: "My Project" }),
+      }),
+    );
+  });
+
+  it("returns null when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    expect(await resetWorkspace("/proj")).toBeNull();
+  });
+});
+
+// ---- postWorkspaceSource ----
+
+describe("postWorkspaceSource", () => {
+  it("returns normalized connected sync state when response is 2xx", async () => {
+    const body = {
+      workspace_id: "ws1",
+      connector: "github",
+      source_uri: "owner/repo",
+      status: "connected",
+      event_count: 0,
+      last_error: "stale token",
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "github",
+      source_uri: "owner/repo",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.body).toEqual({
+      connector: "github",
+      source_uri: "owner/repo",
+      status: "connected",
+      event_count: 0,
+      last_error: "stale token",
+    });
+  });
+
+  it("posts to /api/workspace/source with JSON body", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "jira",
+      source_uri: "https://acme.atlassian.net/browse/ABC-1",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace/source",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          workspace_id: "/proj",
+          connector: "jira",
+          source_uri: "https://acme.atlassian.net/browse/ABC-1",
+        }),
+      }),
+    );
+  });
+
+  it("returns ok:false with error body when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "connector is required" }, false, 400));
+    const result = await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "github",
+      source_uri: "",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.body.message).toBe("connector is required");
+  });
+
+  it("returns a structured API unreachable error when fetch fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await postWorkspaceSource({
+      workspace_id: "/proj",
+      connector: "github",
+      source_uri: "owner/repo",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+    }
+  });
+});
+
+// ---- postChatQuery ----
+
+describe("postChatQuery", () => {
+  it("returns ok:true with body when response is 2xx", async () => {
+    const body = { intent: "artifacts", answer: "Found 1 artifact", artifact_count: 1, artifacts: [] };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await postChatQuery({ workspace_id: "ws1", message: "give me today slack messages" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.body).toEqual(body);
+  });
+
+  it("returns ok:false with error body when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "workspace_id required" }, false, 400));
+    const result = await postChatQuery({ workspace_id: "", message: "status" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.body.message).toBe("workspace_id required");
+  });
+
+  it("posts to /api/chat/query with JSON body", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await postChatQuery({ workspace_id: "ws1", message: "today jira tickets", limit: 20 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat/query",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ workspace_id: "ws1", message: "today jira tickets", limit: 20 }),
+      }),
+    );
+  });
+
+  it("returns a structured API unreachable error when fetch fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await postChatQuery({ workspace_id: "ws1", message: "latest commit" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+      expect(result.body.message).toContain("Start the API");
+    }
+  });
+
+  it("preserves AbortError rejections", async () => {
+    const abortError = new DOMException("aborted", "AbortError");
+    fetchMock.mockRejectedValue(abortError);
+    await expect(postChatQuery({ workspace_id: "ws1", message: "status" })).rejects.toBe(
+      abortError,
+    );
+  });
+});
+
+// ---- streamChatQuery ----
+
+describe("streamChatQuery", () => {
+  it("streams log, status, and result events from /api/chat/query/stream", async () => {
+    const result = {
+      intent: "artifacts",
+      workspace_id: "ws1",
+      workspace_path: "ws1",
+      provider: "codex",
+      answer: "Live answer",
+      artifact_count: 0,
+      artifacts: [],
+    };
+    fetchMock.mockResolvedValue(
+      makeStreamResponse([
+        "event: log\ndata: › Live Codex: GitHub plugin lookup\n\n",
+        "event: log\ndata: • Starting Codex CLI exec.\n\n",
+        "event: status\ndata: {\"elapsed\":2,\"status\":\"running\"}\n\n",
+        `event: answer\ndata: ${JSON.stringify({ ...result, evidence_save_status: "saving" })}\n\n`,
+        `event: result\ndata: ${JSON.stringify(result)}\n\n`,
+      ]),
+    );
+    const logs: string[] = [];
+    const statuses: number[] = [];
+    const answers: unknown[] = [];
+    const results: unknown[] = [];
+
+    await streamChatQuery(
+      { workspace_id: "ws1", message: "help me check sx-tane/context-os" },
+      {
+        onLog: (line) => logs.push(line),
+        onStatus: (elapsed) => statuses.push(elapsed),
+        onAnswer: (body) => answers.push(body),
+        onResult: (body) => results.push(body),
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat/query/stream",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          workspace_id: "ws1",
+          message: "help me check sx-tane/context-os",
+        }),
+      }),
+    );
+    expect(logs).toEqual([
+      "› Live Codex: GitHub plugin lookup",
+      "• Starting Codex CLI exec.",
+    ]);
+    expect(statuses).toEqual([2]);
+    expect(answers).toEqual([{ ...result, evidence_save_status: "saving" }]);
+    expect(results).toEqual([result]);
+  });
+});
+
+// ---- resetChatSession ----
+
+describe("resetChatSession", () => {
+  it("posts to /api/chat/session/reset with workspace scope", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ reset: true }, true, 200));
+
+    const result = await resetChatSession({ workspace_id: "ws1" });
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat/session/reset",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ workspace_id: "ws1" }),
+      }),
+    );
+  });
+
+  it("returns a soft failure when the reset API is unreachable", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const result = await resetChatSession({ workspace_id: "ws1" });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(0);
+    expect(result.body?.error).toBe("api_unreachable");
+  });
+});
+
+// ---- getGraphData ----
+
+describe("getGraphData", () => {
+  it("returns GraphData when response is 2xx", async () => {
+    const body = {
+      workspace_id: "ws1",
+      count: 2,
+      entity_count: 2,
+      relationship_count: 1,
+      entities: [{ id: "e1", name: "Auth", type: "service", confidence: 0.9 }],
+      relationships: [{ id: "r1", from_id: "e1", to_id: "e2", kind: "service_depends_on", confidence: 0.8 }],
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+    const result = await getGraphData("/workspace");
+    expect(result).toEqual(body);
+  });
+
+  it("sends workspace_id as query parameter", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ count: 0, entities: [] }, true, 200));
+    await getGraphData("/my/project");
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("workspace_id=%2Fmy%2Fproject");
+  });
+
+  it("sends entity_type query parameter when provided", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ count: 0, entities: [] }, true, 200));
+    await getGraphData("/proj", "feature");
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("entity_type=feature");
+  });
+
+  it("returns null when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    expect(await getGraphData("/workspace")).toBeNull();
+  });
+
+  it("returns null when fetch throws", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    expect(await getGraphData("/workspace")).toBeNull();
+  });
+});
+
+// ---- upsertWorkspace ----
+
+describe("upsertWorkspace", () => {
+  it("returns WorkspaceRecord when response is 2xx", async () => {
+    const ws = { id: "ws1", name: "My Project", path: "/proj" };
+    fetchMock.mockResolvedValue(makeResponse(ws, true, 200));
+    const result = await upsertWorkspace("/proj", "My Project");
+    expect(result).toEqual(ws);
+  });
+
+  it("normalizes legacy PascalCase upsert responses", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ ID: "ws1", Name: "My Project", Path: "/proj" }, true, 200));
+    const result = await upsertWorkspace("/proj", "My Project");
+    expect(result).toEqual({ id: "ws1", name: "My Project", path: "/proj" });
+  });
+
+  it("posts to /api/workspace/upsert", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await upsertWorkspace("/proj", "My Project");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace/upsert",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns null when response is non-2xx", async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    expect(await upsertWorkspace("/proj", "name")).toBeNull();
+  });
+});
+
+// ---- deleteWorkspace ----
+
+describe("deleteWorkspace", () => {
+  it("returns ok true when backend delete succeeds", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ deleted: true }, true, 200));
+    await expect(deleteWorkspace("/proj")).resolves.toEqual({ ok: true, status: 200 });
+  });
+
+  it("calls DELETE /api/workspace with encoded path", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ deleted: true }, true, 200));
+    await deleteWorkspace("/my/project");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/workspace?path=%2Fmy%2Fproject",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("returns backend error details when backend delete fails", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "failed" }, false, 500));
+    await expect(deleteWorkspace("/proj")).resolves.toEqual({
+      ok: false,
+      status: 500,
+      message: "failed",
+    });
+  });
+
+  it("returns API unreachable details when fetch throws", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    await expect(deleteWorkspace("/proj")).resolves.toEqual({
+      ok: false,
+      status: 0,
+      message: "API is unreachable. Nothing was removed.",
+    });
+  });
+});
+
+// ---- getWorkspaceStatus ----
+
+describe("getWorkspaceStatus", () => {
+  it("returns WorkspaceStatus when response is 2xx", async () => {
+    const status = { event_count: 5, entity_count: 3, mismatch_count: 1 };
+    fetchMock.mockResolvedValue(makeResponse(status, true, 200));
+    const result = await getWorkspaceStatus("/proj");
+    expect(result).toEqual(status);
+  });
+
+  it("normalizes legacy PascalCase workspace status responses", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ Workspace: { ID: "ws1", Name: "Main", Path: "/workspace" }, EventCount: 5, Syncs: [{ Connector: "github", SourceURI: "github://repo", EventCount: 2 }] }, true, 200));
+    const result = await getWorkspaceStatus("/workspace");
+    expect(result).toEqual({
+      workspace: { id: "ws1", name: "Main", path: "/workspace" },
+      event_count: 5,
+      syncs: [{ connector: "github", source_uri: "github://repo", event_count: 2 }],
+    });
+  });
+
+  it("encodes workspace path in query string", async () => {
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+    await getWorkspaceStatus("/my/project");
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("path=%2Fmy%2Fproject");
+  });
+
+  it("returns null when fetch throws", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    expect(await getWorkspaceStatus("/proj")).toBeNull();
   });
 });

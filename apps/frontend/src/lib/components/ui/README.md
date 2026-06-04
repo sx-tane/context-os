@@ -1,6 +1,6 @@
 # ui
 
-Primitive building-block components shared across the ContextOS frontend. These have no domain knowledge — they only handle visual structure and interaction.
+Primitive building-block components shared across the ContextOS frontend. These have no domain knowledge; they only handle visual structure and interaction.
 
 ## Components
 
@@ -15,6 +15,49 @@ Styled `<button>` element.
 | `variant`  | `"primary" \| "secondary"`        | `"primary"` | Visual style; secondary is used for lower-emphasis actions. |
 
 Forwards all native button events. Use inside connector forms and status panels.
+
+---
+
+### ConfirmModal
+
+Shared confirmation dialog for destructive or irreversible user actions.
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `eyebrow` | `string` | `"CONFIRM"` | Small label above the title. |
+| `title` | `string` | `""` | Dialog heading. |
+| `description` | `string` | `""` | Body text before optional detail. |
+| `detail` | `string` | `""` | Emphasized target name or path. |
+| `confirmLabel` | `string` | `"Confirm"` | Confirm button text. |
+| `busyLabel` | `string` | `"Working"` | Confirm button text while busy. |
+| `cancelLabel` | `string` | `"Cancel"` | Cancel button text. |
+| `busy` | `boolean` | `false` | Disables both buttons and shows `busyLabel`. |
+
+Emits `cancel` and `confirm` events. Use for workspace removal, source reset, and other confirmation-gated commands. The dialog and action buttons pin the shared mono font because modal styles are component-scoped and cannot rely on route-level button rules.
+
+---
+
+### InlineText
+
+Safe inline text renderer for Markdown links, raw URLs, inline code, and bold spans. It renders structured Svelte nodes and never injects raw HTML.
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `text` | `string` | `""` | Inline text to tokenize safely. |
+
+---
+
+### SafeMarkdownBlock
+
+Safe lightweight Markdown-style block renderer used by chat answers and Activity details.
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `text` | `string` | `""` | Source text to render. |
+| `emptyText` | `string` | `""` | Fallback text when `text` is empty. |
+| `variant` | `"message" \| "plain" \| "source" \| "detail"` | `"message"` | Spacing and paragraph treatment for the host surface. |
+
+Supports headings, connector/source section rows, bullets, numbered lines, raw URLs, Markdown links, inline code, and bold spans. Do not use for full Markdown tables or raw HTML.
 
 ---
 

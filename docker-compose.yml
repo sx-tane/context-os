@@ -1,4 +1,34 @@
 services:
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: "contextos"
+      POSTGRES_USER: "contextos"
+      POSTGRES_PASSWORD: "contextos"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./migrations/0001_enable_pgvector.sql:/docker-entrypoint-initdb.d/0001_enable_pgvector.sql:ro
+      - ./migrations/0002_workspace_schema.sql:/docker-entrypoint-initdb.d/0002_workspace_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contextos -d contextos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js", "-m", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
@@ -11,11 +41,22 @@ services:
       # can authenticate. Set it in your shell before running docker compose up:
       #   export GITHUB_TOKEN=ghp_...
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      # Address of the AI worker used by the identity stage's opt-in WorkerMatcher
+      # for semantic embedding. Uses the Docker service name on the shared network.
+      WORKER_URL: "http://worker:8081"
+      # Local-first infra wiring for upcoming persistence and queue integration.
+      DATABASE_URL: "postgres://contextos:contextos@db:5432/contextos?sslmode=disable"
+      NATS_URL: "nats://nats:4222"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
 
   worker:
     build:
@@ -52,3 +93,6 @@ services:
         condition: service_healthy
       worker:
         condition: service_healthy
+
+volumes:
+  db_data:

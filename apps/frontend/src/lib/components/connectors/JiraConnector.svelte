@@ -2,8 +2,8 @@
   import { onDestroy, onMount } from "svelte";
   import type { CodexPlugin, IngestProvider, IngestResult } from "$lib/types";
   import { getJSON } from "$lib/api";
-  import { runConnectorIngest } from "$lib/ingestRunner";
-  import { runCodexReauth } from "$lib/reauthRunner";
+  import { project } from "$lib/workspace/projectStore";
+  import { runConnectorIngest } from "$lib/ingest/runner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "../feedback/IngestResult.svelte";
@@ -17,8 +17,9 @@
   export let codexAccount: string;
   export let codexPlugins: CodexPlugin[];
   export let refreshCodexStatus: () => Promise<void>;
+  $: void refreshCodexStatus;
 
-  let uri = "https://example.atlassian.net/browse/PROJ-123";
+  let uri = "";
   let token = "";
   let email = "";
   let apiBaseURL = "";
@@ -29,23 +30,16 @@
   let liveLog = "";
   let elapsed = 0;
   let ingestController: AbortController | null = null;
-  let reauthController: AbortController | null = null;
   let ingestRunID = 0;
-  let reauthRunID = 0;
 
   let connected = false;
   let baseURL = "";
   let tokenConfigured = false;
   let emailConfigured = false;
 
-  let reauthPlugin = "";
-  let reauthLog = "";
-  let reauthRunning = false;
-
   onMount(checkStatus);
   onDestroy(() => {
     ingestController?.abort();
-    reauthController?.abort();
   });
 
   async function checkStatus() {
@@ -61,28 +55,13 @@
     emailConfigured = body?.email_configured === true;
   }
 
-  async function runReauth(plugin: string) {
-    reauthController?.abort();
-    reauthController = new AbortController();
-    const runID = ++reauthRunID;
-    await runCodexReauth({
-      plugin,
-      refreshCodexStatus,
-      signal: reauthController.signal,
-      isCurrent: () => runID === reauthRunID,
-      setPlugin: (value) => (reauthPlugin = value),
-      setRunning: (value) => (reauthRunning = value),
-      setLog: (value) =>
-        (reauthLog = typeof value === "function" ? value(reauthLog) : value),
-    });
-  }
-
   async function runIngest() {
     ingestController?.abort();
     ingestController = new AbortController();
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector: "jira",
+      workspace_id: $project.workspacePath,
       uri,
       token,
       provider,
@@ -156,10 +135,6 @@
       {codexAccount}
       {codexPlugins}
       pluginName="atlassian-rovo@openai-curated"
-      {reauthRunning}
-      {reauthPlugin}
-      {reauthLog}
-      on:reauth={(e) => runReauth(e.detail)}
     />
   {/if}
 

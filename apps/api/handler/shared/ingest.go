@@ -19,10 +19,12 @@ const SourceIngestTimeout = 20 * time.Second
 
 // SourceIngestInput carries the decoded fields for a source ingest request.
 type SourceIngestInput struct {
-	URI      string
-	Content  string
-	Cursor   string
-	Metadata map[string]string
+	WorkspaceID string
+	Connector   string
+	URI         string
+	Content     string
+	Cursor      string
+	Metadata    map[string]string
 }
 
 // SourceIngestDecoder decodes an HTTP request body into a SourceIngestInput.
@@ -54,6 +56,23 @@ func WriteSourceIngest(w http.ResponseWriter, r *http.Request, connector contrac
 		return
 	}
 
+	if strings.TrimSpace(input.WorkspaceID) != "" {
+		service := GetPersistentIngestService()
+		if service == nil {
+			response.WriteError(w, http.StatusServiceUnavailable, "persistence_unavailable", "database-backed ingest is unavailable")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), PersistentIngestTimeout)
+		defer cancel()
+		result, err := service.Ingest(ctx, connector, input)
+		if err != nil {
+			response.WriteConnectorError(w, err)
+			return
+		}
+		response.WriteJSON(w, http.StatusOK, result)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), SourceIngestTimeout)
 	defer cancel()
 
@@ -72,7 +91,9 @@ func WriteSourceIngest(w http.ResponseWriter, r *http.Request, connector contrac
 		return
 	}
 
-	response.WriteJSON(w, http.StatusOK, sourceIngestResponse(connector, ingested))
+	result := sourceIngestResponse(connector, ingested)
+	result.PersistenceMode = "preview_debug"
+	response.WriteJSON(w, http.StatusOK, result)
 }
 
 func sourceIngestResponse(connector contracts.MCPSourceConnector, ingested []events.Event) response.Ingest {

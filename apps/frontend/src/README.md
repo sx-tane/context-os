@@ -6,7 +6,8 @@ This folder contains the Svelte application source for the local ContextOS UI.
 
 - `lib/`: shared UI utilities, API helpers, and components.
 - `routes/`: page-level route files.
-- `app.html` and `app.d.ts`: Svelte app shell and type declarations.
+- `app.html`: Svelte app shell.
+- `app.d.ts`: global SvelteKit declarations plus `ImportMetaEnv` entries for `VITE_CONTEXTOS_DEFAULT_WORKSPACE` and `VITE_CONTEXTOS_DEBUG_LOGS`.
 
 ## Routing Flow
 

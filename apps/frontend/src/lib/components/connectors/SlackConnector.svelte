@@ -2,8 +2,8 @@
   import { onDestroy, onMount } from "svelte";
   import type { IngestProvider, IngestResult, CodexPlugin } from "$lib/types";
   import { getJSON } from "$lib/api";
-  import { runConnectorIngest } from "$lib/ingestRunner";
-  import { runCodexReauth } from "$lib/reauthRunner";
+  import { project } from "$lib/workspace/projectStore";
+  import { runConnectorIngest } from "$lib/ingest/runner";
   import ConnectorCard from "./ConnectorCard.svelte";
   import CodexBadge from "./CodexBadge.svelte";
   import ResultPanel from "../feedback/IngestResult.svelte";
@@ -18,9 +18,10 @@
   export let codexAccount: string;
   export let codexPlugins: CodexPlugin[];
   export let refreshCodexStatus: () => Promise<void>;
+  $: void refreshCodexStatus;
 
   // Local state
-  let uri = "slack://C1234567890";
+  let uri = "";
   let token = "";
   let provider: IngestProvider = "token";
   let loading = false;
@@ -29,24 +30,16 @@
   let liveLog = "";
   let elapsed = 0;
   let ingestController: AbortController | null = null;
-  let reauthController: AbortController | null = null;
   let ingestRunID = 0;
-  let reauthRunID = 0;
 
   let connected = false;
   let source = "none";
   let teamName = "";
   let userName = "";
 
-  // Re-auth state (local — only relevant to this connector's plugin)
-  let reauthPlugin = "";
-  let reauthLog = "";
-  let reauthRunning = false;
-
   onMount(checkStatus);
   onDestroy(() => {
     ingestController?.abort();
-    reauthController?.abort();
   });
 
   async function checkStatus() {
@@ -62,28 +55,13 @@
     userName = body?.user_name ?? "";
   }
 
-  async function runReauth(plugin: string) {
-    reauthController?.abort();
-    reauthController = new AbortController();
-    const runID = ++reauthRunID;
-    await runCodexReauth({
-      plugin,
-      refreshCodexStatus,
-      signal: reauthController.signal,
-      isCurrent: () => runID === reauthRunID,
-      setPlugin: (value) => (reauthPlugin = value),
-      setRunning: (value) => (reauthRunning = value),
-      setLog: (value) =>
-        (reauthLog = typeof value === "function" ? value(reauthLog) : value),
-    });
-  }
-
   async function runIngest() {
     ingestController?.abort();
     ingestController = new AbortController();
     const runID = ++ingestRunID;
     await runConnectorIngest({
       connector: "slack",
+      workspace_id: $project.workspacePath,
       uri,
       token,
       provider,
@@ -103,13 +81,13 @@
 <ConnectorCard
   title="Slack MCP Connector"
   description="Ingest a Slack channel or message."
-  examples={["slack://CHANNEL_ID", "slack://CHANNEL_ID/TIMESTAMP"]}
+  examples={["slack://CHANNEL_ID", "slack://CHANNEL_ID/MESSAGE_TIMESTAMP"]}
 >
   <ModeToggle
     bind:value={provider}
     options={[
       { value: "token", label: "Token / env" },
-      { value: "codex", label: "Codex CLI plugin" },
+      { value: "codex", label: "Codex Slack plugin" },
     ]}
     ariaLabel="Slack ingestion provider"
   />
@@ -162,17 +140,13 @@
       {codexAccount}
       {codexPlugins}
       pluginName="slack@openai-curated"
-      {reauthRunning}
-      {reauthPlugin}
-      {reauthLog}
-      on:reauth={(e) => runReauth(e.detail)}
     />
   {/if}
 
   <FormField
     label="URI"
     bind:value={uri}
-    placeholder="slack://C1234567890"
+    placeholder="slack://CHANNEL_ID"
     offset
   />
 

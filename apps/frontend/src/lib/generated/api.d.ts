@@ -4,6 +4,140 @@
  */
 
 export interface paths {
+  "/artifacts": {
+    /** Returns workspace-scoped source artifacts filtered by connector, source, time range, and text. */
+    get: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+          /** Connector name */
+          connector?: string;
+          /** Source URI, channel, repository, or folder */
+          source_uri?: string;
+          /** Text search */
+          q?: string;
+          /** RFC3339 inclusive lower bound */
+          since?: string;
+          /** RFC3339 exclusive upper bound */
+          until?: string;
+          /** Maximum artifacts */
+          limit?: number;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.ArtifactList"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/artifacts/live-evidence/cleanup": {
+    /** Removes old noisy live_chat_answer artifacts for a workspace. This endpoint is explicit and never runs automatically. */
+    post: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["artifacts.CleanupResult"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/chat/query": {
+    /** Answers source, status, and findings-intent questions from local artifacts, with optional Codex live lookup for configured source-specific questions. */
+    post: {
+      parameters: {
+        body: {
+          /** Chat query */
+          body: definitions["request.ChatQuery"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.ChatQuery"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/chat/query/stream": {
+    /** Streams chat query progress, including live Codex logs, then emits the final chat result. */
+    post: {
+      parameters: {
+        body: {
+          /** Chat query */
+          body: definitions["request.ChatQuery"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: unknown;
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/codex/login": {
     /** Runs `codex login --device-auth` and streams log lines as SSE events. */
     post: {
@@ -35,6 +169,35 @@ export interface paths {
         };
         /** Method Not Allowed */
         405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/codex/sources": {
+    /** Uses Codex plugins to list readable sources for github, jira, slack, notion, googledrive, or sharepoint. */
+    get: {
+      parameters: {
+        query: {
+          /** Connector: github, jira, slack, notion, googledrive, or sharepoint */
+          connector: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["codex.sourceDiscoveryResponse"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
           schema: { [key: string]: string };
         };
       };
@@ -93,7 +256,7 @@ export interface paths {
     };
   };
   "/filesystem/upload": {
-    /** Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/<upload-id>/, and ingests through the filesystem connector. Metadata keys filesystem_upload_id, filesystem_upload_root, filesystem_upload_file_count, and filesystem_upload_original_name are added to each result event. */
+    /** Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/<upload-id>/, and ingests through the filesystem connector. */
     post: {
       parameters: {
         formData: {
@@ -200,6 +363,149 @@ export interface paths {
       };
     };
   };
+  "/googledrive/ingest": {
+    /** Lists Google Docs, Sheets, and Slides in a configured folder and emits one raw ingest event per file. Set provider=codex to route through the Google Drive Codex plugin. */
+    post: {
+      parameters: {
+        body: {
+          /** Google Drive ingest request */
+          body: definitions["request.GoogleDriveIngest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.Ingest"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/googledrive/ingest/stream": {
+    /** Streams Google Drive Codex plugin progress via SSE, then emits a result event. */
+    post: {
+      parameters: {
+        body: {
+          /** Google Drive ingest request (provider must be codex) */
+          body: definitions["request.GoogleDriveIngest"];
+        };
+      };
+      responses: {
+        /** SSE stream */
+        200: {
+          schema: string;
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/googledrive/status": {
+    /** Returns whether OAuth credentials, service account credentials, or a direct access token are configured for Google Drive ingest. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/graph": {
+    /** Returns persisted canonical entities for a workspace, optionally filtered by entity type. */
+    get: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+          /** Filter by entity type (e.g. feature, person, service) */
+          entity_type?: string;
+          /** Include low-signal regex entities and co-occurrence-only relationships */
+          include_noise?: boolean;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/graph/cleanup": {
+    /** Permanently removes backend-classified low-signal graph entity and relationship rows for a workspace without deleting source artifacts, findings, chat history, or connected sources. */
+    post: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["graph.cleanupResponse"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/health": {
     /** Returns ok when the API process is running. */
     get: {
@@ -275,6 +581,204 @@ export interface paths {
   };
   "/jira/status": {
     /** Returns whether Jira base URL and authentication environment variables are configured. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/notion/ingest": {
+    /** Fetches Notion page blocks or database entries by URI and returns a provenance-rich event. Set provider=codex to route through the Notion Codex plugin. */
+    post: {
+      parameters: {
+        body: {
+          /** Notion ingest request */
+          body: definitions["request.NotionIngest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.Ingest"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/notion/ingest/stream": {
+    /** Streams Notion Codex plugin progress via SSE, then emits a result event. */
+    post: {
+      parameters: {
+        body: {
+          /** Notion ingest request (provider must be codex) */
+          body: definitions["request.NotionIngest"];
+        };
+      };
+      responses: {
+        /** SSE stream */
+        200: {
+          schema: string;
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/notion/status": {
+    /** Returns whether a Notion integration token environment variable is configured. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/presentation/findings": {
+    /** Runs ingestion and pipeline reasoning, then renders role-specific summaries with evidence, confidence, impact, and assistive execution metadata. */
+    post: {
+      parameters: {
+        body: {
+          /** Presentation findings request */
+          body: definitions["request.PresentationFindings"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.PresentationFindings"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/presentation/status": {
+    /** Returns supported connectors and roles for graph-backed findings output. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/sharepoint/ingest": {
+    /** Fetches a SharePoint or OneDrive file by URI using Microsoft Graph and returns a provenance-rich event. Set provider=codex to route through the SharePoint Codex plugin. */
+    post: {
+      parameters: {
+        body: {
+          /** SharePoint ingest request */
+          body: definitions["request.SharePointIngest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.Ingest"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Bad Gateway */
+        502: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/sharepoint/ingest/stream": {
+    /** Streams SharePoint Codex plugin progress via SSE, then emits a result event. */
+    post: {
+      parameters: {
+        body: {
+          /** SharePoint ingest request (provider must be codex) */
+          body: definitions["request.SharePointIngest"];
+        };
+      };
+      responses: {
+        /** SSE stream */
+        200: {
+          schema: string;
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/sharepoint/status": {
+    /** Returns whether a SharePoint access token or client credentials are configured for Microsoft Graph ingest. */
     get: {
       responses: {
         /** OK */
@@ -399,9 +903,198 @@ export interface paths {
       };
     };
   };
+  "/workspace": {
+    /** Returns all registered ContextOS workspaces. */
+    get: {
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+    /** Deletes a workspace row, cascade-linked DB memory, and workspace-scoped local JSON artifacts without recreating the workspace. */
+    delete: {
+      parameters: {
+        query: {
+          /** Absolute workspace path */
+          path: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: boolean };
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/workspace/reset": {
+    /** Deletes DB-backed local memory and workspace-scoped local JSON artifacts, then recreates an empty workspace row. */
+    post: {
+      parameters: {
+        body: {
+          /** Workspace reset request */
+          body: definitions["workspace.upsertRequest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.WorkspaceStatus"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/workspace/source": {
+    /** Saves a connector/source URI reference for live source lookup without ingesting source content. */
+    post: {
+      parameters: {
+        body: {
+          /** Connected source registration request */
+          body: definitions["workspace.sourceRequest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["response.WorkspaceSync"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/workspace/status": {
+    /** Returns event counts and connector sync states for a workspace. */
+    get: {
+      parameters: {
+        query: {
+          /** Absolute workspace path */
+          path: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: unknown };
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/workspace/upsert": {
+    /** Creates or updates a workspace record by its path. */
+    post: {
+      parameters: {
+        body: {
+          /** Workspace upsert request */
+          body: definitions["workspace.upsertRequest"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["repository.Workspace"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
 }
 
 export interface definitions {
+  "artifacts.CleanupResult": {
+    deleted_count?: number;
+    deleted_ids?: string[];
+    matched_count?: number;
+    workspace_id?: string;
+    workspace_path?: string;
+  };
+  "codex.sourceCandidate": {
+    connector?: string;
+    id?: string;
+    kind?: string;
+    label?: string;
+    uri?: string;
+  };
+  "codex.sourceDiscoveryResponse": {
+    connector?: string;
+    provider?: string;
+    sources?: definitions["codex.sourceCandidate"][];
+  };
   "events.Event": {
     /** @example Issue body: Please update the connector README with setup steps. */
     content?: string;
@@ -414,7 +1107,7 @@ export interface definitions {
     schema_version?: string;
     /** @example github */
     source?: string;
-    /** @example https://github.com/sx-tane/context-os/issues/1 */
+    /** @example https://github.com/owner/repo/issues/1 */
     source_id?: string;
     /** @example Fix: update connector README */
     subject?: string;
@@ -432,6 +1125,100 @@ export interface definitions {
     | "relationship.created"
     | "mismatch.detected"
     | "codex.analysis.completed";
+  "graph.cleanupResponse": {
+    deleted_entity_count?: number;
+    deleted_relationship_count?: number;
+    matched_entity_count?: number;
+    matched_relationship_count?: number;
+    workspace_id?: string;
+    workspace_path?: string;
+  };
+  "repository.ConnectorSync": {
+    /** @description Connector is the source connector name. */
+    connector?: string;
+    /** @description Cursor is the replay checkpoint used for incremental sync. */
+    cursor?: string;
+    /** @description EventCount is the number of events ingested in the last sync run. */
+    eventCount?: number;
+    /** @description LastError is the last error message, empty if no error. */
+    lastError?: string;
+    /** @description LastSyncedAt is when the last successful sync completed, nil if never. */
+    lastSyncedAt?: string;
+    /** @description SourceURI is the URI this sync record covers. */
+    sourceURI?: string;
+    /** @description Status is the current sync state: connected | idle | syncing | error. */
+    status?: string;
+    /** @description WorkspaceID links the record to its workspace. */
+    workspaceID?: string;
+  };
+  "repository.Workspace": {
+    /** @description CreatedAt is the UTC timestamp when the workspace was first registered. */
+    createdAt?: string;
+    /** @description ID is the primary key derived from the workspace path. */
+    id?: string;
+    /** @description Name is the human-readable workspace name. */
+    name?: string;
+    /** @description Path is the absolute local folder path used as the project key. */
+    path?: string;
+    /** @description UpdatedAt is the UTC timestamp of the last write to the workspace row. */
+    updatedAt?: string;
+  };
+  "request.ChatQuery": {
+    /**
+     * @description Connector optionally pins the query to a connector such as slack, github, jira, or filesystem.
+     * @example slack
+     */
+    connector?: string;
+    /**
+     * @description Connectors optionally pins the query to several live connectors.
+     * @example [
+     *   "jira",
+     *   "github",
+     *   "slack"
+     * ]
+     */
+    connectors?: string[];
+    /**
+     * @description Limit caps returned artifacts.
+     * @example 20
+     */
+    limit?: number;
+    /**
+     * @description LocalDate is the user's current local date in YYYY-MM-DD form.
+     * @example 2026-06-01
+     */
+    local_date?: string;
+    /**
+     * @description Message is the user question to answer from local ContextOS data.
+     * @example give me today's Slack messages
+     */
+    message?: string;
+    /**
+     * @description ResponseLanguage is a short language hint used to match the user's current prompt language.
+     * @example zh
+     */
+    response_language?: string;
+    /**
+     * @description SourceURI optionally pins the query to a channel, repository, folder, or document URI.
+     * @example #delivery-team
+     */
+    source_uri?: string;
+    /**
+     * @description Timezone is the user's IANA timezone, used for local date words such as today.
+     * @example Asia/Kuala_Lumpur
+     */
+    timezone?: string;
+    /**
+     * @description WorkspaceID is the selected workspace path or stored workspace identifier.
+     * @example /home/user/myproject
+     */
+    workspace_id?: string;
+    /**
+     * @description WorkspacePath is an optional explicit workspace path; it takes precedence over WorkspaceID.
+     * @example /home/user/myproject
+     */
+    workspace_path?: string;
+  };
   "request.FilesystemIngest": {
     /** @example Optional raw content instead of reading from URI */
     content?: string;
@@ -444,14 +1231,37 @@ export interface definitions {
     metadata?: { [key: string]: string };
     /** @example storage/raw/README.md */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.GithubIngest": {
     /** @example token */
     provider?: string;
     /** @example ghp_xxxx */
     token?: string;
-    /** @example https://github.com/sx-tane/context-os/issues/1 */
+    /** @example https://github.com/owner/repo/issues/1 */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
+  };
+  "request.GoogleDriveIngest": {
+    /** @example ya29.a0AfH6SMD... */
+    access_token?: string;
+    /** @example /Users/name/.config/context-os/google-authorized-user.json */
+    credential_path?: string;
+    /** @example 2026-05-29T10:00:00Z */
+    cursor?: string;
+    /** @example 1234567890 */
+    folder_id?: string;
+    metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
+    /** @example /Users/name/.config/context-os/google-service-account.json */
+    service_account_path?: string;
+    /** @example https://drive.google.com/drive/folders/1234567890 */
+    uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.JiraIngest": {
     /** @example https://mysite.atlassian.net */
@@ -469,30 +1279,274 @@ export interface definitions {
     provider?: string;
     /** @example ATATT3xFfGF0xxxx */
     token?: string;
-    /** @example https://mysite.atlassian.net/browse/PROJ-123 */
+    /** @example https://site.atlassian.net/browse/PROJ-123 */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
+  };
+  "request.NotionIngest": {
+    /** @example Optional raw content instead of fetching from Notion */
+    content?: string;
+    metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
+    /** @example secret_xxxx */
+    token?: string;
+    /** @example notion://page/PAGE_ID */
+    uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
+  };
+  "request.PresentationFindings": {
+    /** @example filesystem */
+    connector?: string;
+    /** @example frontend expects refundStatus but backend exposes missingRefundState */
+    content?: string;
+    /** @example eyJsYXN0X2lkIjoiMTIzIn0= */
+    cursor?: string;
+    /** @description ForceRefresh bypasses the findings cache and always re-ingests from source. */
+    force_refresh?: boolean;
+    include_execution?: boolean;
+    metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
+    /** @example pmo */
+    role?: string;
+    /** @example ghp_xxxx */
+    token?: string;
+    /** @example storage/raw/context.txt */
+    uri?: string;
+    /**
+     * @description WorkspaceID is the optional workspace path used to scope and persist results.
+     * When set the pipeline output is written to Postgres and cache-hit logic applies.
+     * @example /home/user/myproject
+     */
+    workspace_id?: string;
+  };
+  "request.SharePointIngest": {
+    /** @example 11111111-1111-1111-1111-111111111111 */
+    client_id?: string;
+    /** @example secret~value */
+    client_secret?: string;
+    /** @example Optional raw content instead of fetching from Graph */
+    content?: string;
+    metadata?: { [key: string]: string };
+    /** @example token */
+    provider?: string;
+    /** @example 00000000-0000-0000-0000-000000000000 */
+    tenant_id?: string;
+    /** @example eyJ0... */
+    token?: string;
+    /** @example sharepoint://sites/mysite/items/abcdef01 */
+    uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
   };
   "request.SlackIngest": {
     /** @example token */
     provider?: string;
     /** @example xoxb-111-222-xxxx */
     token?: string;
-    /** @example slack://C1234567890 */
+    /** @example slack://CHANNEL_ID */
     uri?: string;
+    /** @example /home/user/myproject */
+    workspace_id?: string;
+  };
+  "response.AnswerSection": {
+    coding_notes?: string[];
+    confidence?: number;
+    connector?: string;
+    facts?: string[];
+    links?: string[];
+    open_items?: string[];
+    source_label?: string;
+    source_uri?: string;
+    status?: string;
+    summary?: string;
+    timestamps?: string[];
+  };
+  "response.Artifact": {
+    body?: string;
+    connector?: string;
+    content_hash?: string;
+    event_type?: string;
+    id?: string;
+    ingested_at?: string;
+    metadata?: { [key: string]: string };
+    preview?: string;
+    schema_version?: string;
+    source_uri?: string;
+    title?: string;
+    workspace_id?: string;
+  };
+  "response.ArtifactList": {
+    artifacts?: definitions["response.Artifact"][];
+    connector?: string;
+    count?: number;
+    query?: string;
+    source_uri?: string;
+    workspace_id?: string;
+    workspace_path?: string;
+  };
+  "response.ChatQuery": {
+    answer?: string;
+    answer_sections?: definitions["response.AnswerSection"][];
+    artifact_count?: number;
+    artifacts?: definitions["response.Artifact"][];
+    connector?: string;
+    /** @description EvidenceEventCount is the number of local events produced by the evidence save. */
+    evidence_event_count?: number;
+    /** @description EvidenceGraphEntityCount is the number of entities derived from newly saved live evidence. */
+    evidence_graph_entity_count?: number;
+    /** @description EvidenceGraphRelationshipCount is the number of relationships derived from newly saved live evidence. */
+    evidence_graph_relationship_count?: number;
+    /** @description EvidenceGraphStatus describes whether saved live evidence updated the graph. */
+    evidence_graph_status?: string;
+    /** @description EvidenceSaveError is set when evidence persistence failed without discarding the live answer. */
+    evidence_save_error?: string;
+    /** @description EvidenceSaveStatus describes whether a live Codex answer also persisted local evidence. */
+    evidence_save_status?: string;
+    intent?: string;
+    provider?: string;
+    range_end?: string;
+    range_start?: string;
+    source_uri?: string;
+    summary?: string;
+    syncs?: definitions["repository.ConnectorSync"][];
+    workspace_id?: string;
+    workspace_path?: string;
+  };
+  "response.ExecutionEvidence": {
+    assistive?: boolean;
+    enabled?: boolean;
+    error?: string;
+    metadata?: { [key: string]: string };
+    summary?: string;
   };
   "response.Ingest": {
     capabilities?: string[];
     /** @example github */
     connector?: string;
+    entity_count?: number;
     event?: definitions["events.Event"];
     /** @example 1 */
     event_count?: number;
     events?: definitions["events.Event"][];
     metadata?: { [key: string]: string };
     metadata_items?: { [key: string]: string }[];
+    mismatch_count?: number;
+    persisted_event_count?: number;
+    persistence_mode?: string;
     /** @example Issue #1: Fix connector README — requesting updated setup steps. */
     preview?: string;
     previews?: string[];
+    relationship_count?: number;
+    workspace_id?: string;
+  };
+  "response.PMOSummary": {
+    confidence?: { [key: string]: number };
+    evidence?: { [key: string]: string[] };
+    facts?: string[];
+    impacts?: string[];
+    recommended_decisions?: string[];
+    risks?: string[];
+  };
+  "response.PresentationFindings": {
+    connector?: string;
+    entity_count?: number;
+    event_count?: number;
+    execution?: definitions["response.ExecutionEvidence"];
+    mismatch_count?: number;
+    mismatch_ids?: string[];
+    mismatches?: definitions["types.Mismatch"][];
+    pmo?: definitions["response.PMOSummary"];
+    relationship_count?: number;
+    role?: string;
+    severity_count?: { [key: string]: number };
+    summary?: string;
+    trace_id?: string;
+    uri?: string;
+    views?: definitions["response.RoleViews"];
+  };
+  "response.RoleSummaryView": {
+    finding_count?: number;
+    mismatch_ids?: string[];
+    next_actions?: string[];
+    role?: string;
+    summary?: string;
+  };
+  "response.RoleViews": {
+    architecture?: definitions["response.RoleSummaryView"];
+    pmo?: definitions["response.RoleSummaryView"];
+    presentation_layer?: definitions["response.RoleSummaryView"];
+    qa?: definitions["response.RoleSummaryView"];
+    service_layer?: definitions["response.RoleSummaryView"];
+  };
+  "response.Workspace": {
+    created_at?: string;
+    id?: string;
+    name?: string;
+    path?: string;
+    updated_at?: string;
+  };
+  "response.WorkspaceStatus": {
+    audit_count?: number;
+    connector_sync_count?: number;
+    entity_count?: number;
+    event_count?: number;
+    mismatch_count?: number;
+    relationship_count?: number;
+    syncs?: definitions["response.WorkspaceSync"][];
+    workspace?: definitions["response.Workspace"];
+    workspace_count?: number;
+  };
+  "response.WorkspaceSync": {
+    connector?: string;
+    cursor?: string;
+    event_count?: number;
+    last_error?: string;
+    last_synced_at?: string;
+    source_uri?: string;
+    status?: string;
+    workspace_id?: string;
+  };
+  "types.Mismatch": {
+    /** @description delivery roles that need to act on this finding */
+    affected_roles?: string[];
+    /** @description 0.0-1.0 score for how certain the reasoning stage is */
+    confidence?: number;
+    /** @description IDs of the entities involved in the mismatch */
+    entity_ids?: string[];
+    /** @description source artifact references supporting this finding */
+    evidence?: string[];
+    /** @description unique identifier for this mismatch finding */
+    id?: string;
+    /** @description expected business or delivery impact level */
+    impact?: string;
+    /** @description suggested action for the team to resolve this */
+    recommended?: string;
+    /** @description impact level: low, medium, or high */
+    severity?: string;
+    /** @description human-readable description of what was found */
+    summary?: string;
+    /** @description stable category for the detection rule that produced this finding */
+    type?: string;
+  };
+  "workspace.sourceRequest": {
+    /** @description Connector is the connector name, e.g. github or jira. */
+    connector?: string;
+    /** @description SourceURI is the external source URI to save. */
+    source_uri?: string;
+    /** @description URI is accepted for frontend compatibility with existing source forms. */
+    uri?: string;
+    /** @description WorkspaceID is a workspace path or ID. */
+    workspace_id?: string;
+  };
+  "workspace.upsertRequest": {
+    /** @description Name is the optional human-readable workspace name. */
+    name?: string;
+    /** @description Path is the absolute local folder path for the workspace. */
+    path?: string;
   };
 }
 

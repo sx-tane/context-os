@@ -1,8 +1,12 @@
 package middleware_test
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"context-os/apps/api/middleware"
@@ -31,8 +35,8 @@ func TestWithCORSSetsHeaders(t *testing.T) {
 			if got := rec.Header().Get("Access-Control-Allow-Methods"); got == "" {
 				t.Error("Access-Control-Allow-Methods not set")
 			}
-			if got := rec.Header().Get("Access-Control-Allow-Headers"); got == "" {
-				t.Error("Access-Control-Allow-Headers not set")
+			if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "X-ContextOS-Request-ID") {
+				t.Errorf("Access-Control-Allow-Headers = %q, want X-ContextOS-Request-ID", got)
 			}
 		})
 	}
@@ -81,5 +85,92 @@ func TestWithCORSPassesRequestToInner(t *testing.T) {
 	}
 	if receivedMethod != http.MethodPost {
 		t.Errorf("inner received method %q, want POST", receivedMethod)
+	}
+}
+
+// TestWithRequestLoggingIsQuietByDefault verifies request logging does not emit logs unless explicitly enabled.
+func TestWithRequestLoggingIsQuietByDefault(t *testing.T) {
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := middleware.WithRequestLogging("/quiet", inner)
+
+	handler.ServeHTTP(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/quiet", nil),
+	)
+
+	if got := logs.String(); got != "" {
+		t.Fatalf("logs = %q, want empty", got)
+	}
+}
+
+// TestWithRequestLoggingRecordsRequestLifecycle verifies enabled request logging includes start, completion, status, bytes, and request ID.
+func TestWithRequestLoggingRecordsRequestLifecycle(t *testing.T) {
+	t.Setenv("CONTEXTOS_API_REQUEST_LOGS", "1")
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		if _, err := io.WriteString(w, "created"); err != nil {
+			t.Fatalf("WriteString() error = %v", err)
+		}
+	})
+	handler := middleware.WithRequestLogging("/resource", inner)
+	req := httptest.NewRequest(http.MethodPost, "/resource?debug=1", nil)
+	req.Header.Set("X-ContextOS-Request-ID", "web-test-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	got := logs.String()
+	for _, want := range []string{
+		"http request start",
+		"http request done",
+		"id=web-test-1",
+		"method=POST",
+		"path=/resource",
+		"route=/resource",
+		"query=debug=1",
+		"status=201",
+		"bytes=7",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("logs missing %q: %s", want, got)
+		}
+	}
+}
+
+// TestWithRequestLoggingPreservesFlush verifies streaming handlers can still flush through the logging wrapper.
+func TestWithRequestLoggingPreservesFlush(t *testing.T) {
+	t.Setenv("CONTEXTOS_API_REQUEST_LOGS", "1")
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("ResponseWriter does not implement http.Flusher")
+		}
+		if _, err := io.WriteString(w, "event: log\n"); err != nil {
+			t.Fatalf("WriteString() error = %v", err)
+		}
+		flusher.Flush()
+	})
+	handler := middleware.WithRequestLogging("/stream", inner)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/stream", nil))
+
+	if got := rec.Body.String(); got != "event: log\n" {
+		t.Fatalf("Body = %q, want event log line", got)
+	}
+	if !rec.Flushed {
+		t.Fatal("response was not flushed")
 	}
 }

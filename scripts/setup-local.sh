@@ -38,7 +38,11 @@ append_if_missing() {
 install_base_packages() {
   info "Installing base utilities"
   sudo apt update
-  sudo apt install -y curl wget tar xz-utils git build-essential ca-certificates nodejs npm
+  if dpkg -s libnode-dev >/dev/null 2>&1; then
+    info "Removing conflicting Ubuntu node development headers"
+    sudo apt remove -y libnode-dev
+  fi
+  sudo apt install -y curl wget tar xz-utils unzip git build-essential ca-certificates nodejs
 }
 
 install_go() {
@@ -72,8 +76,8 @@ install_bun() {
 }
 
 install_python() {
-  info "Installing Python 3.12 and tooling"
-  sudo apt install -y python3.12 python3.12-venv python3-pip
+  info "Installing Python tooling"
+  sudo apt install -y python3-venv python3-pip
 }
 
 install_uv() {
@@ -97,7 +101,7 @@ is_headless() {
 install_codex() {
   info "Installing Codex CLI"
   if ! command -v npm >/dev/null 2>&1; then
-    echo "npm is required to install Codex CLI." >&2
+    echo "npm is required to install Codex CLI. Install nodejs (which provides npm on NodeSource) or add npm to PATH." >&2
     exit 1
   fi
 
@@ -107,13 +111,15 @@ install_codex() {
     sudo npm install -g @openai/codex
   fi
 
-  info "Installing Codex GitHub, Atlassian Rovo, and Slack plugins"
+  info "Installing Codex GitHub, Atlassian Rovo, Slack, and Google Drive plugins"
   codex plugin add github@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install GitHub Codex plugin." >&2
   codex plugin add atlassian-rovo@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Atlassian Rovo Codex plugin." >&2
   codex plugin add slack@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Slack Codex plugin." >&2
+  codex plugin add google-drive@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Google Drive Codex plugin." >&2
 
   if ! codex login status >/dev/null 2>&1; then
     if is_headless; then
@@ -133,9 +139,12 @@ verify_tools() {
   info "Verifying installed tool versions"
   go version
   bun --version
-  python3.12 --version
   uv --version
   codex --version
+  (
+    cd "$ROOT_DIR/apps/ai-worker"
+    uv run python --version
+  )
 }
 
 validate_repo() {

@@ -1,0 +1,36 @@
+{
+  "entities": [
+    {
+      "name": "Checkout fee rule",
+      "type": "dependency"
+    },
+    {
+      "name": "checkoutFeeAmount",
+      "type": "api_field"
+    },
+    {
+      "name": "checkout_fee_amount_cents",
+      "type": "db_column"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "Checkout fee rule",
+      "to": "checkoutFeeAmount",
+      "kind": "requirement_affects_api",
+      "confidence_min": 0.75,
+      "evidence": ["Checkout fee rule requires checkoutFeeAmount"]
+    },
+    {
+      "from": "checkoutFeeAmount",
+      "to": "checkout_fee_amount_cents",
+      "kind": "api_backed_by_db",
+      "confidence_min": 0.75,
+      "evidence": [
+        "event:relationship-clean-assist#checkoutFeeAmount",
+        "event:relationship-clean-assist#checkout_fee_amount_cents"
+      ]
+    }
+  ],
+  "mismatches": []
+}

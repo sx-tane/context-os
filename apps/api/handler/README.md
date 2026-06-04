@@ -1,7 +1,7 @@
 # apps/api/handler
 
 HTTP handlers for the ContextOS API, organized as per-domain Go packages.
-Shared plumbing lives in `shared/`.
+Source connector HTTP handlers live together in `connectors/`; shared plumbing lives in `shared/`.
 
 ---
 
@@ -10,11 +10,14 @@ Shared plumbing lives in `shared/`.
 | Package                               | Route prefix    | Exports                                                   |
 | ------------------------------------- | --------------- | --------------------------------------------------------- |
 | [`health/`](health/README.md)         | `/health`       | `Health`                                                  |
-| [`codex/`](codex/README.md)           | `/codex/*`      | `Status`, `Login`, `PluginReauth`                         |
-| [`github/`](github/README.md)         | `/github/*`     | `Status`, `Ingest`, `IngestStream`                        |
-| [`jira/`](jira/README.md)             | `/jira/*`       | `Status`, `Ingest`, `IngestStream`                        |
-| [`slack/`](slack/README.md)           | `/slack/*`      | `Status`, `Connect`, `Callback`, `Ingest`, `IngestStream` |
-| [`filesystem/`](filesystem/README.md) | `/filesystem/*` | `Ingest`, `Upload`                                        |
+| [`connectors/codex/`](connectors/codex/README.md) | `/codex/*` | `Status`, `Login`, `PluginReauth` |
+| [`connectors/github/`](connectors/github/README.md) | `/github/*` | `Status`, `Ingest`, `IngestStream` |
+| [`connectors/googledrive/`](connectors/googledrive/README.md) | `/googledrive/*` | `Status`, `Ingest` |
+| [`connectors/jira/`](connectors/jira/README.md) | `/jira/*` | `Status`, `Ingest`, `IngestStream` |
+| [`connectors/notion/`](connectors/notion/README.md) | `/notion/*` | `Status`, `Ingest`, `IngestStream` |
+| [`connectors/sharepoint/`](connectors/sharepoint/README.md) | `/sharepoint/*` | `Status`, `Ingest`, `IngestStream` |
+| [`connectors/slack/`](connectors/slack/README.md) | `/slack/*` | `Status`, `Connect`, `Callback`, `Ingest`, `IngestStream` |
+| [`connectors/filesystem/`](connectors/filesystem/README.md) | `/filesystem/*` | `Ingest`, `Upload` |
 | [`shared/`](shared/README.md)         | —               | Ingest helpers, SSE infrastructure                        |
 
 Each domain package has its own README with handler table and design notes.
@@ -101,11 +104,11 @@ Key helpers consumed by domain packages:
 
 ## Adding a new connector handler
 
-1. Create `apps/api/handler/<domain>.go` with `package handler`.
+1. Create `apps/api/handler/connectors/<domain>/<domain>.go`.
 2. Add a `Status` handler (GET) that reads env vars and reports connection state.
 3. Add an `Ingest` handler (POST) using `runSourceIngest` or `writeSourceIngest`.
 4. Optionally add an `IngestStream` handler using `streamCodexIngest` for Codex CLI providers.
-5. Add `apps/api/handler/<domain>_test.go` with at least: method-not-allowed, invalid JSON, and key env-var behavior tests.
+5. Add `apps/api/handler/connectors/<domain>/<domain>_test.go` with at least: method-not-allowed, invalid JSON, and key env-var behavior tests.
 6. Register the routes in `apps/api/main.go`.
 7. Add Swagger annotations to each handler and regenerate: `swag init -g main.go -o docs`.
 

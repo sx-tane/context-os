@@ -29,7 +29,7 @@ type Event struct {
     Type          Type              `json:"type"           example:"document.ingested"`
     SchemaVersion string            `json:"schema_version" example:"v1"`
     Source        string            `json:"source"         example:"github"`
-    SourceID      string            `json:"source_id"      example:"https://github.com/sx-tane/context-os/issues/1"`
+    SourceID      string            `json:"source_id"      example:"https://github.com/owner/repo/issues/1"`
     Subject       string            `json:"subject"        example:"Fix: update connector README"`
     Content       string            `json:"content"        example:"Issue body: Please update the connector README with setup steps."`
     Metadata      map[string]string `json:"metadata"`

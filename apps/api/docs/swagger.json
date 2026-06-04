@@ -9,6 +9,291 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/artifacts": {
+            "get": {
+                "description": "Returns workspace-scoped source artifacts filtered by connector, source, time range, and text.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "artifacts"
+                ],
+                "summary": "Query local artifacts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Connector name",
+                        "name": "connector",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source URI, channel, repository, or folder",
+                        "name": "source_uri",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Text search",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 inclusive lower bound",
+                        "name": "since",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 exclusive upper bound",
+                        "name": "until",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum artifacts",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ArtifactList"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/artifacts/live-evidence/cleanup": {
+            "post": {
+                "description": "Removes old noisy live_chat_answer artifacts for a workspace. This endpoint is explicit and never runs automatically.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "artifacts"
+                ],
+                "summary": "Clean noisy live evidence",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/artifacts.CleanupResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/chat/query": {
+            "post": {
+                "description": "Answers source, status, and findings-intent questions from local artifacts, with optional Codex live lookup for configured source-specific questions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Query workspace context",
+                "parameters": [
+                    {
+                        "description": "Chat query",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ChatQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ChatQuery"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/chat/query/stream": {
+            "post": {
+                "description": "Streams chat query progress, including live Codex logs, then emits the final chat result.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Stream workspace context query",
+                "parameters": [
+                    {
+                        "description": "Chat query",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ChatQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/codex/login": {
             "post": {
                 "description": "Runs `codex login --device-auth` and streams log lines as SSE events.",
@@ -69,6 +354,62 @@
                     },
                     "405": {
                         "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/codex/sources": {
+            "get": {
+                "description": "Uses Codex plugins to list readable sources for github, jira, slack, notion, googledrive, or sharepoint.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "codex"
+                ],
+                "summary": "List Codex-accessible sources",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connector: github, jira, slack, notion, googledrive, or sharepoint",
+                        "name": "connector",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/codex.sourceDiscoveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -190,7 +531,7 @@
         },
         "/filesystem/upload": {
             "post": {
-                "description": "Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/\u003cupload-id\u003e/, and ingests through the filesystem connector. Metadata keys filesystem_upload_id, filesystem_upload_root, filesystem_upload_file_count, and filesystem_upload_original_name are added to each result event.",
+                "description": "Accepts multipart/form-data with one or more file parts and optional relative paths, stages them under storage/raw/uploads/\u003cupload-id\u003e/, and ingests through the filesystem connector.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -414,6 +755,301 @@
                 }
             }
         },
+        "/googledrive/ingest": {
+            "post": {
+                "description": "Lists Google Docs, Sheets, and Slides in a configured folder and emits one raw ingest event per file. Set provider=codex to route through the Google Drive Codex plugin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "googledrive"
+                ],
+                "summary": "Ingest Google Drive documents",
+                "parameters": [
+                    {
+                        "description": "Google Drive ingest request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.GoogleDriveIngest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Ingest"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/googledrive/ingest/stream": {
+            "post": {
+                "description": "Streams Google Drive Codex plugin progress via SSE, then emits a result event.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "googledrive"
+                ],
+                "summary": "Stream Google Drive Codex ingest",
+                "parameters": [
+                    {
+                        "description": "Google Drive ingest request (provider must be codex)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.GoogleDriveIngest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/googledrive/status": {
+            "get": {
+                "description": "Returns whether OAuth credentials, service account credentials, or a direct access token are configured for Google Drive ingest.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "googledrive"
+                ],
+                "summary": "Google Drive connection status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/graph": {
+            "get": {
+                "description": "Returns persisted canonical entities for a workspace, optionally filtered by entity type.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "graph"
+                ],
+                "summary": "Query workspace entity graph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by entity type (e.g. feature, person, service)",
+                        "name": "entity_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include low-signal regex entities and co-occurrence-only relationships",
+                        "name": "include_noise",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/graph/cleanup": {
+            "post": {
+                "description": "Permanently removes backend-classified low-signal graph entity and relationship rows for a workspace without deleting source artifacts, findings, chat history, or connected sources.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "graph"
+                ],
+                "summary": "Clean noisy graph data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/graph.cleanupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Returns ok when the API process is running.",
@@ -578,6 +1214,419 @@
                     "jira"
                 ],
                 "summary": "Jira connection status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notion/ingest": {
+            "post": {
+                "description": "Fetches Notion page blocks or database entries by URI and returns a provenance-rich event. Set provider=codex to route through the Notion Codex plugin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notion"
+                ],
+                "summary": "Ingest a Notion page or database",
+                "parameters": [
+                    {
+                        "description": "Notion ingest request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.NotionIngest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Ingest"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notion/ingest/stream": {
+            "post": {
+                "description": "Streams Notion Codex plugin progress via SSE, then emits a result event.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "notion"
+                ],
+                "summary": "Stream Notion Codex ingest",
+                "parameters": [
+                    {
+                        "description": "Notion ingest request (provider must be codex)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.NotionIngest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notion/status": {
+            "get": {
+                "description": "Returns whether a Notion integration token environment variable is configured.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notion"
+                ],
+                "summary": "Notion connection status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/presentation/findings": {
+            "post": {
+                "description": "Runs ingestion and pipeline reasoning, then renders role-specific summaries with evidence, confidence, impact, and assistive execution metadata.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "presentation"
+                ],
+                "summary": "Build graph-backed role findings output",
+                "parameters": [
+                    {
+                        "description": "Presentation findings request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.PresentationFindings"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PresentationFindings"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/presentation/status": {
+            "get": {
+                "description": "Returns supported connectors and roles for graph-backed findings output.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "presentation"
+                ],
+                "summary": "Presentation output status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sharepoint/ingest": {
+            "post": {
+                "description": "Fetches a SharePoint or OneDrive file by URI using Microsoft Graph and returns a provenance-rich event. Set provider=codex to route through the SharePoint Codex plugin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sharepoint"
+                ],
+                "summary": "Ingest a SharePoint / OneDrive item",
+                "parameters": [
+                    {
+                        "description": "SharePoint ingest request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.SharePointIngest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Ingest"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sharepoint/ingest/stream": {
+            "post": {
+                "description": "Streams SharePoint Codex plugin progress via SSE, then emits a result event.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "sharepoint"
+                ],
+                "summary": "Stream SharePoint Codex ingest",
+                "parameters": [
+                    {
+                        "description": "SharePoint ingest request (provider must be codex)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.SharePointIngest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sharepoint/status": {
+            "get": {
+                "description": "Returns whether a SharePoint access token or client credentials are configured for Microsoft Graph ingest.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sharepoint"
+                ],
+                "summary": "SharePoint connection status",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -823,9 +1872,423 @@
                     }
                 }
             }
+        },
+        "/workspace": {
+            "get": {
+                "description": "Returns all registered ContextOS workspaces.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "List workspaces",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes a workspace row, cascade-linked DB memory, and workspace-scoped local JSON artifacts without recreating the workspace.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Delete workspace memory",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Absolute workspace path",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workspace/reset": {
+            "post": {
+                "description": "Deletes DB-backed local memory and workspace-scoped local JSON artifacts, then recreates an empty workspace row.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Reset workspace memory",
+                "parameters": [
+                    {
+                        "description": "Workspace reset request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/workspace.upsertRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.WorkspaceStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workspace/source": {
+            "post": {
+                "description": "Saves a connector/source URI reference for live source lookup without ingesting source content.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Register a connected workspace source",
+                "parameters": [
+                    {
+                        "description": "Connected source registration request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/workspace.sourceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.WorkspaceSync"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workspace/status": {
+            "get": {
+                "description": "Returns event counts and connector sync states for a workspace.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Workspace status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Absolute workspace path",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workspace/upsert": {
+            "post": {
+                "description": "Creates or updates a workspace record by its path.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Register or update a workspace",
+                "parameters": [
+                    {
+                        "description": "Workspace upsert request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/workspace.upsertRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/repository.Workspace"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "artifacts.CleanupResult": {
+            "type": "object",
+            "properties": {
+                "deleted_count": {
+                    "type": "integer"
+                },
+                "deleted_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "matched_count": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "type": "string"
+                },
+                "workspace_path": {
+                    "type": "string"
+                }
+            }
+        },
+        "codex.sourceCandidate": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "uri": {
+                    "type": "string"
+                }
+            }
+        },
+        "codex.sourceDiscoveryResponse": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/codex.sourceCandidate"
+                    }
+                }
+            }
+        },
         "events.Event": {
             "type": "object",
             "properties": {
@@ -857,7 +2320,7 @@
                 },
                 "source_id": {
                     "type": "string",
-                    "example": "https://github.com/sx-tane/context-os/issues/1"
+                    "example": "https://github.com/owner/repo/issues/1"
                 },
                 "subject": {
                     "type": "string",
@@ -898,6 +2361,153 @@
                 "CodexAnalysisComplete"
             ]
         },
+        "graph.cleanupResponse": {
+            "type": "object",
+            "properties": {
+                "deleted_entity_count": {
+                    "type": "integer"
+                },
+                "deleted_relationship_count": {
+                    "type": "integer"
+                },
+                "matched_entity_count": {
+                    "type": "integer"
+                },
+                "matched_relationship_count": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "type": "string"
+                },
+                "workspace_path": {
+                    "type": "string"
+                }
+            }
+        },
+        "repository.ConnectorSync": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "description": "Connector is the source connector name.",
+                    "type": "string"
+                },
+                "cursor": {
+                    "description": "Cursor is the replay checkpoint used for incremental sync.",
+                    "type": "string"
+                },
+                "eventCount": {
+                    "description": "EventCount is the number of events ingested in the last sync run.",
+                    "type": "integer"
+                },
+                "lastError": {
+                    "description": "LastError is the last error message, empty if no error.",
+                    "type": "string"
+                },
+                "lastSyncedAt": {
+                    "description": "LastSyncedAt is when the last successful sync completed, nil if never.",
+                    "type": "string"
+                },
+                "sourceURI": {
+                    "description": "SourceURI is the URI this sync record covers.",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status is the current sync state: connected | idle | syncing | error.",
+                    "type": "string"
+                },
+                "workspaceID": {
+                    "description": "WorkspaceID links the record to its workspace.",
+                    "type": "string"
+                }
+            }
+        },
+        "repository.Workspace": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "description": "CreatedAt is the UTC timestamp when the workspace was first registered.",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the primary key derived from the workspace path.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the human-readable workspace name.",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Path is the absolute local folder path used as the project key.",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "UpdatedAt is the UTC timestamp of the last write to the workspace row.",
+                    "type": "string"
+                }
+            }
+        },
+        "request.ChatQuery": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "description": "Connector optionally pins the query to a connector such as slack, github, jira, or filesystem.",
+                    "type": "string",
+                    "example": "slack"
+                },
+                "connectors": {
+                    "description": "Connectors optionally pins the query to several live connectors.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "jira",
+                        "github",
+                        "slack"
+                    ]
+                },
+                "limit": {
+                    "description": "Limit caps returned artifacts.",
+                    "type": "integer",
+                    "example": 20
+                },
+                "local_date": {
+                    "description": "LocalDate is the user's current local date in YYYY-MM-DD form.",
+                    "type": "string",
+                    "example": "2026-06-01"
+                },
+                "message": {
+                    "description": "Message is the user question to answer from local ContextOS data.",
+                    "type": "string",
+                    "example": "give me today's Slack messages"
+                },
+                "response_language": {
+                    "description": "ResponseLanguage is a short language hint used to match the user's current prompt language.",
+                    "type": "string",
+                    "example": "zh"
+                },
+                "source_uri": {
+                    "description": "SourceURI optionally pins the query to a channel, repository, folder, or document URI.",
+                    "type": "string",
+                    "example": "#delivery-team"
+                },
+                "timezone": {
+                    "description": "Timezone is the user's IANA timezone, used for local date words such as today.",
+                    "type": "string",
+                    "example": "Asia/Kuala_Lumpur"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the selected workspace path or stored workspace identifier.",
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                },
+                "workspace_path": {
+                    "description": "WorkspacePath is an optional explicit workspace path; it takes precedence over WorkspaceID.",
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                }
+            }
+        },
         "request.FilesystemIngest": {
             "type": "object",
             "properties": {
@@ -926,6 +2536,10 @@
                 "uri": {
                     "type": "string",
                     "example": "storage/raw/README.md"
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "example": "/home/user/myproject"
                 }
             }
         },
@@ -942,7 +2556,54 @@
                 },
                 "uri": {
                     "type": "string",
-                    "example": "https://github.com/sx-tane/context-os/issues/1"
+                    "example": "https://github.com/owner/repo/issues/1"
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                }
+            }
+        },
+        "request.GoogleDriveIngest": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string",
+                    "example": "ya29.a0AfH6SMD..."
+                },
+                "credential_path": {
+                    "type": "string",
+                    "example": "/Users/name/.config/context-os/google-authorized-user.json"
+                },
+                "cursor": {
+                    "type": "string",
+                    "example": "2026-05-29T10:00:00Z"
+                },
+                "folder_id": {
+                    "type": "string",
+                    "example": "1234567890"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "service_account_path": {
+                    "type": "string",
+                    "example": "/Users/name/.config/context-os/google-service-account.json"
+                },
+                "uri": {
+                    "type": "string",
+                    "example": "https://drive.google.com/drive/folders/1234567890"
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "example": "/home/user/myproject"
                 }
             }
         },
@@ -985,7 +2646,136 @@
                 },
                 "uri": {
                     "type": "string",
-                    "example": "https://mysite.atlassian.net/browse/PROJ-123"
+                    "example": "https://site.atlassian.net/browse/PROJ-123"
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                }
+            }
+        },
+        "request.NotionIngest": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "example": "Optional raw content instead of fetching from Notion"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "secret_xxxx"
+                },
+                "uri": {
+                    "type": "string",
+                    "example": "notion://page/PAGE_ID"
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                }
+            }
+        },
+        "request.PresentationFindings": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "type": "string",
+                    "example": "filesystem"
+                },
+                "content": {
+                    "type": "string",
+                    "example": "frontend expects refundStatus but backend exposes missingRefundState"
+                },
+                "cursor": {
+                    "type": "string",
+                    "example": "eyJsYXN0X2lkIjoiMTIzIn0="
+                },
+                "force_refresh": {
+                    "description": "ForceRefresh bypasses the findings cache and always re-ingests from source.",
+                    "type": "boolean"
+                },
+                "include_execution": {
+                    "type": "boolean"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "role": {
+                    "type": "string",
+                    "example": "pmo"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "ghp_xxxx"
+                },
+                "uri": {
+                    "type": "string",
+                    "example": "storage/raw/context.txt"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the optional workspace path used to scope and persist results.\nWhen set the pipeline output is written to Postgres and cache-hit logic applies.",
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                }
+            }
+        },
+        "request.SharePointIngest": {
+            "type": "object",
+            "properties": {
+                "client_id": {
+                    "type": "string",
+                    "example": "11111111-1111-1111-1111-111111111111"
+                },
+                "client_secret": {
+                    "type": "string",
+                    "example": "secret~value"
+                },
+                "content": {
+                    "type": "string",
+                    "example": "Optional raw content instead of fetching from Graph"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "tenant_id": {
+                    "type": "string",
+                    "example": "00000000-0000-0000-0000-000000000000"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "eyJ0..."
+                },
+                "uri": {
+                    "type": "string",
+                    "example": "sharepoint://sites/mysite/items/abcdef01"
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "example": "/home/user/myproject"
                 }
             }
         },
@@ -1002,7 +2792,240 @@
                 },
                 "uri": {
                     "type": "string",
-                    "example": "slack://C1234567890"
+                    "example": "slack://CHANNEL_ID"
+                },
+                "workspace_id": {
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                }
+            }
+        },
+        "response.AnswerSection": {
+            "type": "object",
+            "properties": {
+                "coding_notes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "connector": {
+                    "type": "string"
+                },
+                "facts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "open_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_label": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "timestamps": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "response.Artifact": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "connector": {
+                    "type": "string"
+                },
+                "content_hash": {
+                    "type": "string"
+                },
+                "event_type": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ingested_at": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "preview": {
+                    "type": "string"
+                },
+                "schema_version": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.ArtifactList": {
+            "type": "object",
+            "properties": {
+                "artifacts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.Artifact"
+                    }
+                },
+                "connector": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "type": "string"
+                },
+                "workspace_path": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.ChatQuery": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                },
+                "answer_sections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.AnswerSection"
+                    }
+                },
+                "artifact_count": {
+                    "type": "integer"
+                },
+                "artifacts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.Artifact"
+                    }
+                },
+                "connector": {
+                    "type": "string"
+                },
+                "evidence_event_count": {
+                    "description": "EvidenceEventCount is the number of local events produced by the evidence save.",
+                    "type": "integer"
+                },
+                "evidence_graph_entity_count": {
+                    "description": "EvidenceGraphEntityCount is the number of entities derived from newly saved live evidence.",
+                    "type": "integer"
+                },
+                "evidence_graph_relationship_count": {
+                    "description": "EvidenceGraphRelationshipCount is the number of relationships derived from newly saved live evidence.",
+                    "type": "integer"
+                },
+                "evidence_graph_status": {
+                    "description": "EvidenceGraphStatus describes whether saved live evidence updated the graph.",
+                    "type": "string"
+                },
+                "evidence_save_error": {
+                    "description": "EvidenceSaveError is set when evidence persistence failed without discarding the live answer.",
+                    "type": "string"
+                },
+                "evidence_save_status": {
+                    "description": "EvidenceSaveStatus describes whether a live Codex answer also persisted local evidence.",
+                    "type": "string"
+                },
+                "intent": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "range_end": {
+                    "type": "string"
+                },
+                "range_start": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "syncs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/repository.ConnectorSync"
+                    }
+                },
+                "workspace_id": {
+                    "type": "string"
+                },
+                "workspace_path": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.ExecutionEvidence": {
+            "type": "object",
+            "properties": {
+                "assistive": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "summary": {
+                    "type": "string"
                 }
             }
         },
@@ -1018,6 +3041,9 @@
                 "connector": {
                     "type": "string",
                     "example": "github"
+                },
+                "entity_count": {
+                    "type": "integer"
                 },
                 "event": {
                     "$ref": "#/definitions/events.Event"
@@ -1047,6 +3073,15 @@
                         }
                     }
                 },
+                "mismatch_count": {
+                    "type": "integer"
+                },
+                "persisted_event_count": {
+                    "type": "integer"
+                },
+                "persistence_mode": {
+                    "type": "string"
+                },
                 "preview": {
                     "type": "string",
                     "example": "Issue #1: Fix connector README — requesting updated setup steps."
@@ -1056,6 +3091,333 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "relationship_count": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.PMOSummary": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "evidence": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "facts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "impacts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "recommended_decisions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "risks": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "response.PresentationFindings": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "type": "string"
+                },
+                "entity_count": {
+                    "type": "integer"
+                },
+                "event_count": {
+                    "type": "integer"
+                },
+                "execution": {
+                    "$ref": "#/definitions/response.ExecutionEvidence"
+                },
+                "mismatch_count": {
+                    "type": "integer"
+                },
+                "mismatch_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mismatches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Mismatch"
+                    }
+                },
+                "pmo": {
+                    "$ref": "#/definitions/response.PMOSummary"
+                },
+                "relationship_count": {
+                    "type": "integer"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "severity_count": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "trace_id": {
+                    "type": "string"
+                },
+                "uri": {
+                    "type": "string"
+                },
+                "views": {
+                    "$ref": "#/definitions/response.RoleViews"
+                }
+            }
+        },
+        "response.RoleSummaryView": {
+            "type": "object",
+            "properties": {
+                "finding_count": {
+                    "type": "integer"
+                },
+                "mismatch_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "next_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "role": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.RoleViews": {
+            "type": "object",
+            "properties": {
+                "architecture": {
+                    "$ref": "#/definitions/response.RoleSummaryView"
+                },
+                "pmo": {
+                    "$ref": "#/definitions/response.RoleSummaryView"
+                },
+                "presentation_layer": {
+                    "$ref": "#/definitions/response.RoleSummaryView"
+                },
+                "qa": {
+                    "$ref": "#/definitions/response.RoleSummaryView"
+                },
+                "service_layer": {
+                    "$ref": "#/definitions/response.RoleSummaryView"
+                }
+            }
+        },
+        "response.Workspace": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.WorkspaceStatus": {
+            "type": "object",
+            "properties": {
+                "audit_count": {
+                    "type": "integer"
+                },
+                "connector_sync_count": {
+                    "type": "integer"
+                },
+                "entity_count": {
+                    "type": "integer"
+                },
+                "event_count": {
+                    "type": "integer"
+                },
+                "mismatch_count": {
+                    "type": "integer"
+                },
+                "relationship_count": {
+                    "type": "integer"
+                },
+                "syncs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.WorkspaceSync"
+                    }
+                },
+                "workspace": {
+                    "$ref": "#/definitions/response.Workspace"
+                },
+                "workspace_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "response.WorkspaceSync": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "type": "string"
+                },
+                "cursor": {
+                    "type": "string"
+                },
+                "event_count": {
+                    "type": "integer"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.Mismatch": {
+            "type": "object",
+            "properties": {
+                "affected_roles": {
+                    "description": "delivery roles that need to act on this finding",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "confidence": {
+                    "description": "0.0-1.0 score for how certain the reasoning stage is",
+                    "type": "number"
+                },
+                "entity_ids": {
+                    "description": "IDs of the entities involved in the mismatch",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "evidence": {
+                    "description": "source artifact references supporting this finding",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "description": "unique identifier for this mismatch finding",
+                    "type": "string"
+                },
+                "impact": {
+                    "description": "expected business or delivery impact level",
+                    "type": "string"
+                },
+                "recommended": {
+                    "description": "suggested action for the team to resolve this",
+                    "type": "string"
+                },
+                "severity": {
+                    "description": "impact level: low, medium, or high",
+                    "type": "string"
+                },
+                "summary": {
+                    "description": "human-readable description of what was found",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "stable category for the detection rule that produced this finding",
+                    "type": "string"
+                }
+            }
+        },
+        "workspace.sourceRequest": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "description": "Connector is the connector name, e.g. github or jira.",
+                    "type": "string"
+                },
+                "source_uri": {
+                    "description": "SourceURI is the external source URI to save.",
+                    "type": "string"
+                },
+                "uri": {
+                    "description": "URI is accepted for frontend compatibility with existing source forms.",
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is a workspace path or ID.",
+                    "type": "string"
+                }
+            }
+        },
+        "workspace.upsertRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "Name is the optional human-readable workspace name.",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Path is the absolute local folder path for the workspace.",
+                    "type": "string"
                 }
             }
         }
