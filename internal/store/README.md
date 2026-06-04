@@ -7,7 +7,7 @@ PostgreSQL-backed implementations of the `domain/repository` interfaces.
 | Type | Interface | Table(s) |
 |------|-----------|---------|
 | `WorkspaceStore` | `WorkspaceRepository` | `workspaces` |
-| `EventStore` | `EventRepository` | `ingest_events` |
+| `EventStore` | `EventRepository`, `EventDeleter` | `ingest_events` |
 | `EntityStore` | `EntityRepository` | `entities`, `relationships` |
 | `MismatchStore` | `MismatchRepository` | `mismatches` |
 | `SyncStore` | `SyncRepository` | `connector_syncs` |
@@ -18,6 +18,10 @@ All upsert operations use `ON CONFLICT … DO NOTHING` or `DO UPDATE` so that
 replaying the same pipeline run is safe. Event dedup uses `(id, workspace_id)`,
 and duplicate events update the stored connector/source/content fields.
 Entity and relationship confidence is merged upward (`GREATEST`).
+
+`EventStore.DeleteByIDs` is reserved for explicit workspace-scoped cleanup flows
+such as removing old noisy live-chat evidence rows. It does not run during normal
+artifact queries or pipeline ingestion.
 
 ## Graph Reads
 

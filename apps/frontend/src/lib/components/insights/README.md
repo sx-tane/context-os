@@ -9,7 +9,7 @@ Homepage right-pane components for workspace context and insight tabs.
 | `WorkspaceSummary.svelte` | Renders Codex account, active workspace, ready source summary, and the embedded source setup flow. |
 | `FindingsView.svelte`    | Renders the Findings tab rows, zero-finding state, and source/entity counts from analysis output.  |
 | `GraphView.svelte`       | Renders the focused selected-entity graph, entity index, relationship details, and type legend.    |
-| `ActivityView.svelte`    | Renders source-grouped activity artifacts with a persisted local time filter, hidden scrollbar, and click-to-inspect provenance details. |
+| `ActivityView.svelte`    | Renders source-grouped activity artifacts with a persisted local time filter, hidden scrollbar, click-to-inspect provenance details, and explicit noisy live-evidence cleanup. |
 
 ## Data Flow
 
@@ -19,4 +19,4 @@ Homepage right-pane components for workspace context and insight tabs.
 
 Keep graph behavior focused on the selected entity and its direct links. Do not draw every relationship at once in this surface.
 
-Activity keeps every fetched artifact inspectable rather than hard-limiting the rendered list. Use the local time-window filter to keep high-volume workspaces readable, and preserve source grouping so users can trace activity back to the exact connector/source record.
+Activity keeps every fetched artifact inspectable rather than hard-limiting the rendered list. Use the local time-window filter to keep high-volume workspaces readable, and preserve source grouping so users can trace activity back to the exact connector/source record. The **Clean noisy live evidence** action is confirmation-gated and calls the backend cleanup endpoint; it must not run automatically during render or refresh.

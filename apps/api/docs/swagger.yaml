@@ -1,5 +1,20 @@
 basePath: /
 definitions:
+  artifacts.CleanupResult:
+    properties:
+      deleted_count:
+        type: integer
+      deleted_ids:
+        items:
+          type: string
+        type: array
+      matched_count:
+        type: integer
+      workspace_id:
+        type: string
+      workspace_path:
+        type: string
+    type: object
   codex.sourceCandidate:
     properties:
       connector:
@@ -379,6 +394,41 @@ definitions:
         example: /home/user/myproject
         type: string
     type: object
+  response.AnswerSection:
+    properties:
+      coding_notes:
+        items:
+          type: string
+        type: array
+      confidence:
+        type: number
+      connector:
+        type: string
+      facts:
+        items:
+          type: string
+        type: array
+      links:
+        items:
+          type: string
+        type: array
+      open_items:
+        items:
+          type: string
+        type: array
+      source_label:
+        type: string
+      source_uri:
+        type: string
+      status:
+        type: string
+      summary:
+        type: string
+      timestamps:
+        items:
+          type: string
+        type: array
+    type: object
   response.Artifact:
     properties:
       body:
@@ -431,6 +481,10 @@ definitions:
     properties:
       answer:
         type: string
+      answer_sections:
+        items:
+          $ref: '#/definitions/response.AnswerSection'
+        type: array
       artifact_count:
         type: integer
       artifacts:
@@ -834,6 +888,50 @@ paths:
               type: string
             type: object
       summary: Query local artifacts
+      tags:
+      - artifacts
+  /artifacts/live-evidence/cleanup:
+    post:
+      description: Removes old noisy live_chat_answer artifacts for a workspace. This
+        endpoint is explicit and never runs automatically.
+      parameters:
+      - description: Workspace path or ID
+        in: query
+        name: workspace_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/artifacts.CleanupResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Clean noisy live evidence
       tags:
       - artifacts
   /chat/query:
@@ -1943,8 +2041,8 @@ paths:
       - slack
   /workspace:
     delete:
-      description: Deletes a workspace row and all cascade-linked local memory without
-        recreating the workspace.
+      description: Deletes a workspace row, cascade-linked DB memory, and workspace-scoped
+        local JSON artifacts without recreating the workspace.
       parameters:
       - description: Absolute workspace path
         in: query
@@ -2010,8 +2108,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Deletes DB-backed local memory for a workspace and recreates an
-        empty workspace row.
+      description: Deletes DB-backed local memory and workspace-scoped local JSON
+        artifacts, then recreates an empty workspace row.
       parameters:
       - description: Workspace reset request
         in: body

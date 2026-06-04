@@ -49,6 +49,39 @@ export interface paths {
       };
     };
   };
+  "/artifacts/live-evidence/cleanup": {
+    /** Removes old noisy live_chat_answer artifacts for a workspace. This endpoint is explicit and never runs automatically. */
+    post: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["artifacts.CleanupResult"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/chat/query": {
     /** Answers source, status, and findings-intent questions from local artifacts, with optional Codex live lookup for configured source-specific questions. */
     post: {
@@ -849,7 +882,7 @@ export interface paths {
         };
       };
     };
-    /** Deletes a workspace row and all cascade-linked local memory without recreating the workspace. */
+    /** Deletes a workspace row, cascade-linked DB memory, and workspace-scoped local JSON artifacts without recreating the workspace. */
     delete: {
       parameters: {
         query: {
@@ -882,7 +915,7 @@ export interface paths {
     };
   };
   "/workspace/reset": {
-    /** Deletes DB-backed local memory for a workspace and recreates an empty workspace row. */
+    /** Deletes DB-backed local memory and workspace-scoped local JSON artifacts, then recreates an empty workspace row. */
     post: {
       parameters: {
         body: {
@@ -1008,6 +1041,13 @@ export interface paths {
 }
 
 export interface definitions {
+  "artifacts.CleanupResult": {
+    deleted_count?: number;
+    deleted_ids?: string[];
+    matched_count?: number;
+    workspace_id?: string;
+    workspace_path?: string;
+  };
   "codex.sourceCandidate": {
     connector?: string;
     id?: string;
@@ -1255,6 +1295,19 @@ export interface definitions {
     /** @example /home/user/myproject */
     workspace_id?: string;
   };
+  "response.AnswerSection": {
+    coding_notes?: string[];
+    confidence?: number;
+    connector?: string;
+    facts?: string[];
+    links?: string[];
+    open_items?: string[];
+    source_label?: string;
+    source_uri?: string;
+    status?: string;
+    summary?: string;
+    timestamps?: string[];
+  };
   "response.Artifact": {
     body?: string;
     connector?: string;
@@ -1280,6 +1333,7 @@ export interface definitions {
   };
   "response.ChatQuery": {
     answer?: string;
+    answer_sections?: definitions["response.AnswerSection"][];
     artifact_count?: number;
     artifacts?: definitions["response.Artifact"][];
     connector?: string;

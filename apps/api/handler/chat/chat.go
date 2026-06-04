@@ -62,9 +62,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), chatRequestTimeout)
-	defer cancel()
-
+	ctx := r.Context()
 	result, err := h.service.Query(ctx, internalchat.Query{
 		WorkspaceID:   req.WorkspaceID,
 		WorkspacePath: req.WorkspacePath,
@@ -161,7 +159,7 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 			sw.Result(chatResult)
 			return
 		case <-ctx.Done():
-			sw.Error("query_timeout", ctx.Err().Error())
+			sw.Error("query_canceled", ctx.Err().Error())
 			return
 		case <-ticker.C:
 			elapsed := int(time.Since(started).Seconds())

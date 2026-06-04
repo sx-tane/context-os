@@ -53,6 +53,12 @@ function trimText(text: string | undefined, maxLength: number): string {
   return `${text.slice(0, maxLength)}\n\n[trimmed ${text.length - maxLength} characters from cached local state]`;
 }
 
+function trimTextList(values: string[] | undefined): string[] | undefined {
+  return Array.isArray(values)
+    ? values.slice(0, 12).map((value) => trimText(value, MAX_STREAM_TEXT_LENGTH))
+    : undefined;
+}
+
 function normalizeProject(raw: ProjectState, fallbackPath: string): ProjectState {
   const workspacePath = cleanWorkspacePath(raw.workspacePath || fallbackPath);
   return {
@@ -154,6 +160,19 @@ function normalizeMessages(raw: unknown): ChatMessage[] {
               ...item.card.chatResult,
               answer: trimText(item.card.chatResult.answer, MAX_MESSAGE_TEXT_LENGTH),
               summary: trimText(item.card.chatResult.summary, MAX_STREAM_TEXT_LENGTH),
+              answer_sections: Array.isArray(item.card.chatResult.answer_sections)
+                ? item.card.chatResult.answer_sections.slice(0, 12).map((section) => ({
+                    ...section,
+                    source_label: trimText(section.source_label, MAX_STREAM_TEXT_LENGTH),
+                    source_uri: trimText(section.source_uri ?? "", MAX_STREAM_TEXT_LENGTH),
+                    summary: trimText(section.summary ?? "", MAX_STREAM_TEXT_LENGTH),
+                    facts: trimTextList(section.facts),
+                    open_items: trimTextList(section.open_items),
+                    coding_notes: trimTextList(section.coding_notes),
+                    links: trimTextList(section.links),
+                    timestamps: trimTextList(section.timestamps),
+                  }))
+                : undefined,
               artifacts: Array.isArray(item.card.chatResult.artifacts)
                 ? item.card.chatResult.artifacts
                     .slice(0, MAX_CARD_ARTIFACTS)

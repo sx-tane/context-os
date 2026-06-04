@@ -27,13 +27,13 @@ Projects are keyed by **workspace folder path** (stored in `localStorage` and mi
 
 | Command | Behavior |
 |---|---|
-| source question | Calls `/chat/query/stream`; plugin-backed concrete sources use live Codex first, auto-save evidence to Local DB, refresh Activity, then fall back to `/chat/query` if streaming is unavailable |
+| source question | Calls `/chat/query/stream`; plugin-backed concrete sources use live Codex first, render structured source cards when returned, auto-save one evidence artifact per real source section to Local DB, refresh Activity, then fall back to `/chat/query` if streaming is unavailable |
 | `show findings` | Runs analysis and shows mismatches for the latest ready connector |
 | `status` | Routed through local chat status handling |
 | `install knowledge` / `add source` | Opens the inline source setup panel |
 | `clear` | Clear chat history for current project |
 
-Natural language source questions do not fall back to findings. If live Codex lookup fails, the answer says so before using local artifacts. If no matching local artifact exists, the answer says no local data was found. Broad connector lookups such as `jira` or `github` remain read-only; concrete sources such as `BKGDEV-8466`, Jira browse URLs, GitHub repositories, Slack channels, and docs show a compact `Local DB:` save status. Activity refreshes after a saved live answer, while Graph and Findings update only after the user runs analysis.
+Natural language source questions do not fall back to findings. If live Codex lookup fails, the answer says so before using local artifacts. If no matching local artifact exists, the answer says no local data was found. Broad connector lookups such as `jira` or `github` remain read-only; concrete sources such as `BKGDEV-8466`, Jira browse URLs, GitHub repositories, Slack channels, and docs show a compact `Local DB:` save status. Live chat does not impose a fixed API timeout; the request runs until Codex returns or the browser cancels it. Activity refreshes after a saved live answer and includes an explicit **Clean noisy live evidence** action for old regex-generated rows, while Graph and Findings update only after the user runs analysis.
 
 ## Initial Knowledge Installment
 

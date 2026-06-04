@@ -116,6 +116,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/artifacts/live-evidence/cleanup": {
+            "post": {
+                "description": "Removes old noisy live_chat_answer artifacts for a workspace. This endpoint is explicit and never runs automatically.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "artifacts"
+                ],
+                "summary": "Clean noisy live evidence",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/artifacts.CleanupResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/chat/query": {
             "post": {
                 "description": "Answers source, status, and findings-intent questions from local artifacts, with optional Codex live lookup for configured source-specific questions.",
@@ -1773,7 +1838,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes a workspace row and all cascade-linked local memory without recreating the workspace.",
+                "description": "Deletes a workspace row, cascade-linked DB memory, and workspace-scoped local JSON artifacts without recreating the workspace.",
                 "produces": [
                     "application/json"
                 ],
@@ -1841,7 +1906,7 @@ const docTemplate = `{
         },
         "/workspace/reset": {
             "post": {
-                "description": "Deletes DB-backed local memory for a workspace and recreates an empty workspace row.",
+                "description": "Deletes DB-backed local memory and workspace-scoped local JSON artifacts, then recreates an empty workspace row.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2099,6 +2164,29 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "artifacts.CleanupResult": {
+            "type": "object",
+            "properties": {
+                "deleted_count": {
+                    "type": "integer"
+                },
+                "deleted_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "matched_count": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "type": "string"
+                },
+                "workspace_path": {
+                    "type": "string"
+                }
+            }
+        },
         "codex.sourceCandidate": {
             "type": "object",
             "properties": {
@@ -2607,6 +2695,59 @@ const docTemplate = `{
                 }
             }
         },
+        "response.AnswerSection": {
+            "type": "object",
+            "properties": {
+                "coding_notes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "connector": {
+                    "type": "string"
+                },
+                "facts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "open_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_label": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "timestamps": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "response.Artifact": {
             "type": "object",
             "properties": {
@@ -2685,6 +2826,12 @@ const docTemplate = `{
             "properties": {
                 "answer": {
                     "type": "string"
+                },
+                "answer_sections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.AnswerSection"
+                    }
                 },
                 "artifact_count": {
                     "type": "integer"

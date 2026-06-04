@@ -23,10 +23,6 @@ var (
 	githubSourcePattern              = regexp.MustCompile(`^[a-z0-9_.-]+/[a-z0-9_.-]+$`)
 )
 
-type eventDeleter interface {
-	DeleteByIDs(ctx context.Context, workspaceID string, ids []string) (int, error)
-}
-
 // CleanupResult is the JSON payload returned by POST /artifacts/live-evidence/cleanup.
 type CleanupResult struct {
 	WorkspaceID   string   `json:"workspace_id"`
@@ -145,7 +141,7 @@ func (h *Handler) CleanupLiveEvidence(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "artifact store is unavailable")
 		return
 	}
-	deleter, ok := h.events.(eventDeleter)
+	deleter, ok := h.events.(repository.EventDeleter)
 	if !ok {
 		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "artifact cleanup is unavailable")
 		return

@@ -125,33 +125,40 @@
     });
 
     async function refreshSystemStatus() {
+        const preserveDuringWork = busy;
         const apiProbe = probeService(API_URL).then((status) => {
-            apiStatus = status;
+            apiStatus =
+                preserveDuringWork && status === "unreachable"
+                    ? "checking"
+                    : status;
             return status;
         });
         const workerProbe = probeService("/worker").then((status) => {
-            workerStatus = status;
+            workerStatus =
+                preserveDuringWork && status === "unreachable"
+                    ? "checking"
+                    : status;
             return status;
         });
 
         const currentAPIStatus = await apiProbe;
         if (currentAPIStatus === "ok") {
-            await checkCodexStatus();
-        } else {
+            await checkCodexStatus(preserveDuringWork);
+        } else if (!preserveDuringWork) {
             setCodexUnavailable();
         }
         await workerProbe.catch(() => {
-            workerStatus = "unreachable";
+            workerStatus = preserveDuringWork ? "checking" : "unreachable";
         });
     }
 
-    async function checkCodexStatus() {
+    async function checkCodexStatus(preserveOnFailure = false) {
         try {
             const res = await apiFetch(`${API_URL}/codex/status`, {
-                signal: AbortSignal.timeout(5000),
+                signal: AbortSignal.timeout(15000),
             });
             if (!res.ok) {
-                setCodexUnavailable();
+                if (!preserveOnFailure) setCodexUnavailable();
                 return;
             }
             const body = await res.json();
@@ -160,7 +167,7 @@
             codexAccount = body?.account ?? "";
             codexPlugins = body?.plugins ?? [];
         } catch {
-            setCodexUnavailable();
+            if (!preserveOnFailure) setCodexUnavailable();
         }
     }
 
@@ -549,13 +556,17 @@
                 class:status-ok={apiStatus === "ok" &&
                     codexInstalled &&
                     codexLoggedIn}
-                class:status-checking={apiStatus === "checking"}
-                class:status-offline={apiStatus !== "ok" ||
+                class:status-checking={apiStatus === "checking" || busy}
+                class:status-offline={!busy &&
+                    apiStatus !== "checking" &&
+                    (apiStatus !== "ok" ||
                     !codexInstalled ||
-                    !codexLoggedIn}
+                    !codexLoggedIn)}
                 title="Codex status"
             >
-                Codex {apiStatus !== "ok"
+                Codex {apiStatus === "checking" || busy
+                    ? "Checking"
+                    : apiStatus !== "ok"
                     ? "Unavailable"
                     : !codexInstalled
                       ? "Missing"

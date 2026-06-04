@@ -117,6 +117,12 @@ type EventRepository interface {
 	Count(ctx context.Context, workspaceID, connector string) (int, error)
 }
 
+// EventDeleter removes selected workspace-scoped source events.
+type EventDeleter interface {
+	// DeleteByIDs removes events by ID for one workspace and returns the deleted row count.
+	DeleteByIDs(ctx context.Context, workspaceID string, ids []string) (int, error)
+}
+
 // EntityRepository manages canonical entities and their relationships.
 type EntityRepository interface {
 	// UpsertEntities persists canonical entities, updating confidence and aliases

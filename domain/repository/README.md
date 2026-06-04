@@ -10,6 +10,7 @@ Implementations live in `internal/store`. Nothing in `domain/` depends on `inter
 |-----------|---------|
 | `WorkspaceRepository` | Register and retrieve workspace records by path. |
 | `EventRepository` | Upsert and query raw ingested source events (idempotent by `id+workspace_id`). Duplicate upserts update the stored row and return the written row count. Query supports connector, source URI, date range, text, and limit filters. |
+| `EventDeleter` | Optional delete capability for explicit workspace-scoped cleanup flows such as noisy live-chat evidence removal. |
 | `EntityRepository` | Upsert and list canonical entities and typed relationship edges. |
 | `MismatchRepository` | Upsert and query reasoning findings with evidence and confidence. |
 | `SyncRepository` | Read and write connector sync cursors and status. |

@@ -51,19 +51,19 @@ type Query struct {
 
 // Result is one deterministic local chat answer.
 type Result struct {
-	Intent        string
-	WorkspaceID   string
-	WorkspacePath string
-	Connector     string
-	SourceURI     string
-	Provider      string
-	Answer        string
-	Summary       string
+	Intent         string
+	WorkspaceID    string
+	WorkspacePath  string
+	Connector      string
+	SourceURI      string
+	Provider       string
+	Answer         string
+	Summary        string
 	AnswerSections []AnswerSection
-	Since         *time.Time
-	Until         *time.Time
-	Artifacts     []repository.IngestEvent
-	Syncs         []repository.ConnectorSync
+	Since          *time.Time
+	Until          *time.Time
+	Artifacts      []repository.IngestEvent
+	Syncs          []repository.ConnectorSync
 }
 
 // AnswerSection is one structured source-backed section in a chat answer.
