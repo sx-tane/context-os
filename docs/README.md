@@ -45,7 +45,7 @@ flowchart TD
   SOURCES --> API[apps/api and internal/source READMEs]
 ```
 
-## Freshness Rules
+## Maintenance
 
 - Update [Architecture](ARCHITECTURE.md) when a runtime layer, data flow, route family, persistence boundary, Codex role, or pipeline relationship changes.
 - Update [MCP Connectors](mcp-connectors.md) when the active connector portfolio, Codex plugin defaults, source setup behavior, or connector route families change.

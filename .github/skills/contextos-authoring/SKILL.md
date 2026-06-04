@@ -35,7 +35,7 @@ Deliver a correctly-placed, fully-wired customization primitive that is immediat
 
 Every customization change must keep the matching README current:
 
-- Update `.github/README.md` when an agent, instruction, skill, wiring map, folder structure, or routing rule changes.
+- Update the relevant `.github/agents/README.md`, `.github/instructions/README.md`, or nearest folder README when an agent, instruction, skill, wiring map, folder structure, or routing rule changes. Do not add a top-level `.github/README.md` only to satisfy benchmarks; the scripts treat it as optional when absent.
 - Update the nearest product or package README when the customization changes how files in that folder should be edited.
 - Keep skeleton, checklist, example, and script links valid after every rename or move.
 - Add `scripts/` only when the skill has a real executable helper; do not create empty script placeholders.
@@ -88,7 +88,7 @@ Every customization change must keep the matching README current:
      `.github/agents/contextos-architect.agent.md`.
 
 7. **Update README maps**:
-   - Update `.github/README.md` with the new skill, instruction, or agent routing.
+   - Update the relevant `.github/agents/README.md`, `.github/instructions/README.md`, or nearest folder README with the new skill, instruction, or agent routing.
    - Update the nearest target-folder README if the skill changes how work in that folder is done.
 
 8. **Validate** with the [authoring checklist](./references/authoring-checklist.md).
@@ -128,7 +128,7 @@ Every customization change must keep the matching README current:
 
 4. **Keep it short** — instructions load automatically on every file match. Aim for < 50 lines. Deep detail belongs in the skill, not the instruction.
 
-5. **Update README maps** — update `.github/README.md` and the nearest affected folder README when the instruction changes editing behavior.
+5. **Update README maps** — update `.github/instructions/README.md` and the nearest affected folder README when the instruction changes editing behavior.
 
 ---
 
@@ -166,7 +166,7 @@ Every customization change must keep the matching README current:
 
 5. **Include a `## Constraints`** section with explicit guardrails (what must never happen).
 
-6. **Update README maps** — update `.github/README.md` with the new or changed agent wiring.
+6. **Update README maps** — update `.github/agents/README.md` with the new or changed agent wiring.
 
 7. **Validate** with the [authoring checklist](./references/authoring-checklist.md).
 
@@ -209,7 +209,7 @@ The structural benchmark scores each skill out of 100 using structural, routing,
 - Frontmatter: folder/name match, `Use when` discovery text, argument hint, and `user-invocable`.
 - Body: `Outcome`, `Procedure`, decision context, and `References` sections.
 - Support files: non-empty `assets/` and `references/`; `scripts/` only when useful and referenced.
-- Routing/docs: listed in `.github/README.md`, wired to at least one agent, and includes README alignment.
+- Routing/docs: listed in the relevant `.github` README when one owns that routing map, wired to at least one agent, and includes README alignment.
 - Overlap: flags exact duplicate descriptions so redundant skills are visible.
 
 The routing benchmark checks real prompt scenarios against expected skills. The Mermaid policy benchmark verifies explanatory response rules stay wired into repo-wide instructions and docs.

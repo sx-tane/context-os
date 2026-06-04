@@ -11,36 +11,43 @@ authoring_skill="$repo_root/.codex/skills/contextos-authoring/SKILL.md"
 score=0
 findings=()
 
+add_finding() {
+  local file="$1"
+  local check="$2"
+  findings+=("$file: $check")
+}
+
 if grep -qi 'Mermaid diagram' "$copilot_instructions"; then
   score=$((score + 40))
 else
-    findings+=("missing-agents-mermaid-rule")
+  add_finding "$copilot_instructions" "missing Mermaid diagram rule"
 fi
 
 for term in architecture workflows pipeline "skill routing"; do
   if grep -qi "$term" "$copilot_instructions"; then
     score=$((score + 5))
   else
-    findings+=("missing-scope-$term")
+    add_finding "$copilot_instructions" "missing scope term: $term"
   fi
 done
 
 if grep -q '^## Mermaid Explanation Policy' "$github_readme"; then
   score=$((score + 20))
 else
-  findings+=("missing-readme-mermaid-policy")
+  add_finding "$github_readme" "missing ## Mermaid Explanation Policy"
 fi
 
 if grep -q 'Mermaid' "$authoring_skill"; then
   score=$((score + 20))
 else
-  findings+=("missing-authoring-mermaid-reference")
+  add_finding "$authoring_skill" "missing Mermaid reference"
 fi
 
 printf "Mermaid policy score: %s/100\n" "$score"
 
 if [[ ${#findings[@]} -gt 0 ]]; then
-  printf "Findings: %s\n" "${findings[*]}"
+  printf "Findings:\n"
+  printf " - %s\n" "${findings[@]}"
   exit 1
 fi
 

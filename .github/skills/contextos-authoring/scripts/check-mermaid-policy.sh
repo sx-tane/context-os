@@ -10,37 +10,55 @@ authoring_skill="$repo_root/.github/skills/contextos-authoring/SKILL.md"
 
 score=0
 findings=()
+notes=()
+
+add_finding() {
+  local file="$1"
+  local check="$2"
+  findings+=("$file: $check")
+}
 
 if grep -qi 'Mermaid diagram' "$copilot_instructions"; then
   score=$((score + 40))
 else
-  findings+=("missing-copilot-mermaid-rule")
+  add_finding "$copilot_instructions" "missing Mermaid diagram rule"
 fi
 
 for term in architecture workflows pipeline "skill routing"; do
   if grep -qi "$term" "$copilot_instructions"; then
     score=$((score + 5))
   else
-    findings+=("missing-scope-$term")
+    add_finding "$copilot_instructions" "missing scope term: $term"
   fi
 done
 
-if grep -q '^## Mermaid Explanation Policy' "$github_readme"; then
-  score=$((score + 20))
+if [[ -f "$github_readme" ]]; then
+  if grep -q '^## Mermaid Explanation Policy' "$github_readme"; then
+    score=$((score + 20))
+  else
+    add_finding "$github_readme" "missing ## Mermaid Explanation Policy"
+  fi
 else
-  findings+=("missing-readme-mermaid-policy")
+  score=$((score + 20))
+  notes+=("$github_readme: optional README not present; top-level GitHub README policy check skipped")
 fi
 
 if grep -q 'Mermaid' "$authoring_skill"; then
   score=$((score + 20))
 else
-  findings+=("missing-authoring-mermaid-reference")
+  add_finding "$authoring_skill" "missing Mermaid reference"
 fi
 
 printf "Mermaid policy score: %s/100\n" "$score"
 
+if [[ ${#notes[@]} -gt 0 ]]; then
+  printf "Notes:\n"
+  printf " - %s\n" "${notes[@]}"
+fi
+
 if [[ ${#findings[@]} -gt 0 ]]; then
-  printf "Findings: %s\n" "${findings[*]}"
+  printf "Findings:\n"
+  printf " - %s\n" "${findings[@]}"
   exit 1
 fi
 

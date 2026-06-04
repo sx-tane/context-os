@@ -36,7 +36,7 @@ When a matching instruction applies but the user intent is ambiguous, restate th
 1. Use `contextos-authoring`.
 2. Keep the `applyTo` glob as narrow as possible.
 3. Put deep procedure detail in a skill, not in the instruction file.
-4. Update this README and `.github/README.md`.
+4. Update this README, the matching `.codex` mirror when applicable, and the nearest README that owns the changed routing map. Do not add a top-level `.github/README.md` only for benchmark coverage.
 5. Run the authoring benchmark scripts.
 
 ## README Alignment

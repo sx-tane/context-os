@@ -18,7 +18,7 @@ For the full authoring workflow, skeletons, wiring rules, and completion checkli
 
 ## Documentation Checklist
 
-1. Update `.github/README.md`, `.codex/README.md`, and `AGENTS.md` when agent, instruction, skill, routing, or folder structure behavior changes.
+1. Update `.codex/README.md`, `AGENTS.md`, and the relevant `.github/agents/README.md` or `.github/instructions/README.md` when agent, instruction, skill, routing, or folder structure behavior changes. Do not add a top-level `.github/README.md` only to satisfy benchmarks.
 2. Update the nearest folder README when the customization changes how files in that folder should be edited.
 3. Keep links to skeletons, checklists, examples, and scripts valid after every rename or move.
 
