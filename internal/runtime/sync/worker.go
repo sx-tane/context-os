@@ -59,7 +59,7 @@ func (w *Worker) runPass(ctx context.Context) {
 			continue
 		}
 		for _, s := range syncs {
-			stale := s.LastSyncedAt == nil || s.LastSyncedAt.Before(staleCutoff)
+			stale := isStaleSync(s, staleCutoff)
 			errored := s.Status == "error"
 			if stale || errored {
 				log.Printf("sync: workspace=%s connector=%s uri=%s needs_sync=true (stale=%v error=%v)",
@@ -73,4 +73,15 @@ func (w *Worker) runPass(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func isStaleSync(sync repository.ConnectorSync, cutoff time.Time) bool {
+	hasLocalSyncState := sync.LastSyncedAt != nil || sync.EventCount > 0 || sync.Cursor != ""
+	if !hasLocalSyncState {
+		return false
+	}
+	if sync.LastSyncedAt == nil {
+		return true
+	}
+	return sync.LastSyncedAt.Before(cutoff)
 }

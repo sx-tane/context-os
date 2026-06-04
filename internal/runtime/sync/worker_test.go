@@ -27,10 +27,10 @@ func (f fakeWorkspaceRepo) List(context.Context) ([]repository.Workspace, error)
 }
 
 type fakeSyncRepo struct {
-	syncs        map[string][]repository.ConnectorSync
-	upserted     []repository.ConnectorSync
-	listErr      error
-	upsertErr    error
+	syncs     map[string][]repository.ConnectorSync
+	upserted  []repository.ConnectorSync
+	listErr   error
+	upsertErr error
 }
 
 func (f *fakeSyncRepo) Upsert(_ context.Context, s repository.ConnectorSync) error {
@@ -126,6 +126,66 @@ func TestRunPassMarksStaleAndErroredSyncsPending(t *testing.T) {
 		if s.Status != "pending" {
 			t.Errorf("status for %s = %q, want %q", s.Connector, s.Status, "pending")
 		}
+	}
+}
+
+// TestRunPassKeepsSavedConnectedSourcesReady verifies saved live source references are not marked pending before first ingest.
+func TestRunPassKeepsSavedConnectedSourcesReady(t *testing.T) {
+	t.Parallel()
+
+	workspaces := fakeWorkspaceRepo{
+		workspaces: []repository.Workspace{{ID: "ws-1"}},
+	}
+	syncs := &fakeSyncRepo{
+		syncs: map[string][]repository.ConnectorSync{
+			"ws-1": {
+				{
+					WorkspaceID: "ws-1",
+					Connector:   "github",
+					SourceURI:   "repo",
+					Status:      "connected",
+				},
+			},
+		},
+	}
+
+	worker := NewWorker(workspaces, syncs, fakeEventRepo{})
+	worker.runPass(context.Background())
+
+	if len(syncs.upserted) != 0 {
+		t.Fatalf("len(upserted) = %d, want %d", len(syncs.upserted), 0)
+	}
+}
+
+// TestRunPassMarksSyncRowsWithLocalStatePending verifies never-finished local sync rows still require attention.
+func TestRunPassMarksSyncRowsWithLocalStatePending(t *testing.T) {
+	t.Parallel()
+
+	workspaces := fakeWorkspaceRepo{
+		workspaces: []repository.Workspace{{ID: "ws-1"}},
+	}
+	syncs := &fakeSyncRepo{
+		syncs: map[string][]repository.ConnectorSync{
+			"ws-1": {
+				{
+					WorkspaceID: "ws-1",
+					Connector:   "slack",
+					SourceURI:   "#team",
+					Status:      "connected",
+					Cursor:      "cursor-1",
+				},
+			},
+		},
+	}
+
+	worker := NewWorker(workspaces, syncs, fakeEventRepo{})
+	worker.runPass(context.Background())
+
+	if len(syncs.upserted) != 1 {
+		t.Fatalf("len(upserted) = %d, want %d", len(syncs.upserted), 1)
+	}
+	if syncs.upserted[0].Status != "pending" {
+		t.Fatalf("Status = %q, want pending", syncs.upserted[0].Status)
 	}
 }
 

@@ -38,16 +38,16 @@ var (
 
 // Query is one local chat request.
 type Query struct {
-	WorkspaceID   string
-	WorkspacePath string
-	Message       string
-	Connector     string
-	SourceURI     string
-	Timezone      string
-	LocalDate     string
+	WorkspaceID      string
+	WorkspacePath    string
+	Message          string
+	Connector        string
+	SourceURI        string
+	Timezone         string
+	LocalDate        string
 	ResponseLanguage string
-	Limit         int
-	Progress      func(string)
+	Limit            int
+	Progress         func(string)
 }
 
 // Result is one deterministic local chat answer.
@@ -84,11 +84,11 @@ type AnswerSection struct {
 
 // LiveQuery is one optional live source question routed through Codex-backed connectors.
 type LiveQuery struct {
-	Connector string
-	SourceURI string
-	Message   string
+	Connector        string
+	SourceURI        string
+	Message          string
 	ResponseLanguage string
-	Progress  func(string)
+	Progress         func(string)
 }
 
 // LiveAnswerer answers a source question from a live connector account.
@@ -161,15 +161,21 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 	case intentArtifacts:
 		return s.answerArtifacts(ctx, workspace.ID, query, result, message)
 	case intentStatus:
-		result.Answer = buildStatusAnswer(syncs)
+		result.Answer = buildStatusAnswer(syncs, query.ResponseLanguage)
 		result.Summary = result.Answer
 		return result, nil
 	case intentFindings:
-		result.Answer = "Findings are a local analysis view. Use the findings action to run or refresh mismatch detection, then inspect the evidence and graph in the truth panel."
+		result.Answer = localized(
+			query.ResponseLanguage,
+			"Findings are a local analysis view. Use the findings action to run or refresh mismatch detection, then inspect the evidence and graph in the truth panel.",
+			"Findings 是本地分析视图。请使用 findings 操作运行或刷新错配检测，然后在 truth panel 中查看证据和图谱。",
+			"Findings はローカル分析ビューです。findings アクションでミスマッチ検出を実行または更新し、truth panel で証拠とグラフを確認してください。",
+			"Findings는 로컬 분석 보기입니다. findings 작업으로 불일치 감지를 실행하거나 새로고침한 뒤 truth panel에서 증거와 그래프를 확인하세요.",
+		)
 		result.Summary = result.Answer
 		return result, nil
 	default:
-		result.Answer = buildUnsupportedAnswer(syncs)
+		result.Answer = buildUnsupportedAnswer(syncs, query.ResponseLanguage)
 		result.Summary = result.Answer
 		return result, nil
 	}
@@ -179,11 +185,11 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 	liveFailure := ""
 	if s.shouldAskLiveFirst(result) {
 		answer, err := s.live.Answer(ctx, LiveQuery{
-			Connector: result.Connector,
-			SourceURI: result.SourceURI,
-			Message:   message,
+			Connector:        result.Connector,
+			SourceURI:        result.SourceURI,
+			Message:          message,
 			ResponseLanguage: query.ResponseLanguage,
-			Progress:  query.Progress,
+			Progress:         query.Progress,
 		})
 		if err == nil && strings.TrimSpace(answer) != "" {
 			emitProgress(query.Progress, "• Live Codex answer received.")
@@ -220,9 +226,15 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 	}
 	emitProgress(query.Progress, fmt.Sprintf("• Local DB returned %d artifact(s).", len(artifacts)))
 	result.Artifacts = artifacts
-	result.Answer, result.Summary = buildArtifactAnswer(result, limit)
+	result.Answer, result.Summary = buildArtifactAnswer(result, limit, query.ResponseLanguage)
 	if liveFailure != "" {
-		result.Answer = fmt.Sprintf("Live Codex lookup failed: %s\n\n%s", liveFailure, result.Answer)
+		result.Answer = fmt.Sprintf(localized(
+			query.ResponseLanguage,
+			"Live Codex lookup failed: %s\n\n%s",
+			"Live Codex 查询失败：%s\n\n%s",
+			"Live Codex の検索に失敗しました: %s\n\n%s",
+			"Live Codex 조회에 실패했습니다: %s\n\n%s",
+		), liveFailure, result.Answer)
 		result.Summary = result.Answer
 		return result, nil
 	}
@@ -231,7 +243,13 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 		if scope == "" {
 			scope = "that GitHub source"
 		}
-		result.Answer = fmt.Sprintf("I do not have local commit artifacts for %s yet. Connect Codex-backed GitHub chat or ingest commit data to answer this directly.\n\n%s", scope, result.Answer)
+		result.Answer = fmt.Sprintf(localized(
+			query.ResponseLanguage,
+			"I do not have local commit artifacts for %s yet. Connect Codex-backed GitHub chat or ingest commit data to answer this directly.\n\n%s",
+			"我还没有 %s 的本地 commit 证据。请连接 Codex 支持的 GitHub chat，或先摄取 commit 数据后再直接回答。\n\n%s",
+			"%s のローカル commit アーティファクトはまだありません。直接答えるには Codex 対応の GitHub chat を接続するか、commit データを取り込んでください。\n\n%s",
+			"아직 %s에 대한 로컬 commit 아티팩트가 없습니다. 직접 답하려면 Codex 기반 GitHub chat을 연결하거나 commit 데이터를 먼저 수집하세요.\n\n%s",
+		), scope, result.Answer)
 		result.Summary = result.Answer
 	}
 	return result, nil
@@ -442,26 +460,50 @@ func utcPtr(t time.Time) *time.Time {
 	return &utc
 }
 
-func buildArtifactAnswer(result Result, limit int) (string, string) {
+func buildArtifactAnswer(result Result, limit int, language string) (string, string) {
 	description := describeScope(result)
 	if len(result.Artifacts) == 0 {
-		answer := "No local " + description + " artifacts were found. Connect or sync that source, then ask again."
+		answer := fmt.Sprintf(localized(
+			language,
+			"No local %s artifacts were found. Connect or sync that source, then ask again.",
+			"没有找到本地 %s 证据。请先连接或同步该来源，然后再试。",
+			"ローカルの %s アーティファクトは見つかりませんでした。先にそのソースを接続または同期してから、もう一度質問してください。",
+			"로컬 %s 아티팩트를 찾지 못했습니다. 먼저 해당 소스를 연결하거나 동기화한 뒤 다시 질문해 주세요.",
+		), description)
 		return answer, answer
 	}
 
 	latest := compactArtifactTitle(result.Artifacts[0])
-	answer := fmt.Sprintf("Found %d local %s artifacts. Latest: %s", len(result.Artifacts), description, latest)
+	answer := fmt.Sprintf(localized(
+		language,
+		"Found %d local %s artifacts. Latest: %s",
+		"找到 %d 条本地 %s 证据。最新：%s",
+		"%d 件のローカル %s アーティファクトが見つかりました。最新: %s",
+		"%d개의 로컬 %s 아티팩트를 찾았습니다. 최신: %s",
+	), len(result.Artifacts), description, latest)
 	if len(result.Artifacts) == limit {
-		answer += fmt.Sprintf(" Showing the latest %d results.", limit)
+		answer += fmt.Sprintf(localized(
+			language,
+			" Showing the latest %d results.",
+			" 显示最新 %d 条结果。",
+			" 最新 %d 件の結果を表示しています。",
+			" 최신 %d개 결과를 표시합니다.",
+		), limit)
 	}
 	if highlights := compactHighlights(result.Artifacts); len(highlights) > 0 {
-		answer += "\n\nKey points:"
+		answer += localized(language, "\n\nKey points:", "\n\n要点：", "\n\n要点:", "\n\n핵심 내용:")
 		for _, highlight := range highlights {
 			answer += "\n- " + highlight
 		}
-		answer += "\n\nOpen evidence for the full source text."
+		answer += localized(
+			language,
+			"\n\nOpen evidence for the full source text.",
+			"\n\n打开 evidence 可查看完整来源文本。",
+			"\n\n完全なソース本文は evidence を開いて確認してください。",
+			"\n\n전체 소스 텍스트는 evidence를 열어 확인하세요.",
+		)
 	}
-	return answer, summarizeArtifacts(result.Artifacts)
+	return answer, summarizeArtifacts(result.Artifacts, language)
 }
 
 func describeScope(result Result) string {
@@ -558,7 +600,7 @@ func hasCommitArtifact(artifacts []repository.IngestEvent) bool {
 	return false
 }
 
-func summarizeArtifacts(artifacts []repository.IngestEvent) string {
+func summarizeArtifacts(artifacts []repository.IngestEvent, language string) string {
 	if len(artifacts) == 0 {
 		return ""
 	}
@@ -574,7 +616,13 @@ func summarizeArtifacts(artifacts []repository.IngestEvent) string {
 		}
 		items = append(items, previewText(title, 90))
 	}
-	return "Latest local artifacts: " + strings.Join(items, " | ")
+	return localized(
+		language,
+		"Latest local artifacts: ",
+		"最新本地证据：",
+		"最新のローカルアーティファクト: ",
+		"최신 로컬 아티팩트: ",
+	) + strings.Join(items, " | ")
 }
 
 func compactArtifactTitle(artifact repository.IngestEvent) string {
@@ -672,9 +720,15 @@ func compactLiveError(err error) string {
 	return previewText(text, 180)
 }
 
-func buildStatusAnswer(syncs []repository.ConnectorSync) string {
+func buildStatusAnswer(syncs []repository.ConnectorSync, language string) string {
 	if len(syncs) == 0 {
-		return "No local sources are configured for this workspace yet. Add a source to build the local truth store."
+		return localized(
+			language,
+			"No local sources are configured for this workspace yet. Add a source to build the local truth store.",
+			"这个 workspace 还没有配置本地来源。请添加来源来建立本地 truth store。",
+			"この workspace にはまだローカルソースが設定されていません。ローカル truth store を作るにはソースを追加してください。",
+			"이 workspace에는 아직 로컬 소스가 설정되어 있지 않습니다. 로컬 truth store를 만들려면 소스를 추가하세요.",
+		)
 	}
 	counts := map[string]int{}
 	for _, sync := range syncs {
@@ -689,14 +743,58 @@ func buildStatusAnswer(syncs []repository.ConnectorSync) string {
 	for _, key := range keys {
 		parts = append(parts, fmt.Sprintf("%s: %d", key, counts[key]))
 	}
-	return "Local source status: " + strings.Join(parts, ", ") + "."
+	return localized(
+		language,
+		"Local source status: ",
+		"本地来源状态：",
+		"ローカルソース状態: ",
+		"로컬 소스 상태: ",
+	) + strings.Join(parts, ", ") + "."
 }
 
-func buildUnsupportedAnswer(syncs []repository.ConnectorSync) string {
+func buildUnsupportedAnswer(syncs []repository.ConnectorSync, language string) string {
 	if len(syncs) == 0 {
-		return "I can answer from local source data after you connect a workspace source. Try adding GitHub, Jira, Slack, Google Drive, Notion, SharePoint, or filesystem data."
+		return localized(
+			language,
+			"I can answer from local source data after you connect a workspace source. Try adding GitHub, Jira, Slack, Google Drive, Notion, SharePoint, or filesystem data.",
+			"连接 workspace 来源后，我可以基于本地来源数据回答。可以先添加 GitHub、Jira、Slack、Google Drive、Notion、SharePoint 或 filesystem 数据。",
+			"workspace のソースを接続すると、ローカルソースデータから回答できます。GitHub、Jira、Slack、Google Drive、Notion、SharePoint、または filesystem データを追加してください。",
+			"workspace 소스를 연결하면 로컬 소스 데이터에서 답변할 수 있습니다. GitHub, Jira, Slack, Google Drive, Notion, SharePoint 또는 filesystem 데이터를 추가해 보세요.",
+		)
 	}
-	return "I can answer local source questions, status questions, and findings requests. Try asking for recent messages, documents, issues, tickets, or source artifacts from a connector."
+	return localized(
+		language,
+		"I can answer local source questions, status questions, and findings requests. Try asking for recent messages, documents, issues, tickets, or source artifacts from a connector.",
+		"我可以回答本地来源问题、状态问题和 findings 请求。你可以询问某个 connector 的近期消息、文档、issue、ticket 或 source artifact。",
+		"ローカルソースの質問、ステータスの質問、findings リクエストに回答できます。connector の最近のメッセージ、ドキュメント、issue、ticket、source artifact について聞いてみてください。",
+		"로컬 소스 질문, 상태 질문, findings 요청에 답할 수 있습니다. connector의 최근 메시지, 문서, issue, ticket 또는 source artifact에 대해 물어보세요.",
+	)
+}
+
+func localized(language, english, simplifiedChinese, japanese, korean string) string {
+	switch responseLanguageCode(language) {
+	case "zh":
+		return simplifiedChinese
+	case "ja":
+		return japanese
+	case "ko":
+		return korean
+	default:
+		return english
+	}
+}
+
+func responseLanguageCode(language string) string {
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "zh", "zh-cn", "cn", "zh-tw", "zh-hant":
+		return "zh"
+	case "ja", "jp":
+		return "ja"
+	case "ko", "kr":
+		return "ko"
+	default:
+		return "en"
+	}
 }
 
 func clampLimit(limit int) int {

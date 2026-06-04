@@ -525,6 +525,7 @@ describe("postWorkspaceSource", () => {
       source_uri: "owner/repo",
       status: "connected",
       event_count: 0,
+      last_error: "stale token",
     };
     fetchMock.mockResolvedValue(makeResponse(body, true, 200));
     const result = await postWorkspaceSource({
@@ -538,6 +539,7 @@ describe("postWorkspaceSource", () => {
       source_uri: "owner/repo",
       status: "connected",
       event_count: 0,
+      last_error: "stale token",
     });
   });
 

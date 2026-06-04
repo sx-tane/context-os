@@ -28,6 +28,10 @@ flowchart TD
 
 If the user request is unclear, the agent should restate the interpreted prompt in one short sentence and ask the smallest clarifying question before editing files or producing a plan. If the intent is clear enough to act safely, the agent proceeds without asking.
 
+## Response Language
+
+Both agents answer in Chinese by default when the user writes Chinese, using Simplified Chinese unless another variant is requested. Code identifiers, commands, logs, and quoted source text stay in their original language.
+
 ## Agent Selection Rule
 
 - Use ContextOS Implementer when the task asks to change files, run tests, add docs, create skills, or fix behavior.

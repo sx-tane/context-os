@@ -89,6 +89,23 @@ func TestQuerySupportsNonSlackConnectors(t *testing.T) {
 	}
 }
 
+// TestQueryLocalAnswersUseResponseLanguage verifies deterministic local answers follow the requested language.
+func TestQueryLocalAnswersUseResponseLanguage(t *testing.T) {
+	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, &fakeSyncRepository{})
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID:      "/workspace",
+		Message:          "status",
+		ResponseLanguage: "zh",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if !strings.Contains(result.Answer, "本地来源状态") {
+		t.Fatalf("Answer = %q, want Chinese local status answer", result.Answer)
+	}
+}
+
 // TestQueryInfersGitHubSourceFromConfiguredRepoName verifies repo slugs in messages constrain GitHub artifact queries to the matching synced source.
 func TestQueryInfersGitHubSourceFromConfiguredRepoName(t *testing.T) {
 	events := &fakeEventRepository{events: []repository.IngestEvent{
@@ -527,6 +544,75 @@ Message link: https://example.invalid/slack`
 	}
 	if !strings.Contains(result.Answer, "Key points:") {
 		t.Fatalf("Answer = %q, want key points", result.Answer)
+	}
+}
+
+// TestQueryUnsupportedUsesChineseResponseLanguage verifies unsupported local answers use Simplified Chinese when requested.
+func TestQueryUnsupportedUsesChineseResponseLanguage(t *testing.T) {
+	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, &fakeSyncRepository{})
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID:      "/workspace",
+		Message:          "hello?",
+		ResponseLanguage: "zh",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if !strings.Contains(result.Answer, "我可以回答本地来源问题") {
+		t.Fatalf("Answer = %q, want Simplified Chinese unsupported wrapper", result.Answer)
+	}
+}
+
+// TestQueryNoArtifactsUsesChineseResponseLanguage verifies empty artifact answers use Simplified Chinese when requested.
+func TestQueryNoArtifactsUsesChineseResponseLanguage(t *testing.T) {
+	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, nil)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID:      "/workspace",
+		Message:          "give me today jira tickets",
+		Timezone:         "UTC",
+		LocalDate:        "2026-06-01",
+		ResponseLanguage: "zh",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if !strings.Contains(result.Answer, "没有找到本地") {
+		t.Fatalf("Answer = %q, want Simplified Chinese no-artifact wrapper", result.Answer)
+	}
+}
+
+// TestQueryLiveFailureFallbackUsesChineseResponseLanguage verifies live failure prefixes use Simplified Chinese without translating artifact content.
+func TestQueryLiveFailureFallbackUsesChineseResponseLanguage(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-github",
+		WorkspaceID: "ws1",
+		Connector:   "github",
+		SourceURI:   "sx-tane/tourii-backend",
+		Title:       "Repository fallback summary",
+		Body:        "Local repository evidence is available.",
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/tourii-backend", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{err: errors.New("plugin unavailable")}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID:      "/workspace",
+		Message:          "summarize tourii-backend",
+		ResponseLanguage: "zh",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if !strings.Contains(result.Answer, "Live Codex 查询失败：plugin unavailable") {
+		t.Fatalf("Answer = %q, want Simplified Chinese live failure prefix", result.Answer)
+	}
+	if !strings.Contains(result.Answer, "Repository fallback summary") {
+		t.Fatalf("Answer = %q, want original artifact title preserved", result.Answer)
 	}
 }
 

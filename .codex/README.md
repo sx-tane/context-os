@@ -15,6 +15,8 @@ This repo keeps the original GitHub Copilot customization under `.github/` and m
 
 Codex reads `AGENTS.md` as the primary repo guide. When a task needs a specialized playbook, load the matching file from `.codex/skills/<skill>/SKILL.md`.
 
+When the user writes Chinese, Codex should answer in Chinese by default, using Simplified Chinese unless another variant is requested. Code identifiers, commands, logs, and quoted source text stay in their original language.
+
 Frontend Svelte UI work is routed through `contextos-frontend-design` so layout, spacing, button, graph, source setup, and chat changes follow the current app pattern.
 
 ```mermaid

@@ -79,9 +79,31 @@ describe("buildFindingsRunSummary", () => {
       failures,
     });
 
-    expect(message).toContain("Analysis complete for 1/2 selected sources");
+    expect(message).toContain("Analysis complete for 1/2 concrete sources");
     expect(message).toContain("Found 1 finding");
     expect(message).toContain("Failed:");
     expect(message).toContain("jira:project - unauthorized");
+  });
+
+  it("reports skipped chat-only scopes separately from failures", () => {
+    const message = buildFindingsRunSummary({
+      sourceCount: 2,
+      analysisSourceCount: 0,
+      completedCount: 0,
+      result: null,
+      failures: [],
+      skipped: [
+        {
+          connector: "github",
+          uri: "github",
+          reason: "chat-only live connector scope",
+        },
+      ],
+    });
+
+    expect(message).toContain("Analysis skipped");
+    expect(message).toContain("Skipped chat-only scopes");
+    expect(message).toContain("github:github - chat-only live connector scope");
+    expect(message).not.toContain("Failed:");
   });
 });

@@ -90,6 +90,10 @@ The Copilot `applyTo` globs were migrated into `.codex/instructions/`. Codex sho
 
 When explaining architecture, workflows, pipeline stages, skill routing, state transitions, or multi-step behavior, include a small Mermaid diagram unless the answer is trivial, pure command output, or a diagram would be misleading.
 
+## Response Language
+
+When the user writes Chinese, answer in Chinese by default. Use Simplified Chinese unless the user explicitly requests another variant. Keep code identifiers, commands, logs, and quoted source text in their original language.
+
 ## Ambiguity
 
 If a request is ambiguous, restate the interpreted prompt in one short sentence and ask the minimum clarifying question before editing files. If the intent is clear enough to act safely, proceed without asking and keep the work scoped to the interpreted request.

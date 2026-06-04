@@ -225,6 +225,7 @@ export interface WorkspaceSyncState {
   last_synced_at?: string;
   event_count?: number;
   status?: string;
+  last_error?: string;
 }
 
 export interface SourceRegistrationRequest {

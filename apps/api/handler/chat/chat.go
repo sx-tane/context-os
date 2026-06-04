@@ -64,15 +64,15 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	result, err := h.service.Query(ctx, internalchat.Query{
-		WorkspaceID:   req.WorkspaceID,
-		WorkspacePath: req.WorkspacePath,
-		Message:       req.Message,
-		Connector:     req.Connector,
-		SourceURI:     req.SourceURI,
-		Timezone:      req.Timezone,
-		LocalDate:     req.LocalDate,
+		WorkspaceID:      req.WorkspaceID,
+		WorkspacePath:    req.WorkspacePath,
+		Message:          req.Message,
+		Connector:        req.Connector,
+		SourceURI:        req.SourceURI,
+		Timezone:         req.Timezone,
+		LocalDate:        req.LocalDate,
 		ResponseLanguage: req.ResponseLanguage,
-		Limit:         req.Limit,
+		Limit:            req.Limit,
 	})
 	if err != nil {
 		writeQueryError(w, err)
@@ -129,16 +129,16 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	go func() {
 		result, err := h.service.Query(ctx, internalchat.Query{
-			WorkspaceID:   req.WorkspaceID,
-			WorkspacePath: req.WorkspacePath,
-			Message:       req.Message,
-			Connector:     req.Connector,
-			SourceURI:     req.SourceURI,
-			Timezone:      req.Timezone,
-			LocalDate:     req.LocalDate,
+			WorkspaceID:      req.WorkspaceID,
+			WorkspacePath:    req.WorkspacePath,
+			Message:          req.Message,
+			Connector:        req.Connector,
+			SourceURI:        req.SourceURI,
+			Timezone:         req.Timezone,
+			LocalDate:        req.LocalDate,
 			ResponseLanguage: req.ResponseLanguage,
-			Limit:         req.Limit,
-			Progress:      sw.Log,
+			Limit:            req.Limit,
+			Progress:         sw.Log,
 		})
 		resultCh <- streamResult{result: result, err: err}
 	}()

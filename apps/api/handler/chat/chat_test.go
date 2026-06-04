@@ -96,6 +96,28 @@ func TestStreamQueryEmitsAnswerBeforeEvidenceResult(t *testing.T) {
 	}
 }
 
+// TestQueryPassesResponseLanguageToLiveAnswerer verifies request decoding forwards the language hint to runtime chat.
+func TestQueryPassesResponseLanguageToLiveAnswerer(t *testing.T) {
+	live := &fakeLiveAnswerer{answer: "Live repo answer."}
+	handler := NewHandler(internalchat.NewServiceWithLiveAnswerer(
+		fakeWorkspaces(),
+		&fakeEventRepository{},
+		&fakeSyncRepository{},
+		live,
+	)).WithEvidenceSaver(&fakeEvidenceSaver{done: make(chan EvidenceSaveInput, 1)})
+
+	req := httptest.NewRequest(http.MethodPost, "/chat/query", strings.NewReader(`{"workspace_id":"/workspace","message":"check sx-tane/context-os","response_language":"zh"}`))
+	res := httptest.NewRecorder()
+	handler.Query(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if live.lastQuery.ResponseLanguage != "zh" {
+		t.Fatalf("ResponseLanguage = %q, want zh", live.lastQuery.ResponseLanguage)
+	}
+}
+
 // TestLiveAnswerEventBuildsPersistableEvidence verifies live answers become one local source evidence event without another connector read.
 func TestLiveAnswerEventBuildsPersistableEvidence(t *testing.T) {
 	event := liveAnswerEvent(EvidenceSaveInput{
@@ -304,12 +326,14 @@ func (f *fakeEvidenceSaver) Save(ctx context.Context, input EvidenceSaveInput, p
 }
 
 type fakeLiveAnswerer struct {
-	answer string
-	calls  int
+	answer    string
+	calls     int
+	lastQuery internalchat.LiveQuery
 }
 
 func (f *fakeLiveAnswerer) Answer(ctx context.Context, query internalchat.LiveQuery) (string, error) {
 	f.calls++
+	f.lastQuery = query
 	return f.answer, nil
 }
 

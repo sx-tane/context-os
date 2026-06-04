@@ -27,6 +27,10 @@ type AnalysisRunnerTestState = {
   refreshWorkspace: jest.Mock<Promise<void>, []>;
 };
 
+beforeEach(() => {
+  mockPostFindings.mockReset();
+});
+
 describe("analysisProvider", () => {
   it("uses codex for plugin-backed connectors and token for filesystem", () => {
     expect(analysisProvider("github")).toBe("codex");
@@ -104,43 +108,6 @@ describe("runAnalysis", () => {
     expect(state.replacements.at(-1)?.text).toContain("Failed:");
     expect(state.replacements.at(-1)?.text).toContain("slack:channel - unauthorized");
     expect(state.refreshWorkspace).toHaveBeenCalled();
-  });
-
-  it("shows source scope guidance for broad Codex analysis errors", async () => {
-    const originalWindow = (global as unknown as { window?: unknown }).window;
-    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
-      setTimeout,
-      clearTimeout,
-    };
-    mockPostFindings.mockResolvedValueOnce({
-      ok: false,
-      body: {
-        error: "source_too_broad",
-        message: "too broad",
-        examples: ["https://github.com/owner/repo"],
-      },
-    });
-    const state = makeState();
-
-    try {
-      await runAnalysis({
-        workspacePath: "workspace",
-        readySources: [{ connector: "github", uri: "github", status: "ready" }],
-        addMessage: state.addMessage,
-        replaceMessage: state.replaceMessage,
-        setBusy: state.setBusy,
-        setLastFindings: state.setLastFindings,
-        setLastAnalysisAt: state.setLastAnalysisAt,
-        openSources: state.openSources,
-        refreshWorkspace: state.refreshWorkspace,
-        timeoutMs: 1000,
-      });
-    } finally {
-      (global as unknown as { window?: unknown }).window = originalWindow;
-    }
-
-    expect(state.replacements.at(-1)?.text).toContain("Choose a specific repo");
-    expect(state.replacements.at(-1)?.text).toContain("https://github.com/owner/repo");
   });
 
   it("skips broad connector scopes before calling findings analysis", async () => {

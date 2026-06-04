@@ -13,6 +13,7 @@ import {
   upsertWorkspace,
   getWorkspaceStatus,
 } from "$lib/api";
+import { applyWorkspaceSyncsToConnectors } from "$lib/workspace/statusMapping";
 
 const STORAGE_KEY_PREFIX = "contextos_project_";
 const CHAT_KEY_PREFIX = "contextos_chat_";
@@ -523,42 +524,10 @@ export async function loadWorkspaceStatus(workspacePath: string): Promise<Worksp
     const status = await getWorkspaceStatus(workspacePath);
     if (!status?.syncs) return status;
     _project.update((p) => {
-      let changed = false;
-      const updated = p.connectors.map((ck) => {
-        const sync = status.syncs?.find(
-          (s) =>
-            s.connector === ck.connector &&
-            (s.source_uri === ck.uri || s.source_uri === "" || !s.source_uri) &&
-            (s.status === "connected" || (s.event_count ?? 0) > 0),
-        );
-        if (sync) {
-          const next = {
-            ...ck,
-            status: "ready" as KnowledgeStatus,
-            eventCount:
-              sync.status === "connected"
-                ? undefined
-                : sync.event_count ?? ck.eventCount,
-            error: undefined,
-          };
-          changed =
-            changed ||
-            next.status !== ck.status ||
-            next.eventCount !== ck.eventCount ||
-            next.error !== ck.error;
-          return next;
-        }
-        if (ck.status === "ready") {
-          changed = true;
-          return {
-            ...ck,
-            status: "configuring" as KnowledgeStatus,
-            eventCount: 0,
-            error: "Not confirmed in the workspace database.",
-          };
-        }
-        return ck;
-      });
+      const { connectors: updated, changed } = applyWorkspaceSyncsToConnectors(
+        p.connectors,
+        status.syncs,
+      );
       if (!changed) return p;
       return { ...p, connectors: updated };
     });

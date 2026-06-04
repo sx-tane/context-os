@@ -518,6 +518,8 @@ function normalizeWorkspaceSync(body: unknown): WorkspaceSyncState | null {
   if (eventCount !== undefined) sync.event_count = eventCount;
   const currentStatus = stringField(record, "status", "Status").trim();
   if (currentStatus) sync.status = currentStatus;
+  const lastError = stringField(record, "last_error", "LastError").trim();
+  if (lastError) sync.last_error = lastError;
   return sync;
 }
 
