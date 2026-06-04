@@ -1,6 +1,6 @@
 # ui
 
-Primitive building-block components shared across the ContextOS frontend. These have no domain knowledge — they only handle visual structure and interaction.
+Primitive building-block components shared across the ContextOS frontend. These have no domain knowledge; they only handle visual structure and interaction.
 
 ## Components
 
@@ -15,6 +15,25 @@ Styled `<button>` element.
 | `variant`  | `"primary" \| "secondary"`        | `"primary"` | Visual style; secondary is used for lower-emphasis actions. |
 
 Forwards all native button events. Use inside connector forms and status panels.
+
+---
+
+### ConfirmModal
+
+Shared confirmation dialog for destructive or irreversible user actions.
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `eyebrow` | `string` | `"CONFIRM"` | Small label above the title. |
+| `title` | `string` | `""` | Dialog heading. |
+| `description` | `string` | `""` | Body text before optional detail. |
+| `detail` | `string` | `""` | Emphasized target name or path. |
+| `confirmLabel` | `string` | `"Confirm"` | Confirm button text. |
+| `busyLabel` | `string` | `"Working"` | Confirm button text while busy. |
+| `cancelLabel` | `string` | `"Cancel"` | Cancel button text. |
+| `busy` | `boolean` | `false` | Disables both buttons and shows `busyLabel`. |
+
+Emits `cancel` and `confirm` events. Use for workspace removal, source reset, and other confirmation-gated commands.
 
 ---
 

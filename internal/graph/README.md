@@ -108,6 +108,10 @@ contextGraph.AddRelationships(relationships)
 - The `/graph` API exposes a filtered signal graph by default without deleting snapshot or database
   rows. Use `include_noise=true` on the handler endpoint to inspect low-signal regex entities and
   co-occurrence-only relationships from older runs.
+- Permanent noisy graph pruning is separate from graph reads. `POST /graph/cleanup` deletes only
+  backend-classified low-signal persisted entity/relationship rows after user confirmation; it does
+  not delete source artifacts, findings, chat history, connected sources, workspace rows, or graph
+  snapshots.
 
 ## Production Requirements
 

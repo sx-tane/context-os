@@ -19,5 +19,7 @@ Frontend API client helpers for the Go API and SSE streams.
 
 - Update `apps/frontend/src/lib/README.md` when exported helper contracts change.
 - Keep generated OpenAPI types in `../generated/`; do not hand-edit generated declarations.
+- `cleanupLiveEvidence` posts to `/artifacts/live-evidence/cleanup` and removes noisy Activity source-event rows only.
+- `cleanupGraphNoise` posts to `/graph/cleanup` and permanently removes backend-classified noisy graph entity/relationship rows; source artifacts, chat history, findings, and connected sources remain intact.
 - Browser request logs show the exact frontend API path, method, body preview, response status, duration, and request ID. Match `id=web-...` with API terminal logs when `CONTEXTOS_API_REQUEST_LOGS=1` is enabled.
 - Run `bun run test` and `bun run check` after API helper changes.

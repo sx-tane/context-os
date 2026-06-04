@@ -12,6 +12,7 @@ Implementations live in `internal/store`. Nothing in `domain/` depends on `inter
 | `EventRepository` | Upsert and query raw ingested source events (idempotent by `id+workspace_id`). Duplicate upserts update the stored row and return the written row count. Query supports connector, source URI, date range, text, and limit filters. |
 | `EventDeleter` | Optional delete capability for explicit workspace-scoped cleanup flows such as noisy live-chat evidence removal. |
 | `EntityRepository` | Upsert and list canonical entities and typed relationship edges. |
+| `GraphNoiseCleaner` | Optional explicit delete capability for backend-classified low-signal graph rows. |
 | `MismatchRepository` | Upsert and query reasoning findings with evidence and confidence. |
 | `SyncRepository` | Read and write connector sync cursors and status. |
 
@@ -27,3 +28,8 @@ Implementations live in `internal/store`. Nothing in `domain/` depends on `inter
 `EntityRepository.ListRelationships` returns persisted relationship edges for a
 workspace and can optionally scope the result to a set of entity IDs. The graph
 API uses this to render source-backed entity links without re-running analysis.
+
+`GraphNoiseCleaner.CleanupGraphNoise` is separate from graph reads. It is only
+for user-confirmed cleanup flows and permanently deletes low-signal graph rows;
+it must not delete source artifacts, reasoning findings, chat history, connector
+syncs, or workspace records.

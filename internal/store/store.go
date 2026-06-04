@@ -293,6 +293,19 @@ type EntityStore struct {
 	db *sql.DB
 }
 
+var noisyGraphEntityNames = []string{
+	"and",
+	"also",
+	"among",
+	"source",
+	"read",
+	"fields",
+	"field",
+	"type",
+	"status",
+	"content",
+}
+
 // NewEntityStore returns an EntityStore backed by the provided connection pool.
 func NewEntityStore(db *sql.DB) *EntityStore {
 	return &EntityStore{db: db}
@@ -458,6 +471,120 @@ func (s *EntityStore) CountRelationships(ctx context.Context, workspaceID string
 		return 0, fmt.Errorf("store: count relationships: %w", err)
 	}
 	return n, nil
+}
+
+// CleanupGraphNoise removes low-signal graph rows for a workspace and returns matched/deleted counts.
+func (s *EntityStore) CleanupGraphNoise(ctx context.Context, workspaceID string) (repository.GraphCleanupResult, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: begin graph cleanup: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var result repository.GraphCleanupResult
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM relationships
+		WHERE workspace_id = $1 AND kind = $2 AND confidence < $3
+	`, workspaceID, string(types.CoOccursInDocument), 0.6).Scan(&result.MatchedRelationshipCount); err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: count noisy relationships: %w", err)
+	}
+
+	deletedRelationships, err := deleteRows(ctx, tx, `
+		DELETE FROM relationships
+		WHERE workspace_id = $1 AND kind = $2 AND confidence < $3
+	`, workspaceID, string(types.CoOccursInDocument), 0.6)
+	if err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: delete noisy relationships: %w", err)
+	}
+	result.DeletedRelationshipCount += deletedRelationships
+
+	if err := tx.QueryRowContext(ctx, noisyEntityCountSQL, workspaceID, 0.6, pq.Array(noisyGraphEntityNames)).Scan(&result.MatchedEntityCount); err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: count noisy entities: %w", err)
+	}
+
+	deletedEntities, err := deleteRows(ctx, tx, noisyEntityDeleteSQL, workspaceID, 0.6, pq.Array(noisyGraphEntityNames))
+	if err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: delete noisy entities: %w", err)
+	}
+	result.DeletedEntityCount = deletedEntities
+
+	var danglingCount int
+	if err := tx.QueryRowContext(ctx, danglingRelationshipCountSQL, workspaceID).Scan(&danglingCount); err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: count dangling relationships: %w", err)
+	}
+	result.MatchedRelationshipCount += danglingCount
+
+	deletedDangling, err := deleteRows(ctx, tx, danglingRelationshipDeleteSQL, workspaceID)
+	if err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: delete dangling relationships: %w", err)
+	}
+	result.DeletedRelationshipCount += deletedDangling
+
+	if err := tx.Commit(); err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("store: commit graph cleanup: %w", err)
+	}
+	return result, nil
+}
+
+const noisyEntityCountSQL = `
+	SELECT COUNT(*) FROM entities
+	WHERE workspace_id = $1
+	  AND extraction_method = 'regex_token'
+	  AND confidence < $2
+	  AND (
+	    LOWER(TRIM(name)) = ANY($3::text[])
+	    OR LENGTH(TRIM(name)) < 3
+	  )
+`
+
+const noisyEntityDeleteSQL = `
+	DELETE FROM entities
+	WHERE workspace_id = $1
+	  AND extraction_method = 'regex_token'
+	  AND confidence < $2
+	  AND (
+	    LOWER(TRIM(name)) = ANY($3::text[])
+	    OR LENGTH(TRIM(name)) < 3
+	  )
+`
+
+const danglingRelationshipCountSQL = `
+	SELECT COUNT(*) FROM relationships r
+	WHERE r.workspace_id = $1
+	  AND (
+	    NOT EXISTS (
+	      SELECT 1 FROM entities e
+	      WHERE e.workspace_id = r.workspace_id AND e.id = r.from_id
+	    )
+	    OR NOT EXISTS (
+	      SELECT 1 FROM entities e
+	      WHERE e.workspace_id = r.workspace_id AND e.id = r.to_id
+	    )
+	  )
+`
+
+const danglingRelationshipDeleteSQL = `
+	DELETE FROM relationships r
+	WHERE r.workspace_id = $1
+	  AND (
+	    NOT EXISTS (
+	      SELECT 1 FROM entities e
+	      WHERE e.workspace_id = r.workspace_id AND e.id = r.from_id
+	    )
+	    OR NOT EXISTS (
+	      SELECT 1 FROM entities e
+	      WHERE e.workspace_id = r.workspace_id AND e.id = r.to_id
+	    )
+	  )
+`
+
+func deleteRows(ctx context.Context, tx *sql.Tx, query string, args ...any) (int, error) {
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	rows, _ := result.RowsAffected()
+	return int(rows), nil
 }
 
 func compactStrings(values []string) []string {

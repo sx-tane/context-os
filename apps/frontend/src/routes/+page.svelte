@@ -13,6 +13,7 @@
     import {
         API_URL,
         apiFetch,
+        cleanupGraphNoise,
         cleanupLiveEvidence,
         deleteWorkspace,
         getArtifacts,
@@ -37,7 +38,7 @@
         workspaces,
     } from "$lib/workspace/projectStore";
     import ChatPanel from "$lib/components/chat/ChatPanel.svelte";
-    import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+    import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
     import ActivityView from "$lib/components/insights/ActivityView.svelte";
     import FindingsView from "$lib/components/insights/FindingsView.svelte";
     import GraphView from "$lib/components/insights/GraphView.svelte";
@@ -81,6 +82,9 @@
     let removeConfirmOpen = false;
     let workspacePendingRemoval = "";
     let removeInProgress = false;
+    let graphCleanupConfirmOpen = false;
+    let graphCleanupRunning = false;
+    let graphCleanupMessage = "";
     let walkthroughOpen = false;
     let paneSplit = 52;
     let mainGrid: HTMLElement | null = null;
@@ -231,12 +235,52 @@
         return `Removed ${result.body.deleted_count} noisy live evidence event${result.body.deleted_count === 1 ? "" : "s"}.`;
     }
 
+    function requestGraphCleanup() {
+        graphCleanupMessage = "";
+        graphCleanupConfirmOpen = true;
+    }
+
+    function cancelGraphCleanup() {
+        if (graphCleanupRunning) return;
+        graphCleanupConfirmOpen = false;
+    }
+
+    async function confirmGraphCleanup() {
+        if (graphCleanupRunning) return;
+        graphCleanupRunning = true;
+        graphCleanupMessage = "";
+        try {
+            if (workspacePath === DEMO_WORKSPACE_PATH) {
+                graphCleanupMessage = "Demo Graph is read-only.";
+                graphCleanupConfirmOpen = false;
+                return;
+            }
+            const result = await cleanupGraphNoise(workspacePath);
+            if (!result.ok) {
+                graphCleanupMessage =
+                    result.body.message ??
+                    result.body.error ??
+                    "Graph cleanup failed.";
+                return;
+            }
+            const entities = result.body.deleted_entity_count;
+            const relationships = result.body.deleted_relationship_count;
+            graphCleanupMessage = `Removed ${entities} noisy graph node${entities === 1 ? "" : "s"} and ${relationships} low-signal link${relationships === 1 ? "" : "s"}.`;
+            graphCleanupConfirmOpen = false;
+            await refreshWorkspace();
+        } finally {
+            graphCleanupRunning = false;
+        }
+    }
+
     async function switchWorkspace(path: string) {
         if (!path) return;
         workspacePath = path;
         openProject(path);
         lastChatResult = null;
         lastFindings = null;
+        graphCleanupConfirmOpen = false;
+        graphCleanupMessage = "";
         await refreshWorkspace();
     }
 
@@ -417,6 +461,8 @@
         lastAnalysisAt = "";
         graphData = null;
         selectedEntity = null;
+        graphCleanupConfirmOpen = false;
+        graphCleanupMessage = "";
         activityArtifacts = [];
         workspaceStatus = null;
         activeInsightTab = "findings";
@@ -670,6 +716,9 @@
                         {graphData}
                         bind:selectedEntity
                         {hasSources}
+                        cleanupRunning={graphCleanupRunning}
+                        cleanupMessage={graphCleanupMessage}
+                        onRequestCleanupGraph={requestGraphCleanup}
                     />
                 {:else}
                     <ActivityView
@@ -712,6 +761,19 @@
             busy={removeInProgress}
             on:cancel={cancelWorkspaceRemoval}
             on:confirm={confirmWorkspaceRemoval}
+        />
+    {/if}
+
+    {#if graphCleanupConfirmOpen}
+        <ConfirmModal
+            eyebrow="CLEAN GRAPH"
+            title="Clean noisy graph data?"
+            description="This permanently removes backend-classified low-signal graph rows from the local database. It does not delete source artifacts, chat history, findings, or connected sources."
+            confirmLabel="Clean"
+            busyLabel="Cleaning"
+            busy={graphCleanupRunning}
+            on:cancel={cancelGraphCleanup}
+            on:confirm={confirmGraphCleanup}
         />
     {/if}
 

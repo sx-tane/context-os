@@ -46,6 +46,7 @@ Single source of truth for all communication with the Go API (`/api`).
 | `getWorkspaceStatus(path)` | Fetches workspace event/entity/mismatch counts and connector sync state. |
 | `getArtifacts(params)` | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit. |
 | `cleanupLiveEvidence(workspaceID)` | Calls `POST /artifacts/live-evidence/cleanup` and returns deleted noisy live-evidence counts for explicit Activity cleanup. |
+| `cleanupGraphNoise(workspaceID)` | Calls `POST /graph/cleanup` and returns matched/deleted counts for explicit permanent graph cleanup; it removes low-signal graph rows only, not artifacts, findings, chat history, or connected sources. |
 | `postChatQuery(body, opts)` | Sends chat questions to `POST /chat/query`; plugin-backed concrete source links use live Codex first, start eligible Local DB live-answer evidence saves asynchronously, then fall back to local artifacts when needed. Network failures return a structured `api_unreachable` error instead of throwing raw `Failed to fetch`. |
 | `streamChatQuery(body, handlers, opts)` | Opens an SSE stream to `POST /chat/query/stream`; dispatches live Codex `onLog`, heartbeat `onStatus`, early `onAnswer`, final `onResult` with evidence-save status, and `onError` events for the pending chat transcript. |
 | `streamCodexIngest(connector, body, handlers, opts)` | Opens an SSE stream to `POST /<connector>/ingest` for Codex-backed connectors; dispatches `onLog`, `onStatus`, `onResult`, and `onError` events. |

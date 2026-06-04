@@ -9,6 +9,7 @@ import type {
   ConnectorKind,
   FindingsRequest,
   FindingsResult,
+  GraphCleanupResult,
   GraphData,
   IngestRequest,
   IngestResult,
@@ -605,6 +606,43 @@ export async function cleanupLiveEvidence(
       body: {
         error: "api_unreachable",
         message: "API is unreachable. Activity cleanup did not run.",
+      },
+    };
+  }
+}
+
+/** Permanently delete backend-classified low-signal graph rows for a workspace. */
+export async function cleanupGraphNoise(
+  workspaceID: string,
+): Promise<
+  | { ok: true; status: number; body: GraphCleanupResult }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  try {
+    const res = await apiFetch(
+      `${API_URL}/graph/cleanup?workspace_id=${encodeURIComponent(workspaceID)}`,
+      { method: "POST" },
+    );
+    const responseBody = await readJSON(res);
+    if (res.ok) {
+      return {
+        ok: true,
+        status: res.status,
+        body: responseBody as unknown as GraphCleanupResult,
+      };
+    }
+    return {
+      ok: false,
+      status: res.status,
+      body: responseBody,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message: "API is unreachable. Graph cleanup did not run.",
       },
     };
   }

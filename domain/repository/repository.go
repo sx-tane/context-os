@@ -138,6 +138,24 @@ type EntityRepository interface {
 	ListRelationships(ctx context.Context, workspaceID string, entityIDs []string) ([]types.Relationship, error)
 }
 
+// GraphCleanupResult reports explicit workspace-scoped graph cleanup counts.
+type GraphCleanupResult struct {
+	// MatchedEntityCount is the number of backend-classified noisy entity rows found.
+	MatchedEntityCount int
+	// DeletedEntityCount is the number of backend-classified noisy entity rows removed.
+	DeletedEntityCount int
+	// MatchedRelationshipCount is the number of low-signal or dangling relationship rows found.
+	MatchedRelationshipCount int
+	// DeletedRelationshipCount is the number of low-signal or dangling relationship rows removed.
+	DeletedRelationshipCount int
+}
+
+// GraphNoiseCleaner permanently removes backend-classified low-signal graph rows.
+type GraphNoiseCleaner interface {
+	// CleanupGraphNoise removes only workspace-scoped rows classified as graph noise.
+	CleanupGraphNoise(ctx context.Context, workspaceID string) (GraphCleanupResult, error)
+}
+
 // RelationshipCounter reports relationship density for a workspace.
 type RelationshipCounter interface {
 	// CountRelationships returns the total relationship count for a workspace.

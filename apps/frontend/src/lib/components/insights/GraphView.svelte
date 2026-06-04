@@ -16,6 +16,9 @@
     export let graphData: GraphData | null = null;
     export let selectedEntity: GraphEntity | null = null;
     export let hasSources = false;
+    export let cleanupRunning = false;
+    export let cleanupMessage = "";
+    export let onRequestCleanupGraph: () => void = () => {};
 
     let entityQuery = "";
 
@@ -57,10 +60,23 @@
 
 <div class="graph-workspace">
     <div class="graph-canvas" aria-label="Typed entity map">
-        <div class="graph-count">
-            <strong>{graphEntities.length}</strong>
-            <span>entities | {graphLinks.length} links</span>
+        <div class="graph-toolbar">
+            <div class="graph-count">
+                <strong>{graphEntities.length}</strong>
+                <span>entities | {graphLinks.length} links</span>
+            </div>
+            <button
+                type="button"
+                class="cleanup-graph"
+                disabled={!hasSources || cleanupRunning}
+                on:click={onRequestCleanupGraph}
+            >
+                {cleanupRunning ? "Cleaning graph data" : "Clean noisy graph data"}
+            </button>
         </div>
+        {#if cleanupMessage}
+            <p class="graph-cleanup-message">{cleanupMessage}</p>
+        {/if}
 
         {#if graphEntities.length > 0}
             <div class="graph-map-layout">
@@ -329,25 +345,66 @@
         letter-spacing: 0.04em;
     }
 
-    .graph-count {
+    .graph-toolbar {
         position: absolute;
         top: 14px;
         right: 14px;
         z-index: 5;
         display: flex;
+        align-items: center;
+        gap: 14px;
+        background: rgba(235, 232, 224, 0.94);
+        padding: 0 0 6px 10px;
+    }
+
+    .graph-count {
+        display: flex;
         align-items: baseline;
         gap: 6px;
         border-bottom: 1px solid #bdb7a8;
-        background: rgba(235, 232, 224, 0.94);
         padding: 6px 2px;
         color: #625f55;
         font-size: 11px;
         letter-spacing: 0.04em;
-        pointer-events: none;
     }
 
     .graph-count strong {
         color: #1c1b18;
+    }
+
+    .cleanup-graph {
+        border: 0;
+        border-bottom: 1px solid #8a3b27;
+        border-radius: 0;
+        background: transparent;
+        color: #8a3b27;
+        cursor: pointer;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 6px 0;
+        white-space: nowrap;
+    }
+
+    .cleanup-graph:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+    }
+
+    .graph-cleanup-message {
+        position: absolute;
+        top: 52px;
+        right: 14px;
+        z-index: 4;
+        max-width: min(420px, calc(100% - 28px));
+        margin: 0;
+        border-bottom: 1px solid #d7d2c8;
+        background: rgba(235, 232, 224, 0.96);
+        color: #625f55;
+        font-size: 11px;
+        line-height: 1.45;
+        padding: 7px 2px 8px 10px;
+        text-align: right;
     }
 
     .entity-list {

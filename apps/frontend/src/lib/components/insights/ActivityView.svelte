@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Artifact } from "$lib/types";
+  import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
   import {
     activityFilterLabel,
     artifactDetailRows,
@@ -96,28 +97,18 @@
   </div>
 
   {#if cleanupConfirmOpen}
-    <section class="cleanup-confirm" aria-label="Confirm live evidence cleanup">
-      <div>
-        <strong>Clean noisy live evidence?</strong>
-        <p>
-          This removes old live chat Activity rows created from duplicate full
-          answers, URL path fragments, or generic terms. It does not run
-          automatically.
-        </p>
-      </div>
-      <div class="cleanup-buttons">
-        <button type="button" on:click={confirmCleanup} disabled={cleanupRunning}>
-          {cleanupRunning ? "Cleaning..." : "Clean"}
-        </button>
-        <button
-          type="button"
-          on:click={() => (cleanupConfirmOpen = false)}
-          disabled={cleanupRunning}
-        >
-          Cancel
-        </button>
-      </div>
-    </section>
+    <ConfirmModal
+      eyebrow="CLEAN ACTIVITY"
+      title="Clean noisy live evidence?"
+      description="This removes old live chat Activity rows created from duplicate full answers, URL path fragments, or generic terms. It does not run automatically."
+      confirmLabel="Clean"
+      busyLabel="Cleaning"
+      busy={cleanupRunning}
+      on:cancel={() => {
+        if (!cleanupRunning) cleanupConfirmOpen = false;
+      }}
+      on:confirm={confirmCleanup}
+    />
   {/if}
 
   {#if cleanupMessage}
@@ -263,8 +254,7 @@
     font-weight: 700;
   }
 
-  .cleanup-action,
-  .cleanup-buttons button {
+  .cleanup-action {
     border: 0;
     border-bottom: 1px solid #bdb7a8;
     border-radius: 0;
@@ -279,35 +269,16 @@
     color: #8a3b27;
   }
 
-  .cleanup-confirm,
   .cleanup-message {
     border-bottom: 1px solid #d7d2c8;
     padding: 12px 0;
   }
 
-  .cleanup-confirm {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .cleanup-confirm p,
   .cleanup-message {
     margin: 5px 0 0;
     color: #625f55;
     font-size: 12px;
     line-height: 1.45;
-  }
-
-  .cleanup-buttons {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .cleanup-buttons button:disabled {
-    cursor: wait;
-    opacity: 0.5;
   }
 
   .source-group {
@@ -448,10 +419,6 @@
   @media (max-width: 640px) {
     .activity-toolbar {
       align-items: stretch;
-      flex-direction: column;
-    }
-
-    .cleanup-confirm {
       flex-direction: column;
     }
 

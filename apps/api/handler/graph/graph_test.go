@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	graphhandler "context-os/apps/api/handler/graph"
@@ -181,6 +182,160 @@ func TestQueryFiltersNoiseByDefaultAndIncludesWithFlag(t *testing.T) {
 	}
 }
 
+// TestCleanupRejectsNonPostAndMissingWorkspace verifies graph cleanup requires POST and a workspace reference.
+func TestCleanupRejectsNonPostAndMissingWorkspace(t *testing.T) {
+	handler := graphhandler.NewHandler(
+		workspaceRepo{workspace: repository.Workspace{ID: "workspace-1", Path: "/workspace"}},
+		&cleanupEntityRepo{},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/graph/cleanup?workspace_id=/workspace", nil)
+	rec := httptest.NewRecorder()
+	handler.Cleanup(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("Cleanup(GET) status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/graph/cleanup", nil)
+	rec = httptest.NewRecorder()
+	handler.Cleanup(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("Cleanup(missing workspace) status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+// TestCleanupReturnsUnavailableWhenRepoCannotClean verifies cleanup fails explicitly when the entity store lacks delete support.
+func TestCleanupReturnsUnavailableWhenRepoCannotClean(t *testing.T) {
+	handler := graphhandler.NewHandler(
+		workspaceRepo{workspace: repository.Workspace{ID: "workspace-1", Path: "/workspace"}},
+		entityRepo{},
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/graph/cleanup?workspace_id=/workspace", nil)
+	rec := httptest.NewRecorder()
+	handler.Cleanup(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("Cleanup() status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+// TestCleanupDeletesOnlyBackendClassifiedNoise verifies graph cleanup preserves typed and high-confidence rows.
+func TestCleanupDeletesOnlyBackendClassifiedNoise(t *testing.T) {
+	repo := &cleanupEntityRepo{
+		entities: []entities.CanonicalEntity{{
+			Entity: types.Entity{
+				ID:               "entity-signal",
+				Type:             types.APIField,
+				Name:             "travelFeeCommissionTargetFlag",
+				SourceID:         "jira://BKGDEV-8466",
+				ExtractionMethod: "codex_label",
+				Confidence:       0.82,
+				Metadata:         map[string]string{"extraction_method": "codex_label"},
+			},
+			Confidence: 0.82,
+		}, {
+			Entity: types.Entity{
+				ID:               "entity-noise",
+				Type:             types.Dependency,
+				Name:             "Source",
+				SourceID:         "jira://BKGDEV-8466",
+				ExtractionMethod: "regex_token",
+				Confidence:       0.5,
+				Metadata:         map[string]string{"extraction_method": "regex_token"},
+			},
+			Confidence: 0.5,
+		}, {
+			Entity: types.Entity{
+				ID:               "entity-short",
+				Type:             types.Dependency,
+				Name:             "x",
+				SourceID:         "jira://BKGDEV-8466",
+				ExtractionMethod: "regex_token",
+				Confidence:       0.4,
+				Metadata:         map[string]string{"extraction_method": "regex_token"},
+			},
+			Confidence: 0.4,
+		}, {
+			Entity: types.Entity{
+				ID:               "entity-preserved-regex",
+				Type:             types.Service,
+				Name:             "Refund Service",
+				SourceID:         "jira://BKGDEV-8466",
+				ExtractionMethod: "regex_token",
+				Confidence:       0.9,
+				Metadata:         map[string]string{"extraction_method": "regex_token"},
+			},
+			Confidence: 0.9,
+		}},
+		relationships: []types.Relationship{{
+			ID:         "entity-signal->entity-noise:co_occurs_in_document",
+			FromID:     "entity-signal",
+			ToID:       "entity-noise",
+			Kind:       types.CoOccursInDocument,
+			Confidence: 0.5,
+		}, {
+			ID:         "entity-signal->entity-short:requirement_affects_api",
+			FromID:     "entity-signal",
+			ToID:       "entity-short",
+			Kind:       types.RequirementAffectsAPI,
+			Confidence: 0.8,
+		}, {
+			ID:         "entity-signal->entity-preserved-regex:requirement_affects_api",
+			FromID:     "entity-signal",
+			ToID:       "entity-preserved-regex",
+			Kind:       types.RequirementAffectsAPI,
+			Confidence: 0.8,
+		}},
+	}
+	handler := graphhandler.NewHandler(
+		workspaceRepo{workspace: repository.Workspace{ID: "workspace-1", Path: "/workspace"}},
+		repo,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/graph?workspace_id=/workspace&include_noise=true", nil)
+	rec := httptest.NewRecorder()
+	handler.Query(rec, req)
+	body := decodeObject(t, rec.Body.Bytes())
+	if body["entity_count"] != float64(4) {
+		t.Fatalf("before cleanup entity_count = %v, want 4", body["entity_count"])
+	}
+	if body["relationship_count"] != float64(3) {
+		t.Fatalf("before cleanup relationship_count = %v, want 3", body["relationship_count"])
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/graph/cleanup?workspace_id=/workspace", nil)
+	rec = httptest.NewRecorder()
+	handler.Cleanup(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Cleanup() status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body = decodeObject(t, rec.Body.Bytes())
+	if body["matched_entity_count"] != float64(2) {
+		t.Fatalf("matched_entity_count = %v, want 2", body["matched_entity_count"])
+	}
+	if body["deleted_entity_count"] != float64(2) {
+		t.Fatalf("deleted_entity_count = %v, want 2", body["deleted_entity_count"])
+	}
+	if body["matched_relationship_count"] != float64(2) {
+		t.Fatalf("matched_relationship_count = %v, want 2", body["matched_relationship_count"])
+	}
+	if body["deleted_relationship_count"] != float64(2) {
+		t.Fatalf("deleted_relationship_count = %v, want 2", body["deleted_relationship_count"])
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/graph?workspace_id=/workspace&include_noise=true", nil)
+	rec = httptest.NewRecorder()
+	handler.Query(rec, req)
+	body = decodeObject(t, rec.Body.Bytes())
+	if body["entity_count"] != float64(2) {
+		t.Fatalf("after cleanup entity_count = %v, want 2", body["entity_count"])
+	}
+	if body["relationship_count"] != float64(1) {
+		t.Fatalf("after cleanup relationship_count = %v, want 1", body["relationship_count"])
+	}
+}
+
 type workspaceRepo struct {
 	workspace repository.Workspace
 }
@@ -219,6 +374,81 @@ func (r entityRepo) ListEntities(_ context.Context, _ string, _ string) ([]entit
 
 func (r entityRepo) ListRelationships(_ context.Context, _ string, _ []string) ([]types.Relationship, error) {
 	return r.relationships, nil
+}
+
+type cleanupEntityRepo struct {
+	entities      []entities.CanonicalEntity
+	relationships []types.Relationship
+}
+
+func (r *cleanupEntityRepo) UpsertEntities(_ context.Context, _ string, _ []entities.CanonicalEntity) error {
+	return nil
+}
+
+func (r *cleanupEntityRepo) UpsertRelationships(_ context.Context, _ string, _ []types.Relationship) error {
+	return nil
+}
+
+func (r *cleanupEntityRepo) ListEntities(_ context.Context, _ string, _ string) ([]entities.CanonicalEntity, error) {
+	return append([]entities.CanonicalEntity(nil), r.entities...), nil
+}
+
+func (r *cleanupEntityRepo) ListRelationships(_ context.Context, _ string, _ []string) ([]types.Relationship, error) {
+	return append([]types.Relationship(nil), r.relationships...), nil
+}
+
+func (r *cleanupEntityRepo) CleanupGraphNoise(_ context.Context, _ string) (repository.GraphCleanupResult, error) {
+	result := repository.GraphCleanupResult{}
+	keptRelationships := make([]types.Relationship, 0, len(r.relationships))
+	for _, relationship := range r.relationships {
+		if relationship.Kind == types.CoOccursInDocument && relationship.Confidence < 0.6 {
+			result.MatchedRelationshipCount++
+			result.DeletedRelationshipCount++
+			continue
+		}
+		keptRelationships = append(keptRelationships, relationship)
+	}
+	r.relationships = keptRelationships
+
+	deletedEntityIDs := map[string]struct{}{}
+	keptEntities := make([]entities.CanonicalEntity, 0, len(r.entities))
+	for _, entity := range r.entities {
+		if isNoisyTestEntity(entity) {
+			result.MatchedEntityCount++
+			result.DeletedEntityCount++
+			deletedEntityIDs[entity.Entity.ID] = struct{}{}
+			continue
+		}
+		keptEntities = append(keptEntities, entity)
+	}
+	r.entities = keptEntities
+
+	keptRelationships = make([]types.Relationship, 0, len(r.relationships))
+	for _, relationship := range r.relationships {
+		_, fromDeleted := deletedEntityIDs[relationship.FromID]
+		_, toDeleted := deletedEntityIDs[relationship.ToID]
+		if fromDeleted || toDeleted {
+			result.MatchedRelationshipCount++
+			result.DeletedRelationshipCount++
+			continue
+		}
+		keptRelationships = append(keptRelationships, relationship)
+	}
+	r.relationships = keptRelationships
+	return result, nil
+}
+
+func isNoisyTestEntity(entity entities.CanonicalEntity) bool {
+	if entity.Confidence >= 0.6 || entity.Entity.ExtractionMethod != "regex_token" {
+		return false
+	}
+	name := strings.ToLower(strings.TrimSpace(entity.Entity.Name))
+	switch name {
+	case "and", "also", "among", "source", "read", "fields", "field", "type", "status", "content":
+		return true
+	default:
+		return len(name) < 3
+	}
 }
 
 func decodeObject(t *testing.T, body []byte) map[string]any {

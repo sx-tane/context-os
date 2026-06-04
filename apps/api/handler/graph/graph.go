@@ -2,14 +2,20 @@
 package graph
 
 import (
+	"context"
+	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"context-os/apps/api/response"
 	"context-os/domain/entities"
 	"context-os/domain/repository"
 	"context-os/domain/types"
 )
+
+const graphRequestTimeout = 10 * time.Second
 
 // Handler exposes graph query endpoints backed by persistent entity data.
 type Handler struct {
@@ -65,6 +71,15 @@ type graphRelationship struct {
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
+type cleanupResponse struct {
+	WorkspaceID              string `json:"workspace_id"`
+	WorkspacePath            string `json:"workspace_path"`
+	MatchedEntityCount       int    `json:"matched_entity_count"`
+	DeletedEntityCount       int    `json:"deleted_entity_count"`
+	MatchedRelationshipCount int    `json:"matched_relationship_count"`
+	DeletedRelationshipCount int    `json:"deleted_relationship_count"`
+}
+
 // NewHandler returns a Handler wired to the provided repositories.
 func NewHandler(workspaces repository.WorkspaceRepository, entities repository.EntityRepository) *Handler {
 	return &Handler{workspaces: workspaces, entities: entities}
@@ -90,26 +105,33 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
-	if workspaceID == "" {
+	if h.workspaces == nil || h.entities == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "graph store is unavailable")
+		return
+	}
+
+	workspaceRef := workspaceRefFromRequest(r)
+	if workspaceRef == "" {
 		response.WriteError(w, http.StatusBadRequest, "invalid_request", "workspace_id is required")
 		return
 	}
 	entityType := strings.TrimSpace(r.URL.Query().Get("entity_type"))
 	includeNoise := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_noise")), "true")
 
-	// Resolve workspace path to stored ID via WorkspaceRepository.
-	ws, err := h.workspaces.GetByPath(r.Context(), workspaceID)
+	ctx, cancel := context.WithTimeout(r.Context(), graphRequestTimeout)
+	defer cancel()
+
+	workspace, err := h.resolveWorkspace(ctx, workspaceRef)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			response.WriteError(w, http.StatusNotFound, "not_found", "workspace not found")
+			return
+		}
 		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
-	resolvedID := workspaceID
-	if ws != nil {
-		resolvedID = ws.ID
-	}
 
-	canonical, err := h.entities.ListEntities(r.Context(), resolvedID, entityType)
+	canonical, err := h.entities.ListEntities(ctx, workspace.ID, entityType)
 	if err != nil {
 		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
@@ -120,7 +142,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 	if !includeNoise {
 		graphEntities = filterSignalEntities(graphEntities)
 	}
-	relationships, err := h.entities.ListRelationships(r.Context(), resolvedID, entityIDs(canonical))
+	relationships, err := h.entities.ListRelationships(ctx, workspace.ID, entityIDs(canonical))
 	if err != nil {
 		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
@@ -131,7 +153,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		graphRelationships = filterSignalRelationships(graphRelationships)
 	}
 	response.WriteJSON(w, http.StatusOK, queryResponse{
-		WorkspaceID:               resolvedID,
+		WorkspaceID:               workspace.ID,
 		EntityType:                entityType,
 		Count:                     len(graphEntities),
 		EntityCount:               len(graphEntities),
@@ -143,6 +165,99 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		Entities:                  graphEntities,
 		Relationships:             graphRelationships,
 	})
+}
+
+// Cleanup handles POST /graph/cleanup.
+//
+// @Summary      Clean noisy graph data
+// @Description  Permanently removes backend-classified low-signal graph entity and relationship rows for a workspace without deleting source artifacts, findings, chat history, or connected sources.
+// @Tags         graph
+// @Produce      json
+// @Param        workspace_id  query     string  true  "Workspace path or ID"
+// @Success      200           {object}  cleanupResponse
+// @Failure      400           {object}  map[string]string
+// @Failure      404           {object}  map[string]string
+// @Failure      405           {object}  map[string]string
+// @Failure      503           {object}  map[string]string
+// @Router       /graph/cleanup [post]
+func (h *Handler) Cleanup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+		return
+	}
+
+	if h.workspaces == nil || h.entities == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "graph store is unavailable")
+		return
+	}
+	cleaner, ok := h.entities.(repository.GraphNoiseCleaner)
+	if !ok {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "graph cleanup is unavailable")
+		return
+	}
+
+	workspaceRef := workspaceRefFromRequest(r)
+	if workspaceRef == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "workspace_id is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), graphRequestTimeout)
+	defer cancel()
+
+	workspace, err := h.resolveWorkspace(ctx, workspaceRef)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.WriteError(w, http.StatusNotFound, "not_found", "workspace not found")
+			return
+		}
+		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	result, err := cleaner.CleanupGraphNoise(ctx, workspace.ID)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	response.WriteJSON(w, http.StatusOK, cleanupResponse{
+		WorkspaceID:              workspace.ID,
+		WorkspacePath:            workspace.Path,
+		MatchedEntityCount:       result.MatchedEntityCount,
+		DeletedEntityCount:       result.DeletedEntityCount,
+		MatchedRelationshipCount: result.MatchedRelationshipCount,
+		DeletedRelationshipCount: result.DeletedRelationshipCount,
+	})
+}
+
+func (h *Handler) resolveWorkspace(ctx context.Context, ref string) (repository.Workspace, error) {
+	workspace, err := h.workspaces.GetByPath(ctx, ref)
+	if err != nil {
+		return repository.Workspace{}, fmt.Errorf("graph: get workspace by path: %w", err)
+	}
+	if workspace != nil {
+		return *workspace, nil
+	}
+
+	workspaces, err := h.workspaces.List(ctx)
+	if err != nil {
+		return repository.Workspace{}, fmt.Errorf("graph: list workspaces: %w", err)
+	}
+	for _, workspace := range workspaces {
+		if workspace.ID == ref || workspace.Path == ref {
+			return workspace, nil
+		}
+	}
+	return repository.Workspace{}, sql.ErrNoRows
+}
+
+func workspaceRefFromRequest(r *http.Request) string {
+	workspaceRef := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	if workspaceRef == "" {
+		workspaceRef = strings.TrimSpace(r.URL.Query().Get("workspace_path"))
+	}
+	return workspaceRef
 }
 
 func mapEntities(canonical []entities.CanonicalEntity) []graphEntity {

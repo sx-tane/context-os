@@ -285,6 +285,15 @@ export interface ActivityCleanupResult {
   deleted_ids: string[];
 }
 
+export interface GraphCleanupResult {
+  workspace_id: string;
+  workspace_path: string;
+  matched_entity_count: number;
+  deleted_entity_count: number;
+  matched_relationship_count: number;
+  deleted_relationship_count: number;
+}
+
 export interface AnswerSection {
   source_label: string;
   connector?: string;

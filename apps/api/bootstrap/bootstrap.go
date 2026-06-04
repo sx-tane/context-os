@@ -104,6 +104,7 @@ func Routes(sqlDB *sql.DB) []Route {
 	if handlers.graph != nil {
 		routes = append(routes,
 			Route{Pattern: "/graph", Handler: http.HandlerFunc(handlers.graph.Query), CORS: true},
+			Route{Pattern: "/graph/cleanup", Handler: http.HandlerFunc(handlers.graph.Cleanup), CORS: true},
 		)
 	}
 	if handlers.artifacts != nil {

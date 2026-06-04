@@ -8,6 +8,7 @@ import {
   getCodexSources,
   getWorkspaces,
   getArtifacts,
+  cleanupGraphNoise,
   cleanupLiveEvidence,
   postChatQuery,
   getGraphData,
@@ -433,6 +434,57 @@ describe("cleanupLiveEvidence", () => {
       status: 500,
       body: { error: "store_error" },
     });
+  });
+});
+
+// ---- cleanupGraphNoise ----
+
+describe("cleanupGraphNoise", () => {
+  it("posts to the graph cleanup endpoint and returns the cleanup result", async () => {
+    const body = {
+      workspace_id: "ws1",
+      workspace_path: "/workspace",
+      matched_entity_count: 2,
+      deleted_entity_count: 2,
+      matched_relationship_count: 3,
+      deleted_relationship_count: 3,
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+
+    const result = await cleanupGraphNoise("/workspace");
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/graph/cleanup?workspace_id=%2Fworkspace",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("returns the backend error body when graph cleanup fails", async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse({ message: "graph cleanup is unavailable" }, false, 503),
+    );
+
+    const result = await cleanupGraphNoise("ws1");
+
+    expect(result).toEqual({
+      ok: false,
+      status: 503,
+      body: { message: "graph cleanup is unavailable" },
+    });
+  });
+
+  it("returns an API unreachable error when graph cleanup cannot reach the API", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const result = await cleanupGraphNoise("ws1");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+      expect(result.body.message).toContain("Graph cleanup did not run");
+    }
   });
 });
 

@@ -8,7 +8,7 @@ PostgreSQL-backed implementations of the `domain/repository` interfaces.
 |------|-----------|---------|
 | `WorkspaceStore` | `WorkspaceRepository` | `workspaces` |
 | `EventStore` | `EventRepository`, `EventDeleter` | `ingest_events` |
-| `EntityStore` | `EntityRepository` | `entities`, `relationships` |
+| `EntityStore` | `EntityRepository`, `GraphNoiseCleaner` | `entities`, `relationships` |
 | `MismatchStore` | `MismatchRepository` | `mismatches` |
 | `SyncStore` | `SyncRepository` | `connector_syncs` |
 
@@ -22,6 +22,14 @@ Entity and relationship confidence is merged upward (`GREATEST`).
 `EventStore.DeleteByIDs` is reserved for explicit workspace-scoped cleanup flows
 such as removing old noisy live-chat evidence rows. It does not run during normal
 artifact queries or pipeline ingestion.
+
+`EntityStore.CleanupGraphNoise` is reserved for the separate graph cleanup flow.
+It permanently removes only backend-classified low-signal graph rows: low-confidence
+`co_occurs_in_document` links, low-confidence `regex_token` entities with common
+noisy names or very short tokens, and relationships dangling after those entity
+deletes. It does not remove source artifacts, findings, chat history, connected
+sources, connector syncs, or workspace rows, and it never runs during graph query
+or analysis.
 
 ## Graph Reads
 

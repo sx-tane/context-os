@@ -7,6 +7,7 @@ HTTP handler for querying persisted workspace entity graph data.
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/graph` | Returns canonical entities for a workspace, optionally filtered by entity type. |
+| POST | `/graph/cleanup` | Permanently removes backend-classified low-signal graph rows for a workspace. |
 
 ## Query Parameters
 
@@ -48,8 +49,22 @@ HTTP handler for querying persisted workspace entity graph data.
 }
 ```
 
+`/graph/cleanup` is an explicit, permanent local database cleanup. It deletes low-confidence `co_occurs_in_document` relationships, low-confidence `regex_token` entities whose names are common noisy labels or very short tokens, and relationships left dangling by those entity deletes. It does not delete source artifacts, chat history, findings, connected sources, workspace rows, or connector sync rows.
+
+```json
+{
+  "workspace_id": "workspace-id",
+  "workspace_path": "/workspace",
+  "matched_entity_count": 2,
+  "deleted_entity_count": 2,
+  "matched_relationship_count": 3,
+  "deleted_relationship_count": 3
+}
+```
+
 ## Maintenance Notes
 
 - Keep graph reads backed by `repository.EntityRepository`.
+- Keep graph cleanup behind `repository.GraphNoiseCleaner`; never run it during normal graph query, analysis, or activity refresh.
 - Preserve deterministic response fields: `workspace_id`, `entity_type`, `entity_count`, `relationship_count`, filtered counts, and `entities`.
 - Update `internal/graph/README.md` if graph persistence or entity contracts change.

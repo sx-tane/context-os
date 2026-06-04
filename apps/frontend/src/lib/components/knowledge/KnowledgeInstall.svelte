@@ -4,7 +4,7 @@
      * Shows readiness per connector, saves source references, marks knowledge ready.
      */
     import { createEventDispatcher } from "svelte";
-    import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+    import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
     import type {
         CodexPlugin,
         CodexConnectorKind,
