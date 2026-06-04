@@ -29,6 +29,17 @@ Shared pipeline harness coverage lives in `tests/pipeline_test.go` and loads sce
 go test ./tests
 ```
 
+Relationship benchmark scenarios live under `tests/harness/scenarios/relationship/` with fixtures
+and goldens in matching `relationship/` folders. They run both deterministic baseline mode and a
+fake assistant mode; real Codex CLI calls are not part of harness tests. Relationship metrics score
+semantic relationship kinds and ignore raw `co_occurs_in_document` edges.
+
+Relationship benchmark gates use:
+
+- `relationship_precision_min`
+- `relationship_recall_min`
+- `relationship_false_positive_rate_max`
+
 Run the full Go suite after changing scenarios, fixtures, goldens, or stage behavior:
 
 ```sh

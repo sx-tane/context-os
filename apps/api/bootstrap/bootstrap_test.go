@@ -73,3 +73,16 @@ func TestRoutesWithoutDBKeepsPublicFallbackRoutes(t *testing.T) {
 		t.Fatal("routes should not include DB-backed /workspace without a DB")
 	}
 }
+
+// TestRelationshipAssistantFromEnvRequiresExplicitCodexFlag verifies AI relationship assistance is opt-in.
+func TestRelationshipAssistantFromEnvRequiresExplicitCodexFlag(t *testing.T) {
+	t.Setenv("CONTEXTOS_AI_RELATIONSHIPS", "")
+	if got := relationshipAssistantFromEnv(); got != nil {
+		t.Fatalf("relationshipAssistantFromEnv() = %#v, want nil", got)
+	}
+
+	t.Setenv("CONTEXTOS_AI_RELATIONSHIPS", "codex")
+	if got := relationshipAssistantFromEnv(); got == nil {
+		t.Fatal("relationshipAssistantFromEnv() = nil, want assistant")
+	}
+}

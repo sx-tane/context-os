@@ -103,7 +103,7 @@ func typedKind(a, b types.Entity) (types.RelationshipKind, types.Entity, types.E
 // edge builds a deterministic, evidence-backed relationship between two oriented entities.
 func edge(from, to types.Entity, kind types.RelationshipKind, confidence float64) types.Relationship {
 	return types.Relationship{
-		ID:         fmt.Sprintf("%s->%s:%s", from.ID, to.ID, kind), // ID includes kind so distinct edge types never collide
+		ID:         relationshipID(from.ID, to.ID, kind), // ID includes kind so distinct edge types never collide
 		FromID:     from.ID,
 		ToID:       to.ID,
 		Kind:       kind,
@@ -114,6 +114,10 @@ func edge(from, to types.Entity, kind types.RelationshipKind, confidence float64
 		},
 		Metadata: map[string]string{"source_id": from.SourceID}, // record which document produced this edge
 	}
+}
+
+func relationshipID(fromID, toID string, kind types.RelationshipKind) string {
+	return fmt.Sprintf("%s->%s:%s", fromID, toID, kind)
 }
 
 func isLowConfidenceRegexOnly(a, b types.Entity) bool {

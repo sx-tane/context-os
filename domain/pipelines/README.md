@@ -10,12 +10,15 @@ Define the domain-level result contract for the current local-first processing p
 
 ```go
 type Result struct {
-  Entities   []entities.CanonicalEntity `json:"entities"`
-  Mismatches []types.Mismatch           `json:"mismatches"`
+  EventCount    int                        `json:"event_count"`
+  Events        []events.Event             `json:"events"`
+  Entities      []entities.CanonicalEntity `json:"entities"`
+  Relationships []types.Relationship       `json:"relationships"`
+  Mismatches    []types.Mismatch           `json:"mismatches"`
 }
 ```
 
-`Result` is the current high-level output. `Entities` exposes the canonical context accumulated during the run. `Mismatches` contains evidence-backed reasoning findings derived from the in-memory graph.
+`Result` is the current high-level output. `Events`, `Entities`, and `Relationships` expose the context accumulated during the run. `Mismatches` contains evidence-backed reasoning findings derived from the in-memory graph.
 
 ```go
 func Run(ctx context.Context, sourcePipeline ingestion.Pipeline, req contracts.SourceRequest) (Result, error)
@@ -33,12 +36,16 @@ flowchart TD
   extract[Extract]
   resolve[Resolve]
   relate[Build relationships]
+  assist[optional relationship assist]
   ctxgraph[ContextGraph]
   reason[Detect mismatches]
   result[Result]
 
   request --> ingest --> event --> normalize --> classify --> extract --> resolve --> relate --> ctxgraph --> reason --> result
   resolve --> ctxgraph
+  normalize --> assist
+  resolve --> assist
+  assist --> ctxgraph
 ```
 
 ## Behavior
@@ -48,9 +55,13 @@ flowchart TD
 3. Classify the document with deterministic routing rules.
 4. Extract candidate entities from the document body.
 5. Resolve candidates into canonical entities.
-6. Build relationships between adjacent canonical entities from the same source document.
+6. Build deterministic relationships between canonical entities from the same source document.
 7. Add entities and relationships to the in-memory context graph.
 8. Run reasoning against the graph and return canonical entities plus mismatches.
+
+Internal orchestration can opt into relationship assistance through `pipeline.Stores`, but the
+domain result contract remains the same: AI can only add validated relationships and cannot create
+entities or remove deterministic edges.
 
 ## Implementation Notes
 

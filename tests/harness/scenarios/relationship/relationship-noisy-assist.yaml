@@ -1,0 +1,32 @@
+id: relationship-noisy-assist
+area: relationship
+level: benchmark
+description: "A noisy artifact rejects an unsupported assistant edge whose evidence is absent from the source text."
+owner: internal/pipeline
+
+inputs:
+  source_request:
+    uri: "repo://example/relationship-noisy-assist"
+    content_path: "tests/harness/fixtures/relationship/relationship-noisy-assist/input.txt"
+    metadata_path: "tests/harness/fixtures/relationship/relationship-noisy-assist/source-metadata.json"
+  assistant:
+    proposals:
+      - from: "couponStatus"
+        to: "refundState"
+        kind: "api_backed_by_db"
+        evidence: "couponStatus is stored in refundState"
+        confidence: 0.91
+
+expected:
+  golden_path: "tests/harness/golden/relationship/relationship-noisy-assist.json"
+
+thresholds:
+  relationship_precision_min: 0.85
+  relationship_recall_min: 0.70
+  relationship_false_positive_rate_max: 0.15
+
+evidence:
+  - "tests/harness/fixtures/relationship/relationship-noisy-assist/input.txt"
+  - "tests/harness/fixtures/relationship/relationship-noisy-assist/source-metadata.json"
+
+notes: "Negative relationship benchmark; rejected proposals should leave only ignored co-occurrence edges."

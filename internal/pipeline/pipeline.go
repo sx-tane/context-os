@@ -47,6 +47,9 @@ type Stores struct {
 	// SemanticMatcher, when non-nil, enables the Layer-2 semantic identity pass
 	// using embedding cosine similarity alongside the default deterministic layers.
 	SemanticMatcher identity.Matcher
+	// RelationshipAssistant, when non-nil, can add validated same-document
+	// relationship edges after deterministic relationship rules run.
+	RelationshipAssistant relationship.Assistant
 }
 
 // Run executes the full pipeline: ingest → normalize → classify → extract → resolve → relate → reason.
@@ -77,8 +80,10 @@ func RunEventsGraphOnly(ctx context.Context, rawEvents []events.Event, req contr
 
 func runEvents(ctx context.Context, rawEvents []events.Event, req contracts.SourceRequest, stores *Stores, includeReasoning bool) pipelines.Result {
 	var semanticMatcher identity.Matcher
+	var relationshipAssistant relationship.Assistant
 	if stores != nil {
 		semanticMatcher = stores.SemanticMatcher // nil is safe: ResolveWithMatcher falls back to LocalMatcher
+		relationshipAssistant = stores.RelationshipAssistant
 	}
 
 	contextGraph := graph.New()
@@ -97,7 +102,7 @@ func runEvents(ctx context.Context, rawEvents []events.Event, req contracts.Sour
 		} else {
 			canonical = identity.Resolve(extracted)
 		}
-		rels := relationship.Build(canonical)
+		rels := relationship.BuildWithAssist(ctx, doc, canonical, relationshipAssistant)
 		contextGraph.AddEntities(canonical)
 		contextGraph.AddRelationships(rels)
 	}

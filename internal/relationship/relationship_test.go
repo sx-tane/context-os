@@ -1,6 +1,8 @@
 package relationship_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"context-os/domain/entities"
@@ -21,6 +23,42 @@ func findKind(rels []types.Relationship, kind types.RelationshipKind) (types.Rel
 		}
 	}
 	return types.Relationship{}, false
+}
+
+type fakeAssistant struct {
+	rels     []types.Relationship
+	err      error
+	provider string
+	calls    int
+}
+
+// ProposeRelationships returns preconfigured test relationships.
+func (f *fakeAssistant) ProposeRelationships(context.Context, types.NormalizedDocument, []entities.CanonicalEntity) ([]types.Relationship, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make([]types.Relationship, len(f.rels))
+	copy(out, f.rels)
+	return out, nil
+}
+
+// Provider returns the test provider label.
+func (f *fakeAssistant) Provider() string {
+	if f.provider != "" {
+		return f.provider
+	}
+	return "fake"
+}
+
+// assistDoc returns a normalized document with relationship evidence text.
+func assistDoc() types.NormalizedDocument {
+	return types.NormalizedDocument{
+		ID:          "d",
+		Title:       "Checkout graph",
+		Body:        "Checkout fee rule requires checkoutFeeAmount. checkoutFeeAmount is stored in checkout_fee_amount.",
+		ContentHash: "doc-hash",
+	}
 }
 
 // TestBuildOnlyLinksEntitiesFromSameSource verifies edges never cross document boundaries.
@@ -181,6 +219,230 @@ func TestBuildDeterministicIDIncludesKind(t *testing.T) {
 	want := "d:req->d:api:" + string(types.RequirementAffectsAPI)
 	if rel.ID != want {
 		t.Errorf("ID = %q, want %q", rel.ID, want)
+	}
+}
+
+// TestParseAssistantOutputRejectsUnknownEntityNames verifies proposals cannot invent endpoints.
+func TestParseAssistantOutputRejectsUnknownEntityNames(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+		canonical("d:db", "d", types.DBColumn, "checkout_fee_amount"),
+	}
+	output := `CONTEXTOS_RELATIONSHIPS_JSON: {"relationships":[{"from":"missingEntity","to":"checkout_fee_amount","kind":"api_backed_by_db","evidence":"checkoutFeeAmount is stored in checkout_fee_amount","confidence":0.9}]}`
+
+	got, err := relationship.ParseAssistantOutput(output, doc, input)
+	if err != nil {
+		t.Fatalf("ParseAssistantOutput() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ParseAssistantOutput() length = %d, want 0", len(got))
+	}
+}
+
+// TestParseAssistantOutputRejectsUnknownRelationshipKinds verifies proposals must use the stable relationship vocabulary.
+func TestParseAssistantOutputRejectsUnknownRelationshipKinds(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+		canonical("d:db", "d", types.DBColumn, "checkout_fee_amount"),
+	}
+	output := `CONTEXTOS_RELATIONSHIPS_JSON: {"relationships":[{"from":"checkoutFeeAmount","to":"checkout_fee_amount","kind":"made_up","evidence":"checkoutFeeAmount is stored in checkout_fee_amount","confidence":0.9}]}`
+
+	got, err := relationship.ParseAssistantOutput(output, doc, input)
+	if err != nil {
+		t.Fatalf("ParseAssistantOutput() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ParseAssistantOutput() length = %d, want 0", len(got))
+	}
+}
+
+// TestParseAssistantOutputRejectsMissingEvidence verifies proposals need source evidence.
+func TestParseAssistantOutputRejectsMissingEvidence(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+		canonical("d:db", "d", types.DBColumn, "checkout_fee_amount"),
+	}
+	output := `CONTEXTOS_RELATIONSHIPS_JSON: {"relationships":[{"from":"checkoutFeeAmount","to":"checkout_fee_amount","kind":"api_backed_by_db","evidence":"","confidence":0.9}]}`
+
+	got, err := relationship.ParseAssistantOutput(output, doc, input)
+	if err != nil {
+		t.Fatalf("ParseAssistantOutput() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ParseAssistantOutput() length = %d, want 0", len(got))
+	}
+}
+
+// TestParseAssistantOutputRejectsEvidenceOutsideSource verifies evidence must quote the same document.
+func TestParseAssistantOutputRejectsEvidenceOutsideSource(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+		canonical("d:db", "d", types.DBColumn, "checkout_fee_amount"),
+	}
+	output := `CONTEXTOS_RELATIONSHIPS_JSON: {"relationships":[{"from":"checkoutFeeAmount","to":"checkout_fee_amount","kind":"api_backed_by_db","evidence":"checkoutFeeAmount is persisted in an external warehouse","confidence":0.9}]}`
+
+	got, err := relationship.ParseAssistantOutput(output, doc, input)
+	if err != nil {
+		t.Fatalf("ParseAssistantOutput() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ParseAssistantOutput() length = %d, want 0", len(got))
+	}
+}
+
+// TestParseAssistantOutputRejectsLowConfidence verifies weak proposals stay below the acceptance gate.
+func TestParseAssistantOutputRejectsLowConfidence(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+		canonical("d:db", "d", types.DBColumn, "checkout_fee_amount"),
+	}
+	output := `CONTEXTOS_RELATIONSHIPS_JSON: {"relationships":[{"from":"checkoutFeeAmount","to":"checkout_fee_amount","kind":"api_backed_by_db","evidence":"checkoutFeeAmount is stored in checkout_fee_amount","confidence":0.74}]}`
+
+	got, err := relationship.ParseAssistantOutput(output, doc, input)
+	if err != nil {
+		t.Fatalf("ParseAssistantOutput() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ParseAssistantOutput() length = %d, want 0", len(got))
+	}
+}
+
+// TestParseAssistantOutputAcceptsEvidenceBackedEdge verifies valid proposals are converted into typed relationships.
+func TestParseAssistantOutputAcceptsEvidenceBackedEdge(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+		canonical("d:db", "d", types.DBColumn, "checkout_fee_amount"),
+	}
+	output := `CONTEXTOS_RELATIONSHIPS_JSON: {"relationships":[{"from":"checkoutFeeAmount","to":"checkout_fee_amount","kind":"api_backed_by_db","evidence":"checkoutFeeAmount is stored in checkout_fee_amount","confidence":0.86}]}`
+
+	got, err := relationship.ParseAssistantOutput(output, doc, input)
+	if err != nil {
+		t.Fatalf("ParseAssistantOutput() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("ParseAssistantOutput() length = %d, want 1", len(got))
+	}
+	rel := got[0]
+	if rel.ID != "d:api->d:db:api_backed_by_db" {
+		t.Fatalf("ID = %q, want deterministic relationship ID", rel.ID)
+	}
+	if rel.Metadata[relationship.MetadataAssistive] != "true" {
+		t.Fatalf("Metadata[assistive] = %q, want true", rel.Metadata[relationship.MetadataAssistive])
+	}
+	if rel.Metadata[relationship.MetadataAssistProvider] != relationship.AssistProviderCodexCLI {
+		t.Fatalf("Metadata[assist_provider] = %q, want codex_cli", rel.Metadata[relationship.MetadataAssistProvider])
+	}
+}
+
+// TestBuildWithAssistDedupeAgainstDeterministicEdges verifies assist proposals cannot duplicate baseline edges.
+func TestBuildWithAssistDedupeAgainstDeterministicEdges(t *testing.T) {
+	doc := types.NormalizedDocument{ID: "d", Body: "checkout requirement drives amount"}
+	input := []entities.CanonicalEntity{
+		canonical("d:req", "d", types.Requirement, "checkout requirement"),
+		canonical("d:api", "d", types.APIField, "amount"),
+	}
+	assistant := &fakeAssistant{rels: []types.Relationship{{
+		FromID:     "d:req",
+		ToID:       "d:api",
+		Kind:       types.RequirementAffectsAPI,
+		Confidence: 0.91,
+		Evidence:   []string{"checkout requirement drives amount"},
+	}}}
+
+	got := relationship.BuildWithAssist(context.Background(), doc, input, assistant)
+
+	if len(got) != len(relationship.Build(input)) {
+		t.Fatalf("BuildWithAssist() length = %d, want deterministic length", len(got))
+	}
+}
+
+// TestBuildWithAssistPopulatesAssistiveMetadata verifies accepted edges record provider and evidence metadata.
+func TestBuildWithAssistPopulatesAssistiveMetadata(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:req", "d", types.Dependency, "Checkout fee rule"),
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+	}
+	assistant := &fakeAssistant{provider: "fake_provider", rels: []types.Relationship{{
+		FromID:     "d:req",
+		ToID:       "d:api",
+		Kind:       types.RequirementAffectsAPI,
+		Confidence: 0.88,
+		Evidence:   []string{"Checkout fee rule requires checkoutFeeAmount"},
+	}}}
+
+	got := relationship.BuildWithAssist(context.Background(), doc, input, assistant)
+
+	rel, ok := findKind(got, types.RequirementAffectsAPI)
+	if !ok {
+		t.Fatalf("BuildWithAssist() missing assistive relationship, got %+v", got)
+	}
+	if rel.Metadata[relationship.MetadataAssistive] != "true" {
+		t.Fatalf("Metadata[assistive] = %q, want true", rel.Metadata[relationship.MetadataAssistive])
+	}
+	if rel.Metadata[relationship.MetadataAssistProvider] != "fake_provider" {
+		t.Fatalf("Metadata[assist_provider] = %q, want fake_provider", rel.Metadata[relationship.MetadataAssistProvider])
+	}
+	if rel.Metadata[relationship.MetadataAssistEvidence] != "Checkout fee rule requires checkoutFeeAmount" {
+		t.Fatalf("Metadata[assist_evidence] = %q, want source quote", rel.Metadata[relationship.MetadataAssistEvidence])
+	}
+}
+
+// TestBuildWithAssistFallsBackOnAssistantFailure verifies assistant errors preserve deterministic output.
+func TestBuildWithAssistFallsBackOnAssistantFailure(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:req", "d", types.Requirement, "Checkout fee rule"),
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+	}
+	assistant := &fakeAssistant{err: errors.New("codex unavailable")}
+
+	got := relationship.BuildWithAssist(context.Background(), doc, input, assistant)
+	want := relationship.Build(input)
+
+	if len(got) != len(want) {
+		t.Fatalf("BuildWithAssist() length = %d, want %d", len(got), len(want))
+	}
+	if assistant.calls != 1 {
+		t.Fatalf("assistant calls = %d, want 1", assistant.calls)
+	}
+}
+
+// TestCachedAssistantReusesDiskResult verifies relationship assistance is cached by document and entity IDs.
+func TestCachedAssistantReusesDiskResult(t *testing.T) {
+	doc := assistDoc()
+	input := []entities.CanonicalEntity{
+		canonical("d:req", "d", types.Dependency, "Checkout fee rule"),
+		canonical("d:api", "d", types.APIField, "checkoutFeeAmount"),
+	}
+	fake := &fakeAssistant{rels: []types.Relationship{{
+		FromID:     "d:req",
+		ToID:       "d:api",
+		Kind:       types.RequirementAffectsAPI,
+		Confidence: 0.88,
+		Evidence:   []string{"Checkout fee rule requires checkoutFeeAmount"},
+	}}}
+	cached := relationship.NewCachedAssistant(t.TempDir(), fake)
+
+	first, err := cached.ProposeRelationships(context.Background(), doc, input)
+	if err != nil {
+		t.Fatalf("ProposeRelationships() error = %v", err)
+	}
+	second, err := cached.ProposeRelationships(context.Background(), doc, input)
+	if err != nil {
+		t.Fatalf("ProposeRelationships() cached error = %v", err)
+	}
+	if fake.calls != 1 {
+		t.Fatalf("assistant calls = %d, want 1", fake.calls)
+	}
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("cached relationship lengths = %d/%d, want 1/1", len(first), len(second))
 	}
 }
 

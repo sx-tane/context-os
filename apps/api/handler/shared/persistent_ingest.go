@@ -19,6 +19,7 @@ import (
 	"context-os/internal/ingestion"
 	"context-os/internal/normalization"
 	"context-os/internal/pipeline"
+	"context-os/internal/relationship"
 )
 
 // PersistentIngestTimeout allows Codex-backed source reads to complete while
@@ -37,14 +38,15 @@ var persistentIngest struct {
 // includes workspace_id, handlers route through this service so source events,
 // graph state, connector sync rows, and audit rows agree.
 type PersistentIngestService struct {
-	workspaces      repository.WorkspaceRepository
-	events          repository.EventRepository
-	entities        repository.EntityRepository
-	mismatches      repository.MismatchRepository
-	syncs           repository.SyncRepository
-	audit           repository.AuditRepository
-	parsedWriter    *normalization.DocumentWriter
-	semanticMatcher identity.Matcher
+	workspaces            repository.WorkspaceRepository
+	events                repository.EventRepository
+	entities              repository.EntityRepository
+	mismatches            repository.MismatchRepository
+	syncs                 repository.SyncRepository
+	audit                 repository.AuditRepository
+	parsedWriter          *normalization.DocumentWriter
+	semanticMatcher       identity.Matcher
+	relationshipAssistant relationship.Assistant
 }
 
 // PersistentIngestOption configures optional persistence helpers.
@@ -58,6 +60,11 @@ func WithPersistentParsedWriter(w *normalization.DocumentWriter) PersistentInges
 // WithPersistentSemanticMatcher enables semantic identity matching during ingest.
 func WithPersistentSemanticMatcher(m identity.Matcher) PersistentIngestOption {
 	return func(s *PersistentIngestService) { s.semanticMatcher = m }
+}
+
+// WithPersistentRelationshipAssistant enables validated relationship assistance during ingest.
+func WithPersistentRelationshipAssistant(a relationship.Assistant) PersistentIngestOption {
+	return func(s *PersistentIngestService) { s.relationshipAssistant = a }
 }
 
 // NewPersistentIngestService returns a DB-backed production ingest service.
@@ -251,13 +258,14 @@ func (s *PersistentIngestService) prepare(ctx context.Context, workspacePath, co
 
 func (s *PersistentIngestService) pipelineStores(workspaceID, traceID string) *pipeline.Stores {
 	return &pipeline.Stores{
-		WorkspaceID:     workspaceID,
-		TraceID:         traceID,
-		Events:          s.events,
-		Entities:        s.entities,
-		Mismatches:      s.mismatches,
-		ParsedWriter:    s.parsedWriter,
-		SemanticMatcher: s.semanticMatcher,
+		WorkspaceID:           workspaceID,
+		TraceID:               traceID,
+		Events:                s.events,
+		Entities:              s.entities,
+		Mismatches:            s.mismatches,
+		ParsedWriter:          s.parsedWriter,
+		SemanticMatcher:       s.semanticMatcher,
+		RelationshipAssistant: s.relationshipAssistant,
 	}
 }
 
@@ -347,11 +355,12 @@ func graphOnlyStores(stores *pipeline.Stores) *pipeline.Stores {
 		return nil
 	}
 	return &pipeline.Stores{
-		WorkspaceID:     stores.WorkspaceID,
-		TraceID:         stores.TraceID,
-		Entities:        stores.Entities,
-		ParsedWriter:    stores.ParsedWriter,
-		SemanticMatcher: stores.SemanticMatcher,
+		WorkspaceID:           stores.WorkspaceID,
+		TraceID:               stores.TraceID,
+		Entities:              stores.Entities,
+		ParsedWriter:          stores.ParsedWriter,
+		SemanticMatcher:       stores.SemanticMatcher,
+		RelationshipAssistant: stores.RelationshipAssistant,
 	}
 }
 

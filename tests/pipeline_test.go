@@ -32,6 +32,10 @@ type pipelineScenario struct {
 			ContentPath  string `yaml:"content_path"`
 			MetadataPath string `yaml:"metadata_path"`
 		} `yaml:"source_request"`
+		Assistant struct {
+			ImprovesRecall bool                    `yaml:"improves_recall"`
+			Proposals      []assistantRelationship `yaml:"proposals"`
+		} `yaml:"assistant"`
 	} `yaml:"inputs"`
 	Expected struct {
 		GoldenPath string `yaml:"golden_path"`
@@ -41,14 +45,18 @@ type pipelineScenario struct {
 }
 
 type metricThresholds struct {
-	PrecisionMin         float64 `yaml:"precision_min"`
-	RecallMin            float64 `yaml:"recall_min"`
-	FalsePositiveRateMax float64 `yaml:"false_positive_rate_max"`
+	PrecisionMin                     float64 `yaml:"precision_min"`
+	RecallMin                        float64 `yaml:"recall_min"`
+	FalsePositiveRateMax             float64 `yaml:"false_positive_rate_max"`
+	RelationshipPrecisionMin         float64 `yaml:"relationship_precision_min"`
+	RelationshipRecallMin            float64 `yaml:"relationship_recall_min"`
+	RelationshipFalsePositiveRateMax float64 `yaml:"relationship_false_positive_rate_max"`
 }
 
 type pipelineGolden struct {
-	Entities   []goldenEntity   `json:"entities"`
-	Mismatches []goldenMismatch `json:"mismatches"`
+	Entities      []goldenEntity       `json:"entities"`
+	Relationships []goldenRelationship `json:"relationships"`
+	Mismatches    []goldenMismatch     `json:"mismatches"`
 }
 
 type goldenEntity struct {
@@ -66,6 +74,54 @@ type goldenMismatch struct {
 	EntityNames   []string `json:"entity_names"`
 }
 
+type goldenRelationship struct {
+	From          string   `json:"from"`
+	To            string   `json:"to"`
+	Kind          string   `json:"kind"`
+	ConfidenceMin float64  `json:"confidence_min"`
+	Evidence      []string `json:"evidence"`
+}
+
+type assistantRelationship struct {
+	From       string  `yaml:"from"`
+	To         string  `yaml:"to"`
+	Kind       string  `yaml:"kind"`
+	Evidence   string  `yaml:"evidence"`
+	Confidence float64 `yaml:"confidence"`
+}
+
+type scenarioRelationshipAssistant struct {
+	proposals []assistantRelationship
+}
+
+// ProposeRelationships converts scenario relationship proposals into fake assistant edges.
+func (a scenarioRelationshipAssistant) ProposeRelationships(ctx context.Context, doc types.NormalizedDocument, canonical []entities.CanonicalEntity) ([]types.Relationship, error) {
+	_ = ctx
+	_ = doc
+	byName := canonicalByName(canonical)
+	out := make([]types.Relationship, 0, len(a.proposals))
+	for _, proposal := range a.proposals {
+		from, fromOK := byName[proposal.From]
+		to, toOK := byName[proposal.To]
+		if !fromOK || !toOK {
+			continue
+		}
+		out = append(out, types.Relationship{
+			FromID:     from.Entity.ID,
+			ToID:       to.Entity.ID,
+			Kind:       types.RelationshipKind(proposal.Kind),
+			Confidence: proposal.Confidence,
+			Evidence:   []string{proposal.Evidence},
+		})
+	}
+	return out, nil
+}
+
+// Provider returns the fake provider label used in benchmark metadata.
+func (a scenarioRelationshipAssistant) Provider() string {
+	return "fake_benchmark"
+}
+
 // TestPipelineHarnessScenarios verifies shared pipeline scenarios produce deterministic semantic entities and evidence-backed mismatches.
 func TestPipelineHarnessScenarios(t *testing.T) {
 	scenarios := loadPipelineScenarios(t)
@@ -78,7 +134,7 @@ func TestPipelineHarnessScenarios(t *testing.T) {
 			assertScenarioContract(t, scenario)
 
 			golden := loadPipelineGolden(t, scenario.Expected.GoldenPath)
-			result := runPipelineScenario(t, scenario)
+			result := runPipelineScenario(t, scenario, nil)
 			sortPipelineResult(&result)
 
 			matchedEntities := assertGoldenEntities(t, result.Entities, golden.Entities)
@@ -88,11 +144,102 @@ func TestPipelineHarnessScenarios(t *testing.T) {
 	}
 }
 
+// TestRelationshipBenchmarkScenarios verifies relationship quality gates for deterministic baseline and fake-assisted runs.
+func TestRelationshipBenchmarkScenarios(t *testing.T) {
+	scenarios := loadRelationshipScenarios(t)
+	if len(scenarios) == 0 {
+		t.Fatalf("loadRelationshipScenarios() length = %d, want at least one scenario", len(scenarios))
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.ID, func(t *testing.T) {
+			assertRelationshipScenarioContract(t, scenario)
+
+			golden := loadPipelineGolden(t, scenario.Expected.GoldenPath)
+			baseline := runPipelineScenario(t, scenario, nil)
+			sortPipelineResult(&baseline)
+
+			assisted := runPipelineScenario(t, scenario, &pipeline.Stores{
+				RelationshipAssistant: scenarioRelationshipAssistant{proposals: scenario.Inputs.Assistant.Proposals},
+			})
+			sortPipelineResult(&assisted)
+
+			assertGoldenEntities(t, assisted.Entities, golden.Entities)
+			assertGoldenMismatches(t, assisted, golden.Mismatches)
+			metrics := relationshipMetricResult(assisted, golden.Relationships)
+			assertRelationshipThresholds(t, scenario.Thresholds, metrics)
+			assertGoldenRelationships(t, assisted, golden.Relationships)
+
+			if scenario.Inputs.Assistant.ImprovesRecall {
+				baselineMetrics := relationshipMetricResult(baseline, golden.Relationships)
+				if metrics.Recall <= baselineMetrics.Recall {
+					t.Fatalf("relationship recall = %v, want greater than deterministic baseline %v", metrics.Recall, baselineMetrics.Recall)
+				}
+			}
+		})
+	}
+}
+
+// TestRelationshipMetricsDetectMissingExpectedEdges verifies recall drops below the benchmark gate when expected edges are absent.
+func TestRelationshipMetricsDetectMissingExpectedEdges(t *testing.T) {
+	result := pipelines.Result{}
+	want := []goldenRelationship{{From: "A", To: "B", Kind: string(types.RequirementAffectsAPI)}}
+
+	metrics := relationshipMetricResult(result, want)
+
+	if metrics.Recall >= 0.70 {
+		t.Fatalf("relationship recall = %v, want below missing-edge gate", metrics.Recall)
+	}
+}
+
+// TestRelationshipMetricsDetectUnsupportedExtraEdges verifies false-positive rate rises when unsupported edges are emitted.
+func TestRelationshipMetricsDetectUnsupportedExtraEdges(t *testing.T) {
+	result := pipelines.Result{
+		Entities: []entities.CanonicalEntity{
+			{Entity: types.Entity{ID: "a", Name: "A"}},
+			{Entity: types.Entity{ID: "b", Name: "B"}},
+		},
+		Relationships: []types.Relationship{{
+			ID:     "a->b:requirement_affects_api",
+			FromID: "a",
+			ToID:   "b",
+			Kind:   types.RequirementAffectsAPI,
+		}},
+	}
+
+	metrics := relationshipMetricResult(result, nil)
+
+	if metrics.FalsePositiveRate <= 0.15 {
+		t.Fatalf("relationship false positive rate = %v, want above extra-edge gate", metrics.FalsePositiveRate)
+	}
+}
+
 // loadPipelineScenarios returns every shared reasoning pipeline scenario in deterministic path order.
 func loadPipelineScenarios(t *testing.T) []pipelineScenario {
 	t.Helper()
 
 	paths, err := filepath.Glob(repoPath(t, "tests/harness/scenarios/reasoning/*.yaml"))
+	if err != nil {
+		t.Fatalf("Glob() error = %v", err)
+	}
+	sort.Strings(paths)
+
+	scenarios := make([]pipelineScenario, 0, len(paths))
+	for _, path := range paths {
+		var scenario pipelineScenario
+		if err := yaml.Unmarshal(readFile(t, path), &scenario); err != nil {
+			t.Fatalf("Unmarshal(%q) error = %v", path, err)
+		}
+		scenarios = append(scenarios, scenario)
+	}
+	return scenarios
+}
+
+// loadRelationshipScenarios returns every shared relationship benchmark scenario in deterministic path order.
+func loadRelationshipScenarios(t *testing.T) []pipelineScenario {
+	t.Helper()
+
+	paths, err := filepath.Glob(repoPath(t, "tests/harness/scenarios/relationship/*.yaml"))
 	if err != nil {
 		t.Fatalf("Glob() error = %v", err)
 	}
@@ -142,6 +289,45 @@ func assertScenarioContract(t *testing.T, scenario pipelineScenario) {
 	}
 }
 
+// assertRelationshipScenarioContract verifies required relationship benchmark fields are populated.
+func assertRelationshipScenarioContract(t *testing.T, scenario pipelineScenario) {
+	t.Helper()
+
+	if scenario.ID == "" {
+		t.Fatalf("scenario ID = %q, want stable identifier", scenario.ID)
+	}
+	if scenario.Area != "relationship" {
+		t.Fatalf("scenario area = %q, want relationship", scenario.Area)
+	}
+	if scenario.Level != "benchmark" {
+		t.Fatalf("scenario level = %q, want benchmark", scenario.Level)
+	}
+	if scenario.Description == "" {
+		t.Fatalf("scenario description = %q, want one sentence", scenario.Description)
+	}
+	if scenario.Owner != "internal/pipeline" {
+		t.Fatalf("scenario owner = %q, want internal/pipeline", scenario.Owner)
+	}
+	if scenario.Inputs.SourceRequest.URI == "" {
+		t.Fatalf("scenario source request URI = %q, want fixture URI", scenario.Inputs.SourceRequest.URI)
+	}
+	if scenario.Inputs.SourceRequest.ContentPath == "" {
+		t.Fatalf("scenario content path = %q, want fixture path", scenario.Inputs.SourceRequest.ContentPath)
+	}
+	if scenario.Expected.GoldenPath == "" {
+		t.Fatalf("scenario golden path = %q, want golden output path", scenario.Expected.GoldenPath)
+	}
+	if scenario.Thresholds.RelationshipPrecisionMin == 0 {
+		t.Fatalf("relationship precision threshold = %v, want configured gate", scenario.Thresholds.RelationshipPrecisionMin)
+	}
+	if scenario.Thresholds.RelationshipRecallMin == 0 {
+		t.Fatalf("relationship recall threshold = %v, want configured gate", scenario.Thresholds.RelationshipRecallMin)
+	}
+	if len(scenario.Evidence) == 0 {
+		t.Fatalf("scenario evidence length = %d, want fixture evidence reference", len(scenario.Evidence))
+	}
+}
+
 // loadPipelineGolden reads the deterministic semantic golden output for one scenario.
 func loadPipelineGolden(t *testing.T, path string) pipelineGolden {
 	t.Helper()
@@ -154,7 +340,7 @@ func loadPipelineGolden(t *testing.T, path string) pipelineGolden {
 }
 
 // runPipelineScenario executes one scenario through the current full pipeline with local fixtures only.
-func runPipelineScenario(t *testing.T, scenario pipelineScenario) pipelines.Result {
+func runPipelineScenario(t *testing.T, scenario pipelineScenario, stores *pipeline.Stores) pipelines.Result {
 	t.Helper()
 
 	metadata := map[string]string{}
@@ -170,7 +356,7 @@ func runPipelineScenario(t *testing.T, scenario pipelineScenario) pipelines.Resu
 		URI:      scenario.Inputs.SourceRequest.URI,
 		Content:  content,
 		Metadata: metadata,
-	}, nil)
+	}, stores)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -184,6 +370,9 @@ func sortPipelineResult(result *pipelines.Result) {
 	})
 	sort.Slice(result.Mismatches, func(i, j int) bool {
 		return result.Mismatches[i].ID < result.Mismatches[j].ID
+	})
+	sort.Slice(result.Relationships, func(i, j int) bool {
+		return result.Relationships[i].ID < result.Relationships[j].ID
 	})
 }
 
@@ -248,6 +437,72 @@ func assertGoldenMismatches(t *testing.T, result pipelines.Result, want []golden
 		}
 	}
 	return matched
+}
+
+// assertGoldenRelationships verifies each expected semantic relationship includes confidence and evidence.
+func assertGoldenRelationships(t *testing.T, result pipelines.Result, want []goldenRelationship) int {
+	t.Helper()
+
+	entityNames := entityNamesByID(result.Entities)
+	matched := 0
+	for _, expected := range want {
+		rel, ok := findGoldenRelationship(result.Relationships, entityNames, expected)
+		if !ok {
+			t.Fatalf("relationship %s -> %s (%s) present = false, want true", expected.From, expected.To, expected.Kind)
+		}
+		matched++
+		if rel.Confidence < expected.ConfidenceMin {
+			t.Fatalf("relationship %s -> %s confidence = %v, want >= %v", expected.From, expected.To, rel.Confidence, expected.ConfidenceMin)
+		}
+		if !sameStrings(rel.Evidence, expected.Evidence) {
+			t.Fatalf("relationship %s -> %s evidence = %v, want %v", expected.From, expected.To, rel.Evidence, expected.Evidence)
+		}
+	}
+	return matched
+}
+
+type relationshipMetrics struct {
+	Precision         float64
+	Recall            float64
+	FalsePositiveRate float64
+	Matched           int
+	Expected          int
+	Actual            int
+}
+
+// relationshipMetricResult computes semantic relationship precision, recall, and false-positive rate.
+func relationshipMetricResult(result pipelines.Result, want []goldenRelationship) relationshipMetrics {
+	entityNames := entityNamesByID(result.Entities)
+	actual := semanticRelationships(result.Relationships)
+	matched := 0
+	for _, expected := range want {
+		if _, ok := findGoldenRelationship(actual, entityNames, expected); ok {
+			matched++
+		}
+	}
+	return relationshipMetrics{
+		Precision:         precision(matched, len(actual)),
+		Recall:            ratio(matched, len(want)),
+		FalsePositiveRate: falsePositiveRate(matched, len(actual)),
+		Matched:           matched,
+		Expected:          len(want),
+		Actual:            len(actual),
+	}
+}
+
+// assertRelationshipThresholds verifies relationship precision, recall, and false-positive gates pass.
+func assertRelationshipThresholds(t *testing.T, thresholds metricThresholds, metrics relationshipMetrics) {
+	t.Helper()
+
+	if metrics.Precision < thresholds.RelationshipPrecisionMin {
+		t.Fatalf("relationship precision = %v, want >= %v", metrics.Precision, thresholds.RelationshipPrecisionMin)
+	}
+	if metrics.Recall < thresholds.RelationshipRecallMin {
+		t.Fatalf("relationship recall = %v, want >= %v", metrics.Recall, thresholds.RelationshipRecallMin)
+	}
+	if metrics.FalsePositiveRate > thresholds.RelationshipFalsePositiveRateMax {
+		t.Fatalf("relationship false positive rate = %v, want <= %v", metrics.FalsePositiveRate, thresholds.RelationshipFalsePositiveRateMax)
+	}
 }
 
 // assertMetricThresholds verifies scenario precision, recall, and false-positive gates pass for this run.
@@ -334,11 +589,55 @@ func findMismatch(mismatches []types.Mismatch, summary string) (types.Mismatch, 
 	return types.Mismatch{}, false
 }
 
+// findGoldenRelationship returns the relationship matching the expected names and kind.
+func findGoldenRelationship(rels []types.Relationship, names map[string]string, expected goldenRelationship) (types.Relationship, bool) {
+	for _, rel := range rels {
+		if rel.Kind == types.CoOccursInDocument {
+			continue
+		}
+		if names[rel.FromID] != expected.From {
+			continue
+		}
+		if names[rel.ToID] != expected.To {
+			continue
+		}
+		if string(rel.Kind) != expected.Kind {
+			continue
+		}
+		if len(expected.Evidence) > 0 && !sameStrings(rel.Evidence, expected.Evidence) {
+			continue
+		}
+		return rel, true
+	}
+	return types.Relationship{}, false
+}
+
+// semanticRelationships returns non-co-occurrence relationships for quality scoring.
+func semanticRelationships(rels []types.Relationship) []types.Relationship {
+	out := make([]types.Relationship, 0, len(rels))
+	for _, rel := range rels {
+		if rel.Kind == types.CoOccursInDocument {
+			continue
+		}
+		out = append(out, rel)
+	}
+	return out
+}
+
 // entityNamesByID returns a lookup table from entity ID to entity surface name.
 func entityNamesByID(input []entities.CanonicalEntity) map[string]string {
 	out := make(map[string]string, len(input))
 	for _, entity := range input {
 		out[entity.Entity.ID] = entity.Entity.Name
+	}
+	return out
+}
+
+// canonicalByName returns a lookup table from entity surface name to canonical entity.
+func canonicalByName(input []entities.CanonicalEntity) map[string]entities.CanonicalEntity {
+	out := make(map[string]entities.CanonicalEntity, len(input))
+	for _, entity := range input {
+		out[entity.Entity.Name] = entity
 	}
 	return out
 }

@@ -114,6 +114,13 @@ apps/api/
 
 Local DB artifacts, connector syncs, graph state, findings, evidence, confidence, and audit history remain the source of truth for double-checking and local analysis. Concrete live Codex answers are persisted automatically as local evidence artifacts when connector and source URI provenance are available; broad natural-language connector answers remain derived chat output and are not saved as source evidence.
 
+Relationship assistance is opt-in. By default, ingest uses only deterministic relationship rules.
+Set `CONTEXTOS_AI_RELATIONSHIPS=codex` to let persistent ingest call the local Codex CLI for
+additional same-document typed relationship proposals. Accepted proposals must use existing
+entities, existing relationship kinds, confidence `>= 0.75`, and evidence quoted from the same
+document. Results are cached under `storage/relationship-cache/`; failed Codex calls fall back to
+deterministic relationships.
+
 Workspace endpoints return explicit API response objects with snake_case JSON fields such as `path`, `created_at`, `event_count`, and `source_uri`; handlers do not expose raw repository structs.
 
 GitHub, Jira, and Slack ingest requests accept `provider`. Use `"token"` or omit it for direct API-token ingestion. Use `"codex"` for Codex CLI plugin ingestion; streaming clients should call the matching `/ingest/stream` endpoint.

@@ -5,6 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	handlerartifacts "context-os/apps/api/handler/artifacts"
@@ -28,6 +30,7 @@ import (
 	"context-os/internal/execution"
 	"context-os/internal/identity"
 	"context-os/internal/normalization"
+	"context-os/internal/relationship"
 	"context-os/internal/store"
 	internalsync "context-os/internal/sync"
 
@@ -163,6 +166,7 @@ func newHandlers(sqlDB *sql.DB) handlers {
 		wsStore, evStore, entityStore, mismatchStore, syncStore, auditStore,
 		shared.WithPersistentParsedWriter(parsedWriter),
 		shared.WithPersistentSemanticMatcher(identity.WorkerMatcher{Embedder: aiClient}),
+		shared.WithPersistentRelationshipAssistant(relationshipAssistantFromEnv()),
 	))
 
 	syncWorker := internalsync.NewWorker(wsStore, syncStore, evStore)
@@ -183,4 +187,11 @@ func newHandlers(sqlDB *sql.DB) handlers {
 		artifacts: handlerartifacts.NewHandler(wsStore, evStore),
 		chat:      handlerchat.NewHandler(internalchat.NewServiceWithLiveAnswerer(wsStore, evStore, syncStore, internalchat.NewCodexAnswerer())),
 	}
+}
+
+func relationshipAssistantFromEnv() relationship.Assistant {
+	if strings.ToLower(strings.TrimSpace(os.Getenv("CONTEXTOS_AI_RELATIONSHIPS"))) != "codex" {
+		return nil
+	}
+	return relationship.NewCachedAssistant("storage/relationship-cache", relationship.NewCodexAssistant())
 }

@@ -1,0 +1,14 @@
+{
+  "entities": [
+    {
+      "name": "couponStatus",
+      "type": "api_field"
+    },
+    {
+      "name": "refundState",
+      "type": "api_field"
+    }
+  ],
+  "relationships": [],
+  "mismatches": []
+}
