@@ -57,7 +57,7 @@ extension point for swapping in a real transformer without changing the
 request/response contract. Bodies are capped at 1 MiB.
 
 The Go side consumes this endpoint through
-[`internal/aiworker`](../../internal/aiworker/README.md), which the identity
+[`internal/worker/aiworker`](../../internal/worker/aiworker/README.md), which the identity
 stage's opt-in `WorkerMatcher` uses for semantic candidate detection.
 
 ## Tests

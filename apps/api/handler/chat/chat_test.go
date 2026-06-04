@@ -13,7 +13,7 @@ import (
 	"context-os/domain/entities"
 	"context-os/domain/repository"
 	"context-os/domain/types"
-	internalchat "context-os/internal/chat"
+	internalchat "context-os/internal/runtime/chat"
 )
 
 // TestQueryStartsAsyncEvidenceSaveForConcreteLiveSource verifies non-stream chat returns a saving status for live source evidence.

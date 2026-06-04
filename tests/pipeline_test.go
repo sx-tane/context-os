@@ -13,9 +13,9 @@ import (
 	"context-os/domain/entities"
 	"context-os/domain/pipelines"
 	"context-os/domain/types"
-	"context-os/internal/ingestion"
 	"context-os/internal/pipeline"
 	githubsource "context-os/internal/source/github"
+	"context-os/internal/stages/ingestion"
 
 	"gopkg.in/yaml.v2"
 )

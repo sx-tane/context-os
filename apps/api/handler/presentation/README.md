@@ -12,6 +12,7 @@ Routes under `/presentation/*` expose graph-backed role summaries for PMO, prese
 ## Notes
 
 - Execution evidence is assistive and never replaces deterministic mismatch evidence.
+- The handler delegates analysis through the grouped stage packages under `internal/stages/*` plus source connectors under `internal/source/*`; route behavior stays the same even though internal import paths are grouped.
 - The endpoint preserves mismatch IDs, confidence, impact, severity, evidence, and recommended next actions for API/UI stability.
 - Codex-backed findings reject connector-only URIs such as `github`, `jira`, `slack`, `googledrive`, `notion`, and `sharepoint` with `400 {"error":"source_too_broad"}` plus concrete examples. Users must choose a specific repo, project, issue, channel, thread, document, or folder before local analysis runs.
 - Fresh findings responses include `entity_count` and `relationship_count` from the pipeline run so the frontend can explain the resulting graph size.

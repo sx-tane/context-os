@@ -88,5 +88,5 @@ cd apps/ai-worker && uv sync
 Restart your shell or run `source ~/.bashrc` to reload the updated PATH, then start all services:
 
 ```bash
-./scripts/start-all.sh
+./scripts/start-local.sh
 ```

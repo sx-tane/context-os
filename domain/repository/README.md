@@ -2,7 +2,7 @@
 
 Domain repository interfaces for workspace-scoped persistence.
 
-Implementations live in `internal/store`. Nothing in `domain/` depends on `internal/`.
+Implementations live in `internal/persistence/store`. Nothing in `domain/` depends on `internal/`.
 
 ## Interfaces
 

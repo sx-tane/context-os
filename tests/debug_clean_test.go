@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"context-os/domain/contracts"
-	"context-os/internal/ingestion"
 	"context-os/internal/pipeline"
 	githubsource "context-os/internal/source/github"
+	"context-os/internal/stages/ingestion"
 )
 
 func TestDebugClean(t *testing.T) {

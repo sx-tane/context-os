@@ -41,8 +41,8 @@ Natural language source questions do not fall back to findings. If live Codex lo
 
 The `KnowledgeInstall` component (`src/lib/components/knowledge/KnowledgeInstall.svelte`) is the core first-run flow:
 - Shows readiness per connector (Codex plugin installed + logged in).
-- Lets users save a live GitHub, Jira, Slack, Notion, SharePoint/OneDrive, or Google Drive connector by enabling the plugin row; **Check plugin account** discovery is optional and only narrows the default scope to selected repos, projects, channels, pages, folders, or sites visible to the current plugin login.
-- Saves external connectors and optional narrowed sources as connected source references via `POST /workspace/source`; manual URI entry is a collapsed fallback when discovery returns nothing or the user needs a specific pasted link.
+- Lets users save a live GitHub, Jira, Slack, Notion, SharePoint/OneDrive, or Google Drive connector by enabling the plugin row; source setup does not list repositories, projects, channels, pages, folders, or sites.
+- Saves external connectors as connector-level source references via `POST /workspace/source`.
 - Shows filesystem as a separate local upload area with **Choose files**, **Choose folder**, and **Upload and ingest** controls because filesystem content must live inside ContextOS storage.
 - Marks the project as knowledge-ready on completion.
 - Reopenable at any time via the sidebar button.
@@ -93,7 +93,7 @@ All seven connectors are available in the knowledge install wizard:
 
 | Connector | Codex Plugin | Auth Fallback |
 |---|---|---|
-| GitHub | `github@openai-curated` | `GITHUB_TOKEN` env var; source discovery/chat prompts may use read-only `gh` when already authenticated and plugin listing is insufficient |
+| GitHub | `github@openai-curated` | `GITHUB_TOKEN` env var; chat prompts may use read-only `gh` when already authenticated and plugin listing is insufficient |
 | Jira | `atlassian-rovo@openai-curated` | `JIRA_TOKEN` + `JIRA_EMAIL` + `JIRA_BASE_URL` |
 | Slack | `slack@openai-curated` | `SLACK_BOT_TOKEN` env var |
 | Notion | `notion@openai-curated` | `NOTION_TOKEN` env var |
@@ -126,7 +126,7 @@ cd apps/frontend
 bun run codegen
 ```
 
-This reads `apps/api/docs/swagger.json` and writes `src/lib/generated/api.d.ts`. The generated file is committed to the repository because TypeScript needs it to compile. `start-all.sh` runs this step automatically on every startup.
+This reads `apps/api/docs/swagger.json` and writes `src/lib/generated/api.d.ts`. The generated file is committed to the repository because TypeScript needs it to compile. `start-local.sh` runs this step automatically on every startup.
 
 ```
 swag init  →  apps/api/docs/swagger.json  →  bun run codegen  →  src/lib/generated/api.d.ts

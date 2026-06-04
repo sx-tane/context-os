@@ -15,4 +15,4 @@ Svelte components for graph-backed context views.
 - Prefer readable typed relationship maps over dense always-on network diagrams: keep entity navigation compact, keep names directly visible, and draw relationship lines for the selected entity instead of every edge at once.
 - The graph API returns the filtered signal graph by default. View-model helpers still ignore low-confidence `co_occurs_in_document` links if old/debug responses include them, and typed relationships rank ahead of generic co-occurrence links.
 - The Graph tab cleanup action is route-owned and confirmation-gated. It permanently removes only backend-classified low-signal persisted graph rows, then refreshes workspace status, Activity, and Graph; it does not delete source artifacts, findings, chat history, or connected sources.
-- Update `internal/graph/README.md` and API handler docs when graph response fields change.
+- Update `internal/stages/graph/README.md` and API handler docs when graph response fields change.

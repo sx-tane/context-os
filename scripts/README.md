@@ -29,7 +29,7 @@ After it finishes, restart your shell or run `source ~/.bashrc` to reload the up
 
 ---
 
-## start-all.sh / start-local.sh
+## start-local.sh
 
 Starts all local services in a single terminal session. Run this after setup is complete.
 
@@ -41,7 +41,7 @@ What it does:
 - Regenerates frontend TypeScript types only when missing, older than `swagger.json`, or `UPDATE_API_TYPES=1` is set
 - Reuses an already-running healthy ContextOS stack on API `8080`, worker `8081`, and frontend `5173` by printing the existing URLs and log location instead of starting a second stack
 - Fails fast when a required port is occupied by something that does not pass the expected ContextOS health check and prints the owning process
-- Checks all required Codex plugins. Missing plugins are reported without prompting; to install them during startup, run `INSTALL_CODEX_PLUGINS=1 ./scripts/start-all.sh`:
+- Checks all required Codex plugins. Missing plugins are reported without prompting; to install them during startup, run `INSTALL_CODEX_PLUGINS=1 ./scripts/start-local.sh`:
   - `github@openai-curated`
   - `atlassian-rovo@openai-curated`
   - `slack@openai-curated`
@@ -56,13 +56,6 @@ What it does:
 ```bash
 chmod +x scripts/start-local.sh
 ./scripts/start-local.sh
-```
-
-Or, if you prefer the original entrypoint:
-
-```bash
-chmod +x scripts/start-all.sh
-./scripts/start-all.sh
 ```
 
 Expected output when running:
@@ -90,7 +83,7 @@ If the stack is already running, startup prints the existing frontend/API/worker
 ./scripts/status-local.sh
 ```
 
-`start-all.sh` writes service logs to `.tmp/contextos/logs/` for the current run. When an existing healthy stack is reused, tail those files from another terminal:
+`start-local.sh` writes service logs to `.tmp/contextos/logs/` for the current run. When an existing healthy stack is reused, tail those files from another terminal:
 
 ```bash
 tail -F .tmp/contextos/logs/api.log .tmp/contextos/logs/worker.log .tmp/contextos/logs/frontend.log
@@ -106,21 +99,21 @@ Set `GITHUB_TOKEN` before running to authenticate against private repositories:
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
-./scripts/start-all.sh
+./scripts/start-local.sh
 ```
 
 Optional local debug logging is quiet by default. Enable only the layer you are investigating:
 
 ```bash
-CONTEXTOS_API_REQUEST_LOGS=1 ./scripts/start-all.sh   # Go API request start/done lines
-CONTEXTOS_PROXY_LOGS=1 ./scripts/start-all.sh         # Vite proxy request/response lines
-VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-all.sh    # Browser API request logs in dev console
+CONTEXTOS_API_REQUEST_LOGS=1 ./scripts/start-local.sh   # Go API request start/done lines
+CONTEXTOS_PROXY_LOGS=1 ./scripts/start-local.sh         # Vite proxy request/response lines
+VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-local.sh    # Browser API request logs in dev console
 ```
 
 To correlate a browser action to backend logs, enable both frontend and API request logs:
 
 ```bash
-CONTEXTOS_API_REQUEST_LOGS=1 VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-all.sh
+CONTEXTOS_API_REQUEST_LOGS=1 VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-local.sh
 ```
 
 The browser console prints lines such as `[api] -> POST /api/chat/query/stream id=web-...`, and the API terminal prints matching `http request start/done: id=web-...` lines. Without restarting, open the browser console and run `contextosAPITrace(true)` to enable browser-side request logs in localStorage, or `contextosAPITrace(false)` to disable them.
@@ -135,7 +128,7 @@ Once running:
 - **http://localhost:8080/swagger/doc.json** — Raw OpenAPI spec (Postman/Insomnia)
 - **apps/api/docs/api.html** — Standalone Redoc HTML (open directly in browser after docs are generated)
 
-Generated docs under `apps/api/docs/` are committed OpenAPI artifacts and the source for frontend type generation. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository. Normal startup reuses both to keep launch fast; run `UPDATE_API_DOCS=1 UPDATE_API_TYPES=1 ./scripts/start-all.sh` after API shape changes. The rendered docs page is `apps/api/docs/api.html`. The AI worker uses `uv run python`, so it does not depend on a system `python3.12` binary being installed.
+Generated docs under `apps/api/docs/` are committed OpenAPI artifacts and the source for frontend type generation. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository. Normal startup reuses both to keep launch fast; run `UPDATE_API_DOCS=1 UPDATE_API_TYPES=1 ./scripts/start-local.sh` after API shape changes. The rendered docs page is `apps/api/docs/api.html`. The AI worker uses `uv run python`, so it does not depend on a system `python3.12` binary being installed.
 
 ---
 

@@ -202,7 +202,7 @@ flowchart TD
   source[internal/source]
   contracts[domain/contracts]
   events[domain/events]
-  ingestion[internal/ingestion]
+  ingestion[internal/stages/ingestion]
 
   source --> contracts
   source --> events

@@ -1,19 +1,16 @@
 <script lang="ts">
     /**
      * KnowledgeInstall — guided first-run flow to connect external sources and ingest filesystem sources.
-     * Shows readiness per connector, saves source references, marks knowledge ready.
+     * Saves source references and marks knowledge ready.
      */
     import { createEventDispatcher } from "svelte";
     import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
     import type {
         CodexPlugin,
-        CodexConnectorKind,
-        CodexSourceOption,
         ConnectorKind,
         ConnectorKnowledge,
     } from "$lib/types";
     import {
-        getCodexSources,
         getWorkspaceStatus,
         getWorkspaces,
         postFilesystemUpload,
@@ -136,12 +133,6 @@
         ConnectorKind,
         boolean
     >;
-    let sourceOptions: Partial<Record<ConnectorKind, CodexSourceOption[]>> = {};
-    let sourceLoaded: Partial<Record<ConnectorKind, boolean>> = {};
-    let sourceLoading: Partial<Record<ConnectorKind, boolean>> = {};
-    let sourceErrors: Partial<Record<ConnectorKind, string>> = {};
-    let selectedSources: Partial<Record<ConnectorKind, Record<string, boolean>>> =
-        {};
     let filesystemFiles: File[] = [];
     let filesystemUploadLoading = false;
 
@@ -150,10 +141,6 @@
         logs[r.connector] = "";
         statuses[r.connector] = "idle";
         enabled[r.connector] = false;
-    }
-
-    function supportsDiscovery(connector: ConnectorKind): connector is CodexConnectorKind {
-        return connector !== "filesystem";
     }
 
     function defaultLiveSourceURI(connector: ConnectorKind) {
@@ -167,7 +154,7 @@
     // Pre-fill URIs from already-ingested connectors in project store.
     $: {
         for (const ck of $project.connectors) {
-            if (uris[ck.connector] === "" && ck.uri) {
+            if (ck.connector === "filesystem" && uris[ck.connector] === "" && ck.uri) {
                 uris[ck.connector] = ck.uri;
             }
         }
@@ -188,14 +175,6 @@
     async function toggleConnector(connector: ConnectorKind, checked: boolean) {
         enabled[connector] = checked;
         enabled = { ...enabled };
-        if (
-            checked &&
-            supportsDiscovery(connector) &&
-            !sourceLoading[connector] &&
-            !sourceLoaded[connector]
-        ) {
-            void loadSourceOptions(connector);
-        }
     }
 
     function toggleConnectorFromRow(connector: ConnectorKind, disabled: boolean, event: MouseEvent) {
@@ -208,40 +187,6 @@
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         void toggleConnector(connector, !enabled[connector]);
-    }
-
-    async function loadSourceOptions(connector: CodexConnectorKind) {
-        if (sourceLoading[connector]) return;
-        sourceLoading = { ...sourceLoading, [connector]: true };
-        sourceErrors = { ...sourceErrors, [connector]: "" };
-        try {
-            const result = await getCodexSources(connector);
-            if (!result) {
-                sourceErrors = {
-                    ...sourceErrors,
-                    [connector]: "Could not load sources from Codex.",
-                };
-                return;
-            }
-            sourceOptions = { ...sourceOptions, [connector]: result.sources };
-            sourceLoaded = { ...sourceLoaded, [connector]: true };
-            selectedSources = {
-                ...selectedSources,
-                [connector]: selectedSources[connector] ?? {},
-            };
-        } finally {
-            sourceLoading = { ...sourceLoading, [connector]: false };
-        }
-    }
-
-    function toggleSource(connector: ConnectorKind, uri: string, checked: boolean) {
-        selectedSources = {
-            ...selectedSources,
-            [connector]: {
-                ...(selectedSources[connector] ?? {}),
-                [uri]: checked,
-            },
-        };
     }
 
     function selectFilesystemFiles(event: Event) {
@@ -318,33 +263,14 @@
         }
     }
 
-    function selectedTargets(
-        enabledState = enabled,
-        uriState = uris,
-        selectedState = selectedSources,
-        optionState = sourceOptions,
-    ) {
+    function selectedTargets(enabledState = enabled, uriState = uris) {
         const targets: { connector: ConnectorKind; uri: string }[] = [];
         for (const r of REQUIRED) {
             const manualURI = uriState[r.connector].trim();
             if (!enabledState[r.connector] && !manualURI) continue;
-            let hasSpecificTarget = false;
-            const selected = selectedState[r.connector] ?? {};
-            for (const option of optionState[r.connector] ?? []) {
-                if (selected[option.uri]) {
-                    targets.push({ connector: r.connector, uri: option.uri });
-                    hasSpecificTarget = true;
-                }
-            }
-            if (manualURI) {
+            if (r.connector === "filesystem" && manualURI) {
                 targets.push({ connector: r.connector, uri: manualURI });
-                hasSpecificTarget = true;
-            }
-            if (
-                enabledState[r.connector] &&
-                r.connector !== "filesystem" &&
-                !hasSpecificTarget
-            ) {
+            } else if (enabledState[r.connector] && r.connector !== "filesystem") {
                 targets.push({
                     connector: r.connector,
                     uri: defaultLiveSourceURI(r.connector),
@@ -374,7 +300,7 @@
                 (logs[target.connector] || "") +
                 (target.connector === "filesystem"
                     ? `Ingesting ${config.label} source ${target.uri} into local workspace storage...\n`
-                    : `Saving ${config.label} source ${target.uri} for live Codex lookup...\n`);
+                    : `Saving ${config.label} as a live Codex source...\n`);
             setConnectorKnowledge(
                 target.connector,
                 target.uri,
@@ -403,7 +329,7 @@
 
                     completed += 1;
                     statuses[target.connector] = "done";
-                    logs[target.connector] += "Connected source saved. Chat will query this source live through Codex.\n";
+                    logs[target.connector] += "Connected source saved. Chat will query this connector live through Codex.\n";
                     setConnectorKnowledge(target.connector, target.uri, "ready", {
                         lastIngestedAt: undefined,
                     });
@@ -510,9 +436,6 @@
             logs = { ...logs };
             statuses = { ...statuses };
             enabled = { ...enabled };
-            selectedSources = {};
-            sourceOptions = {};
-            sourceLoaded = {};
             filesystemFiles = [];
             allDone = false;
             resetConfirmOpen = false;
@@ -522,12 +445,7 @@
         }
     }
 
-    $: selectedCount = selectedTargets(
-        enabled,
-        uris,
-        selectedSources,
-        sourceOptions,
-    ).length;
+    $: selectedCount = selectedTargets(enabled, uris).length;
     $: hasPendingFilesystemUpload =
         enabled.filesystem && filesystemFiles.length > 0;
     $: anyEnabled = selectedCount > 0 || hasPendingFilesystemUpload;
@@ -557,6 +475,11 @@
         return source.status;
     }
 
+    function sourceDisplayLabel(source: ConnectorKnowledge) {
+        if (source.connector === "filesystem") return source.uri;
+        return "Live connector";
+    }
+
     function saveButtonLabel(count: number) {
         if (filesystemUploadLoading) return "Uploading...";
         if (installing) return "Saving...";
@@ -578,7 +501,7 @@
             <div class="warn-banner">
                 Codex CLI is not logged in. Run <code
                     >codex login --device-auth</code
-                > in your terminal, then reload this page to unlock all connectors.
+                > in your terminal, then reload this page to unlock live connectors.
             </div>
         {/if}
 
@@ -594,7 +517,7 @@
                     {#each connectedSources as source (`${source.connector}:${source.uri}`)}
                         <div class="saved-source" class:error={source.status === "error"} class:ingesting={source.status === "ingesting"}>
                             <span>{connectorName(source.connector)}</span>
-                            <strong>{source.uri}</strong>
+                            <strong>{sourceDisplayLabel(source)}</strong>
                             <small>{sourceStatusLabel(source)}</small>
                         </div>
                     {/each}
@@ -634,7 +557,7 @@
                                 <span class="conn-name">{r.label}</span>
                                 {#if r.codexPlugin && !pluginReady}
                                     <span class="pill error"
-                                        >plugin not installed</span
+                                        >plugin not ready</span
                                     >
                                 {:else if r.codexPlugin && pluginReady}
                                     <span class="pill ok">Codex ready</span>
@@ -701,85 +624,12 @@
                                         <span class="hint">{r.uriHint}</span>
                                     </div>
                                 </details>
-                            {:else if supportsDiscovery(r.connector)}
+                            {:else}
                                 <div class="source-picker">
-                                    {#if sourceLoading[r.connector]}
-                                        <span class="hint">Checking sources from the logged-in Codex plugin account...</span>
-                                    {:else if sourceErrors[r.connector]}
-                                        <span class="hint error-text">{sourceErrors[r.connector]}</span>
-                                        <button
-                                            class="mini-btn"
-                                            type="button"
-                                            on:click|stopPropagation={() => {
-                                                if (supportsDiscovery(r.connector)) {
-                                                    loadSourceOptions(r.connector);
-                                                }
-                                            }}
-                                        >
-                                            Retry
-                                        </button>
-                                    {:else if sourceOptions[r.connector]?.length}
-                                        {#each sourceOptions[r.connector] ?? [] as option}
-                                            <label class="source-option">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={Boolean(selectedSources[r.connector]?.[option.uri])}
-                                                    on:change={(event) =>
-                                                        toggleSource(
-                                                            r.connector,
-                                                            option.uri,
-                                                            (event.currentTarget as HTMLInputElement).checked,
-                                                        )}
-                                                />
-                                                <span>
-                                                    <strong>{option.label}</strong>
-                                                    <small>{option.kind} · {option.uri}</small>
-                                                </span>
-                                            </label>
-                                        {/each}
-                                    {:else if sourceLoaded[r.connector]}
-                                        <span class="hint">No sources were returned from Codex for this connector.</span>
-                                        <button
-                                            class="mini-btn"
-                                            type="button"
-                                            on:click|stopPropagation={() => {
-                                                if (supportsDiscovery(r.connector)) {
-                                                    sourceLoaded = { ...sourceLoaded, [r.connector]: false };
-                                                    loadSourceOptions(r.connector);
-                                                }
-                                            }}
-                                        >
-                                            Retry source list
-                                        </button>
-                                    {:else}
-                                        <button
-                                            class="mini-btn"
-                                            type="button"
-                                            on:click|stopPropagation={() => {
-                                                if (supportsDiscovery(r.connector)) {
-                                                    loadSourceOptions(r.connector);
-                                                }
-                                            }}
-                                        >
-                                            Check plugin account
-                                        </button>
-                                        <span class="hint">Load repos, projects, channels, pages, folders, or sites visible to the current plugin login.</span>
-                                    {/if}
-                                    <span class="hint">Two ways: save this connector for live chat now, or pick a listed source to narrow the default scope.</span>
+                                    <span class="hint">
+                                        Account checked. Saving this connector lets chat use the connected Codex account without selecting repositories, channels, or folders here.
+                                    </span>
                                 </div>
-
-                                <details class="manual-source">
-                                    <summary>Enter source manually</summary>
-                                    <div class="uri-row">
-                                        <input
-                                            class="uri-input"
-                                            type="text"
-                                            placeholder={r.uriPlaceholder}
-                                            bind:value={uris[r.connector]}
-                                        />
-                                        <span class="hint">{r.uriHint}</span>
-                                    </div>
-                                </details>
                             {/if}
 
                             {#if logs[r.connector]}
@@ -1203,43 +1053,6 @@
         padding: 0.45rem 0 0.3rem;
     }
 
-    .source-option {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        border-radius: 0;
-        padding: 0.35rem 0;
-        cursor: pointer;
-        background: transparent;
-    }
-
-    .source-option:hover {
-        background: transparent;
-    }
-
-    .source-option span,
-    .source-option strong,
-    .source-option small {
-        display: block;
-        min-width: 0;
-    }
-
-    .source-option strong {
-        color: #111827;
-        font-size: 0.82rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .source-option small {
-        color: #9ca3af;
-        font-size: 0.68rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
     .mini-btn {
         height: 30px;
         width: max-content;
@@ -1276,10 +1089,6 @@
         border-bottom-color: #d1d5db;
         background-position: 100% 0;
         color: #111827;
-    }
-
-    .error-text {
-        color: #991b1b;
     }
 
     .uri-input {

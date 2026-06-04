@@ -18,12 +18,7 @@ import (
 	"context-os/domain/contracts"
 	"context-os/domain/repository"
 	"context-os/domain/types"
-	"context-os/internal/execution"
-	"context-os/internal/identity"
-	"context-os/internal/ingestion"
-	"context-os/internal/normalization"
 	"context-os/internal/pipeline"
-	stagepresentation "context-os/internal/presentation"
 	codexsource "context-os/internal/source/codex"
 	filesystemsource "context-os/internal/source/filesystem"
 	githubsource "context-os/internal/source/github"
@@ -32,6 +27,11 @@ import (
 	notionsource "context-os/internal/source/notion"
 	sharepointsource "context-os/internal/source/sharepoint"
 	slacksource "context-os/internal/source/slack"
+	"context-os/internal/stages/execution"
+	"context-os/internal/stages/identity"
+	"context-os/internal/stages/ingestion"
+	"context-os/internal/stages/normalization"
+	stagepresentation "context-os/internal/stages/presentation"
 )
 
 // findingsTimeout allows Codex-backed presentation analysis to complete while

@@ -7,7 +7,7 @@ HTTP middleware for the ContextOS API.
 `logging.go` provides `WithRequestLogging`, which wraps registered routes and can emit one start line plus one completion line for each request. Request logs are quiet by default; enable them for local debugging with:
 
 ```bash
-CONTEXTOS_API_REQUEST_LOGS=1 ./scripts/start-all.sh
+CONTEXTOS_API_REQUEST_LOGS=1 ./scripts/start-local.sh
 ```
 
 When enabled, logs include:

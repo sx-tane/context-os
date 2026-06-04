@@ -1,5 +1,5 @@
 // Package repository defines the domain repository interfaces for workspace-scoped persistence.
-// Implementations live in internal/store.
+// Implementations live in internal/persistence/store.
 package repository
 
 import (

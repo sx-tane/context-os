@@ -1,6 +1,6 @@
 # Internal Pipeline Orchestration
 
-This folder contains orchestration code that wires stage implementations into executable pipeline flow.
+This folder contains orchestration code that wires [`internal/stages`](../stages/README.md) implementations into executable pipeline flow.
 
 ## Responsibilities
 
@@ -10,6 +10,8 @@ This folder contains orchestration code that wires stage implementations into ex
 - Persist events, entities, relationships, mismatches, and filesystem snapshots when repository stores are provided.
 - Support a graph-only run for already-returned live chat evidence so Activity and Graph can update without running Findings.
 - Keep relationship assistance opt-in through `Stores.RelationshipAssistant`; nil stores and nil assistants stay deterministic.
+
+Stage implementations live below [`../stages/`](../stages/README.md). This package is the boundary that imports multiple stages; individual stage packages should not import each other.
 
 ```mermaid
 flowchart LR

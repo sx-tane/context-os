@@ -22,7 +22,7 @@ The docs in this folder are intentionally cross-layer. Deep implementation detai
 | SvelteKit product UI | [apps/frontend/README.md](../apps/frontend/README.md) |
 | Optional local AI worker | [apps/ai-worker/README.md](../apps/ai-worker/README.md) |
 | Stable contracts | [domain/README.md](../domain/README.md) |
-| Internal stages and services | [internal/README.md](../internal/README.md) |
+| Internal grouped packages | [internal/README.md](../internal/README.md), including stages, runtime services, persistence, worker clients, source connectors, and pipeline orchestration |
 | Local persistence and runtime artifacts | [storage/README.md](../storage/README.md) |
 
 ## Document Flow
@@ -47,7 +47,7 @@ flowchart TD
 
 ## Maintenance
 
-- Update [Architecture](ARCHITECTURE.md) when a runtime layer, data flow, route family, persistence boundary, Codex role, or pipeline relationship changes.
+- Update [Architecture](ARCHITECTURE.md) when a runtime layer, internal package group, data flow, route family, persistence boundary, Codex role, or pipeline relationship changes.
 - Update [MCP Connectors](mcp-connectors.md) when the active connector portfolio, Codex plugin defaults, source setup behavior, or connector route families change.
 - Update [Production Readiness](PRODUCTION_READINESS.md) when the production bar, readiness status, risks, or priority order changes.
 - Keep endpoint fields, generated OpenAPI details, component props, and package internals in their nearest package README.

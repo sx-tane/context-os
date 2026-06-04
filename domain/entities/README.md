@@ -52,7 +52,7 @@ type CanonicalEntity struct {
 
 ## Produced By
 
-[internal/identity](../../internal/identity/README.md) produces canonical entities from extracted `types.Entity` values.
+[internal/stages/identity](../../internal/stages/identity/README.md) produces canonical entities from extracted `types.Entity` values.
 
 ```mermaid
 flowchart LR
@@ -68,4 +68,4 @@ flowchart LR
 - Keep confidence explainable. Future semantic or multilingual matching should include evidence in metadata or a richer contract before lowering certainty.
 - `NeedsHuman` is the hook for conflict review once identity resolution moves beyond deterministic key matching.
 - `MergeCandidate` values should preserve rejected and accepted proposals so benchmark and review workflows can inspect false merges.
-- Canonical entities are stored in [internal/graph](../../internal/graph/README.md).
+- Canonical entities are stored in [internal/stages/graph](../../internal/stages/graph/README.md).

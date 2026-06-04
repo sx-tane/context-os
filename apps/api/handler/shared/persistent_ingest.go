@@ -15,11 +15,11 @@ import (
 	"context-os/domain/events"
 	"context-os/domain/pipelines"
 	"context-os/domain/repository"
-	"context-os/internal/identity"
-	"context-os/internal/ingestion"
-	"context-os/internal/normalization"
 	"context-os/internal/pipeline"
-	"context-os/internal/relationship"
+	"context-os/internal/stages/identity"
+	"context-os/internal/stages/ingestion"
+	"context-os/internal/stages/normalization"
+	"context-os/internal/stages/relationship"
 )
 
 // PersistentIngestTimeout allows Codex-backed source reads to complete while

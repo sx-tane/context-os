@@ -20,8 +20,8 @@ flowchart TD
 
   DBH --> PG[(PostgreSQL local DB)]
   DBH --> PIPE[internal/pipeline]
-  DBH --> CHAT[internal/chat]
-  DBH --> SYNC[internal/sync worker]
+  DBH --> CHAT[internal/runtime/chat]
+  DBH --> SYNC[internal/runtime/sync worker]
 
   STATIC --> CONN[apps/api/handler/connectors]
   CONN --> SRC[internal/source connectors]
@@ -202,16 +202,16 @@ flowchart LR
 | Stage | Responsibility | Reference |
 | --- | --- | --- |
 | Source | Convert external systems and files into `document.ingested` events. | [internal/source](../internal/source/README.md) |
-| Ingestion | Fan source requests through connectors and preserve traceability. | [internal/ingestion](../internal/ingestion/README.md) |
-| Normalization | Convert event envelopes into normalized documents and parsed side outputs. | [internal/normalization](../internal/normalization/README.md) |
-| Classification | Assign deterministic routing labels and classification signals. | [internal/classification](../internal/classification/README.md) |
-| Extraction | Extract candidate entities from text, documents, code, spreadsheets, OpenAPI, and connector facts. | [internal/extraction](../internal/extraction/README.md) |
-| Identity | Merge candidate entities into canonical identities; can use worker embeddings as an assistive matcher. | [internal/identity](../internal/identity/README.md) |
-| Relationship | Build evidence-backed relationships between canonical entities. | [internal/relationship](../internal/relationship/README.md) |
-| Graph | Materialize entities and relationships, expose graph reads, and create snapshots. | [internal/graph](../internal/graph/README.md) |
-| Reasoning | Detect mismatch findings with evidence, confidence, impact, severity, and recommendation. | [internal/reasoning](../internal/reasoning/README.md) |
-| Execution | Keep generated assistance separate from deterministic facts. | [internal/execution](../internal/execution/README.md) |
-| Presentation | Shape findings for PMO, presentation, service, QA, and architecture views. | [internal/presentation](../internal/presentation/README.md) |
+| Ingestion | Fan source requests through connectors and preserve traceability. | [internal/stages/ingestion](../internal/stages/ingestion/README.md) |
+| Normalization | Convert event envelopes into normalized documents and parsed side outputs. | [internal/stages/normalization](../internal/stages/normalization/README.md) |
+| Classification | Assign deterministic routing labels and classification signals. | [internal/stages/classification](../internal/stages/classification/README.md) |
+| Extraction | Extract candidate entities from text, documents, code, spreadsheets, OpenAPI, and connector facts. | [internal/stages/extraction](../internal/stages/extraction/README.md) |
+| Identity | Merge candidate entities into canonical identities; can use worker embeddings as an assistive matcher. | [internal/stages/identity](../internal/stages/identity/README.md) |
+| Relationship | Build evidence-backed relationships between canonical entities. | [internal/stages/relationship](../internal/stages/relationship/README.md) |
+| Graph | Materialize entities and relationships, expose graph reads, and create snapshots. | [internal/stages/graph](../internal/stages/graph/README.md) |
+| Reasoning | Detect mismatch findings with evidence, confidence, impact, severity, and recommendation. | [internal/stages/reasoning](../internal/stages/reasoning/README.md) |
+| Execution | Keep generated assistance separate from deterministic facts. | [internal/stages/execution](../internal/stages/execution/README.md) |
+| Presentation | Shape findings for PMO, presentation, service, QA, and architecture views. | [internal/stages/presentation](../internal/stages/presentation/README.md) |
 
 `RunEvents` executes the full post-ingest flow through reasoning. `RunEventsGraphOnly` persists live chat evidence and graph state without auto-running findings.
 
@@ -256,7 +256,7 @@ The domain layer must not import `internal/`. `internal/pipeline` is the orchest
 
 ## AI Worker And Storage
 
-The optional Python AI worker currently provides deterministic local embeddings through `/embed`. The Go side uses `internal/aiworker` and an embedding cache under `storage/embeddings`. Identity can use this as an assistive semantic matcher, but deterministic evidence remains authoritative.
+The optional Python AI worker currently provides deterministic local embeddings through `/embed`. The Go side uses `internal/worker/aiworker` and an embedding cache under `storage/embeddings`. Identity can use this as an assistive semantic matcher, but deterministic evidence remains authoritative.
 
 `storage/` is not the main product source of truth. Use this rule:
 

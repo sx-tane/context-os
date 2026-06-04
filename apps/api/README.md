@@ -66,7 +66,7 @@ apps/api/
 2. Reuse `response.Ingest` unless the connector needs a genuinely different response shape.
 3. Create a new `handler/connectors/<domain>/` package with a `<domain>.go` file and its own `README.md`; include full swag annotations (`@Summary`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`).
 4. Register the route in `main.go` — the `@Router` tag must exactly match.
-5. Regenerate docs (required before building): `swag init -g apps/api/main.go -o apps/api/docs`. Then refresh frontend TypeScript types: `cd apps/frontend && bun run codegen`. All steps run automatically via `start-local.sh` or `start-all.sh`.
+5. Regenerate docs (required before building): `swag init -g apps/api/main.go -o apps/api/docs`. Then refresh frontend TypeScript types: `cd apps/frontend && bun run codegen`. All steps run automatically via `start-local.sh`.
 6. Update this README and the frontend connector config/component when the endpoint is user-facing.
 
 ## Endpoints
@@ -148,7 +148,7 @@ go run ./apps/api          # listens on :8080
 API_ADDR=:9000 go run ./apps/api
 ```
 
-Or use `start-local.sh` or `start-all.sh`, which run `swag init` and `bun run codegen` automatically before starting.
+Or use `start-local.sh`, which runs `swag init` and `bun run codegen` automatically before starting.
 
 Once running:
 

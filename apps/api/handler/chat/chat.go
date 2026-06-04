@@ -11,7 +11,7 @@ import (
 	"context-os/apps/api/handler/shared"
 	"context-os/apps/api/request"
 	"context-os/apps/api/response"
-	internalchat "context-os/internal/chat"
+	internalchat "context-os/internal/runtime/chat"
 )
 
 // Handler holds the service dependency for local chat handlers.

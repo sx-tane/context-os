@@ -67,4 +67,4 @@ HTTP handler for querying persisted workspace entity graph data.
 - Keep graph reads backed by `repository.EntityRepository`.
 - Keep graph cleanup behind `repository.GraphNoiseCleaner`; never run it during normal graph query, analysis, or activity refresh.
 - Preserve deterministic response fields: `workspace_id`, `entity_type`, `entity_count`, `relationship_count`, filtered counts, and `entities`.
-- Update `internal/graph/README.md` if graph persistence or entity contracts change.
+- Update `internal/stages/graph/README.md` if graph persistence or entity contracts change.
