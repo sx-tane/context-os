@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"context-os/internal/stages/graphverify"
 )
 
 // TestRegisterRoutesAppliesCORS verifies routes with CORS enabled receive CORS headers and routes without CORS do not.
@@ -84,5 +86,35 @@ func TestRelationshipAssistantFromEnvRequiresExplicitCodexFlag(t *testing.T) {
 	t.Setenv("CONTEXTOS_AI_RELATIONSHIPS", "codex")
 	if got := relationshipAssistantFromEnv(); got == nil {
 		t.Fatal("relationshipAssistantFromEnv() = nil, want assistant")
+	}
+}
+
+// TestGraphVerifierFromEnvUsesCodexProviderForDocumentedAndAliasModes verifies graph verifier env modes produce Codex provenance.
+func TestGraphVerifierFromEnvUsesCodexProviderForDocumentedAndAliasModes(t *testing.T) {
+	for _, mode := range []string{"codex", "data_analytics"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("CONTEXTOS_GRAPH_VERIFIER", mode)
+			got := graphVerifierFromEnv(nil, nil)
+			if got == nil {
+				t.Fatalf("graphVerifierFromEnv() = nil, want verifier")
+			}
+			if got.Assistant.Provider() != "codex_cli" {
+				t.Fatalf("Provider() = %q, want codex_cli", got.Assistant.Provider())
+			}
+		})
+	}
+
+	t.Setenv("CONTEXTOS_GRAPH_VERIFIER", "")
+	if got := graphVerifierFromEnv(nil, nil); got != nil {
+		t.Fatalf("graphVerifierFromEnv() = %#v, want nil", got)
+	}
+
+	t.Setenv("CONTEXTOS_GRAPH_VERIFIER", "unsupported")
+	if got := graphVerifierFromEnv(nil, nil); got != nil {
+		t.Fatalf("graphVerifierFromEnv() = %#v, want nil", got)
+	}
+
+	if graphverify.NewCodexAssistant().Provider() != "codex_cli" {
+		t.Fatal("NewCodexAssistant() provider must stay codex_cli")
 	}
 }

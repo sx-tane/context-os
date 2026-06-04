@@ -154,7 +154,7 @@ func evidenceSaveInput(result response.ChatQuery) (EvidenceSaveInput, bool) {
 	if connector == "" || answer == "" {
 		return EvidenceSaveInput{}, false
 	}
-	if codexPluginForConnector(connector) == "" {
+	if connector != "multiple" && codexPluginForConnector(connector) == "" {
 		return EvidenceSaveInput{}, false
 	}
 	sources := extractEvidenceSources(result)

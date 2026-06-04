@@ -8,6 +8,7 @@ go-quality	refactor Go code for error handling and goroutine safety	go-best-prac
 pipeline-stage	change extraction stage output and preserve trace IDs	contextos-pipeline-stage-delivery	pipeline stage,contracts,traceability	contextos-misalignment-report,contextos-identity-resolution-benchmark
 identity-benchmark	tune alias merge thresholds and measure precision recall	contextos-identity-resolution-benchmark	identity-resolution,precision,recall	contextos-pipeline-stage-delivery,contextos-misalignment-report
 misalignment-report	produce mismatch findings between PMO API and frontend	contextos-misalignment-report	misalignment,confidence,evidence	contextos-pipeline-stage-delivery,contextos-identity-resolution-benchmark
+benchmark-auditor	audit whether the misalignment benchmark proves real contradictions	contextos-benchmark-auditor	benchmark quality,precision,contradictions	contextos-harness-engineering,contextos-misalignment-report
 harness	add deterministic fixtures golden outputs and regression gates	contextos-harness-engineering	fixtures,golden,regression	go-test-patterns,contextos-identity-resolution-benchmark
 issues	create parent child implementation issues with labels	contextos-issue-workflow	parent-child,labels,issue	contextos-authoring,contextos-pipeline-stage-delivery
 authoring	create or update an agent instruction or skill	contextos-authoring	SKILL.md,instructions,agent	contextos-issue-workflow,go-best-practices

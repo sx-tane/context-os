@@ -10,7 +10,12 @@ import {
 } from "../findings/analysisRunner";
 
 import { postFindings } from "$lib/api";
-import type { ConnectorKnowledge, FindingsResult } from "../types";
+import type {
+  Artifact,
+  ChatQueryResult,
+  ConnectorKnowledge,
+  FindingsResult,
+} from "../types";
 
 const mockPostFindings = postFindings as jest.Mock;
 
@@ -183,6 +188,116 @@ describe("runAnalysis", () => {
     expect(state.replacements.at(-1)?.text).toContain("Skipped chat-only scopes");
     expect(state.replacements.at(-1)?.text).not.toContain("Failed:");
   });
+
+  it("runs chat-derived concrete sources instead of skipping broad connector scopes", async () => {
+    const originalWindow = (global as unknown as { window?: unknown }).window;
+    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
+      setTimeout,
+      clearTimeout,
+    };
+    mockPostFindings.mockResolvedValueOnce({
+      ok: true,
+      body: {
+        connector: "jira",
+        uri: "BKGDEV-8551",
+        mismatch_count: 0,
+        event_count: 1,
+        entity_count: 2,
+        mismatches: [],
+      },
+    });
+    const state = makeState();
+
+    try {
+      await runAnalysis({
+        workspacePath: "workspace",
+        readySources: [
+          { connector: "jira", uri: "jira", status: "ready" },
+          { connector: "slack", uri: "slack", status: "ready" },
+        ],
+        lastChatResult: chatResult({
+          answer_sections: [
+            {
+              source_label: "Jira issue BKGDEV-8551",
+              connector: "jira",
+              source_uri: "BKGDEV-8551",
+            },
+          ],
+        }),
+        addMessage: state.addMessage,
+        replaceMessage: state.replaceMessage,
+        setBusy: state.setBusy,
+        setLastFindings: state.setLastFindings,
+        setLastAnalysisAt: state.setLastAnalysisAt,
+        openSources: state.openSources,
+        refreshWorkspace: state.refreshWorkspace,
+        timeoutMs: 1000,
+      });
+    } finally {
+      (global as unknown as { window?: unknown }).window = originalWindow;
+    }
+
+    expect(mockPostFindings).toHaveBeenCalledTimes(1);
+    expect(mockPostFindings.mock.calls[0][0]).toMatchObject({
+      connector: "jira",
+      uri: "BKGDEV-8551",
+    });
+    expect(state.replacements.at(-1)?.text).toContain("1/1 concrete source");
+    expect(state.replacements.at(-1)?.text).toContain("Skipped chat-only scopes");
+  });
+
+  it("runs activity-derived live evidence even when no Sources row is ready", async () => {
+    const originalWindow = (global as unknown as { window?: unknown }).window;
+    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
+      setTimeout,
+      clearTimeout,
+    };
+    mockPostFindings.mockResolvedValueOnce({
+      ok: true,
+      body: {
+        connector: "github",
+        uri: "https://github.com/context-os/app/pull/43",
+        mismatch_count: 0,
+        event_count: 1,
+        entity_count: 1,
+        mismatches: [],
+      },
+    });
+    const state = makeState();
+
+    try {
+      await runAnalysis({
+        workspacePath: "workspace",
+        readySources: [],
+        recentArtifacts: [
+          artifact({
+            connector: "github",
+            source_uri: "https://github.com/context-os/app/pull/43",
+            metadata: {
+              evidence_kind: "live_chat_answer",
+            },
+          }),
+        ],
+        addMessage: state.addMessage,
+        replaceMessage: state.replaceMessage,
+        setBusy: state.setBusy,
+        setLastFindings: state.setLastFindings,
+        setLastAnalysisAt: state.setLastAnalysisAt,
+        openSources: state.openSources,
+        refreshWorkspace: state.refreshWorkspace,
+        timeoutMs: 1000,
+      });
+    } finally {
+      (global as unknown as { window?: unknown }).window = originalWindow;
+    }
+
+    expect(state.openSources).not.toHaveBeenCalled();
+    expect(mockPostFindings).toHaveBeenCalledTimes(1);
+    expect(mockPostFindings.mock.calls[0][0]).toMatchObject({
+      connector: "github",
+      uri: "https://github.com/context-os/app/pull/43",
+    });
+  });
 });
 
 function makeState(): AnalysisRunnerTestState {
@@ -211,4 +326,35 @@ function makeState(): AnalysisRunnerTestState {
     refreshWorkspace: jest.fn<Promise<void>, []>().mockResolvedValue(),
   };
   return state;
+}
+
+function chatResult(overrides: Partial<ChatQueryResult>): ChatQueryResult {
+  return {
+    intent: "artifacts",
+    workspace_id: "workspace",
+    workspace_path: "workspace",
+    provider: "codex",
+    answer: "Answer",
+    summary: "Summary",
+    artifact_count: 0,
+    artifacts: [],
+    ...overrides,
+  };
+}
+
+function artifact(overrides: Partial<Artifact>): Artifact {
+  return {
+    id: "artifact",
+    workspace_id: "workspace",
+    connector: "github",
+    source_uri: "owner/repo",
+    event_type: "document.ingested",
+    title: "Evidence",
+    body: "Evidence body",
+    preview: "Evidence preview",
+    content_hash: "hash",
+    schema_version: "1",
+    ingested_at: "2026-06-04T00:00:00.000Z",
+    ...overrides,
+  };
 }

@@ -16,6 +16,7 @@ import (
 	"context-os/domain/pipelines"
 	"context-os/domain/repository"
 	"context-os/internal/pipeline"
+	"context-os/internal/stages/graphverify"
 	"context-os/internal/stages/identity"
 	"context-os/internal/stages/ingestion"
 	"context-os/internal/stages/normalization"
@@ -47,6 +48,7 @@ type PersistentIngestService struct {
 	parsedWriter          *normalization.DocumentWriter
 	semanticMatcher       identity.Matcher
 	relationshipAssistant relationship.Assistant
+	graphVerifier         *graphverify.Service
 }
 
 // PersistentIngestOption configures optional persistence helpers.
@@ -65,6 +67,11 @@ func WithPersistentSemanticMatcher(m identity.Matcher) PersistentIngestOption {
 // WithPersistentRelationshipAssistant enables validated relationship assistance during ingest.
 func WithPersistentRelationshipAssistant(a relationship.Assistant) PersistentIngestOption {
 	return func(s *PersistentIngestService) { s.relationshipAssistant = a }
+}
+
+// WithPersistentGraphVerifier enables opt-in cross-source graph verification after live evidence saves.
+func WithPersistentGraphVerifier(v *graphverify.Service) PersistentIngestOption {
+	return func(s *PersistentIngestService) { s.graphVerifier = v }
 }
 
 // NewPersistentIngestService returns a DB-backed production ingest service.
@@ -204,7 +211,11 @@ func (s *PersistentIngestService) PersistEvidenceEvents(
 		}
 	}
 	result := pipeline.RunEventsGraphOnly(processCtx, rawEvents, req, graphOnlyStores(s.pipelineStores(workspace.ID, traceID)))
-	return s.completeEvidence(processCtx, workspace.ID, connectorName, req, traceID, capabilities, result), nil
+	ingest := s.completeEvidence(processCtx, workspace.ID, connectorName, req, traceID, capabilities, result)
+	if verified := s.verifyGraph(processCtx, workspace.ID, traceID); verified > 0 {
+		ingest.RelationshipCount += verified
+	}
+	return ingest, nil
 }
 
 func withProductConnector(metadata map[string]string, connectorName string) map[string]string {
@@ -423,6 +434,32 @@ func (s *PersistentIngestService) completeEvidence(ctx context.Context, workspac
 	ingest.EntityCount = len(result.Entities)
 	ingest.RelationshipCount = len(result.Relationships)
 	return ingest
+}
+
+func (s *PersistentIngestService) verifyGraph(ctx context.Context, workspaceID, traceID string) int {
+	if s.graphVerifier == nil {
+		return 0
+	}
+	result, err := s.graphVerifier.VerifyWorkspace(ctx, workspaceID)
+	if err != nil {
+		log.Printf("persistent ingest: graph verifier failed for workspace %s: %v", workspaceID, err)
+		return 0
+	}
+	if result.AcceptedRelationshipCount == 0 {
+		return 0
+	}
+	s.logAudit(ctx, repository.AuditEvent{
+		WorkspaceID: workspaceID,
+		EventType:   "graph.verified",
+		Actor:       "api",
+		TraceID:     traceID,
+		Payload: map[string]string{
+			"provider":           result.Provider,
+			"verifier_trace_id":  result.TraceID,
+			"relationship_count": fmt.Sprintf("%d", result.AcceptedRelationshipCount),
+		},
+	})
+	return result.AcceptedRelationshipCount
 }
 
 func ingestEventsFromRaw(workspaceID, connectorName, sourceURI string, rawEvents []events.Event) []repository.IngestEvent {

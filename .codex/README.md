@@ -15,7 +15,7 @@ This repo keeps the original GitHub Copilot customization under `.github/` and m
 
 Codex reads `AGENTS.md` as the primary repo guide. When a task needs a specialized playbook, load the matching file from `.codex/skills/<skill>/SKILL.md`.
 
-When the user writes Chinese, Codex should answer in Chinese by default, using Simplified Chinese unless another variant is requested. Code identifiers, commands, logs, and quoted source text stay in their original language.
+Codex should match the language of the user's current prompt by default. Code identifiers, commands, logs, and quoted source text stay in their original language.
 
 Frontend Svelte UI work is routed through `contextos-frontend-design` so layout, spacing, button, graph, source setup, and chat changes follow the current app pattern.
 
@@ -45,6 +45,7 @@ README coverage excludes `.codex/skills` because skill internals use `SKILL.md`,
 | --- | --- |
 | `contextos-api-handler` | API handlers, source connector routes, status, ingest, and stream endpoints |
 | `contextos-authoring` | New or changed skills, instruction files, agents, or routing maps |
+| `contextos-benchmark-auditor` | Correctness audits for the core misalignment benchmark, including contradiction evidence, precision, recall, false positives, severity, and stability |
 | `contextos-frontend-design` | Svelte UI design, spacing, buttons, panels, graph/source/chat visuals |
 | `contextos-frontend-connector` | New Svelte connector components and connector registration |
 | `contextos-harness-engineering` | Fixtures, scenarios, goldens, benchmarks, and regression gates |
@@ -55,6 +56,8 @@ README coverage excludes `.codex/skills` because skill internals use `SKILL.md`,
 | `frontend-jest-swc-patterns` | Frontend `*.test.ts`, `$lib` mocks, fetch mocks, and setter lifecycle tests |
 | `go-best-practices` | Go implementation, review, and refactor quality |
 | `go-test-patterns` | Go `_test.go` files and test style review |
+
+`contextos-benchmark-auditor` is the correctness-audit layer for the first product claim: the misalignment benchmark must prove ContextOS finds real cross-layer contradictions with accurate evidence, not just topical summaries.
 
 ## Mermaid Explanation Policy
 

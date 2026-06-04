@@ -118,6 +118,42 @@ func TestQueryPassesResponseLanguageToLiveAnswerer(t *testing.T) {
 	}
 }
 
+// TestQueryPassesConnectorsToRuntimeFanout verifies request decoding forwards multi-connector hints to runtime chat.
+func TestQueryPassesConnectorsToRuntimeFanout(t *testing.T) {
+	live := &fakeLiveAnswerer{answer: "Related implementation context was found."}
+	handler := NewHandler(internalchat.NewServiceWithLiveAnswerer(
+		fakeWorkspaces(),
+		&fakeEventRepository{},
+		&fakeSyncRepository{syncs: []repository.ConnectorSync{
+			{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+			{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+			{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+		}},
+		live,
+	)).WithEvidenceSaver(&fakeEvidenceSaver{})
+
+	req := httptest.NewRequest(http.MethodPost, "/chat/query", strings.NewReader(`{"workspace_id":"/workspace","message":"kkg payment 決済GW","connectors":["jira","slack"]}`))
+	res := httptest.NewRecorder()
+	handler.Query(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if live.calls != 2 {
+		t.Fatalf("live calls = %d, want 2", live.calls)
+	}
+	var body response.ChatQuery
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.Connector != "multiple" {
+		t.Fatalf("Connector = %q, want multiple", body.Connector)
+	}
+	if len(body.AnswerSections) != 2 {
+		t.Fatalf("AnswerSections length = %d, want 2", len(body.AnswerSections))
+	}
+}
+
 // TestLiveAnswerEventBuildsPersistableEvidence verifies live answers become one local source evidence event without another connector read.
 func TestLiveAnswerEventBuildsPersistableEvidence(t *testing.T) {
 	event := liveAnswerEvent(EvidenceSaveInput{
@@ -227,6 +263,31 @@ func TestEvidenceSaveInputUsesStructuredSectionsBeforeRegex(t *testing.T) {
 	}
 	if source.Section.SourceLabel != "Google Drive · BKGDEV-8096_帳票項目のマッピング確認.xlsx" {
 		t.Fatalf("SourceLabel = %q, want structured label", source.Section.SourceLabel)
+	}
+}
+
+// TestEvidenceSaveInputAcceptsMultipleConnectorSections verifies aggregate live answers persist concrete section provenance.
+func TestEvidenceSaveInputAcceptsMultipleConnectorSections(t *testing.T) {
+	input, ok := evidenceSaveInput(mapChatResult(internalchat.Result{
+		WorkspaceID:   "ws1",
+		WorkspacePath: "/workspace",
+		Connector:     "multiple",
+		Provider:      "codex",
+		Answer:        "Found Jira and GitHub context.",
+		Summary:       "Multi-source context",
+		AnswerSections: []internalchat.AnswerSection{
+			{SourceLabel: "Jira BKGDEV-8551", Connector: "jira", SourceURI: "BKGDEV-8551", Summary: "Receipt issuer task."},
+			{SourceLabel: "GitHub PR", Connector: "github", SourceURI: "forcia/kkg_payment/pull/357", Summary: "SBPS payment gateway PR."},
+		},
+	}))
+	if !ok {
+		t.Fatalf("evidenceSaveInput() ok = false, want true")
+	}
+	if input.Connector != "multiple" {
+		t.Fatalf("Connector = %q, want multiple", input.Connector)
+	}
+	if len(input.Sources) != 2 {
+		t.Fatalf("Sources length = %d, want 2", len(input.Sources))
 	}
 }
 

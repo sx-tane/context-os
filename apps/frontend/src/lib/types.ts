@@ -314,11 +314,17 @@ export interface ChatQueryRequest {
   workspace_path?: string;
   message: string;
   connector?: string;
+  connectors?: string[];
   source_uri?: string;
   timezone?: string;
   local_date?: string;
   response_language?: string;
   limit?: number;
+}
+
+export interface ChatSessionResetRequest {
+  workspace_id: string;
+  workspace_path?: string;
 }
 
 export interface ChatQueryResult {

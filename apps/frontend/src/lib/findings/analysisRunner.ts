@@ -6,7 +6,9 @@ import {
 } from "$lib/findings/aggregator";
 import { DEMO_WORKSPACE_PATH } from "$lib/workspace/projectStore";
 import type {
+  Artifact,
   ChatMessage,
+  ChatQueryResult,
   ConnectorKind,
   ConnectorKnowledge,
   FindingsResult,
@@ -15,7 +17,7 @@ import { demoFindings } from "$lib/chat/demoWorkspace";
 import { assistantMsg, loadingMsg, progressMsg } from "$lib/chat/controller";
 import {
   analysisSourceCountLabel,
-  splitAnalysisSources,
+  buildAnalysisSources,
 } from "$lib/sources/analysisEligibility";
 
 export type AnalysisSourceStatus = {
@@ -28,6 +30,8 @@ export type AnalysisSourceStatus = {
 export type AnalysisRunnerOptions = {
   workspacePath: string;
   readySources: ConnectorKnowledge[];
+  lastChatResult?: ChatQueryResult | null;
+  recentArtifacts?: Artifact[];
   addMessage: (message: ChatMessage) => void;
   replaceMessage: (id: string, message: ChatMessage) => void;
   setBusy: (busy: boolean) => void;
@@ -57,17 +61,22 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     return;
   }
 
-  if (options.readySources.length === 0) {
+  const { eligible, skipped } = buildAnalysisSources({
+    readySources: options.readySources,
+    lastChatResult: options.lastChatResult,
+    recentArtifacts: options.recentArtifacts,
+  });
+
+  if (options.readySources.length === 0 && eligible.length === 0) {
     options.openSources();
     options.addMessage(
       assistantMsg(
-        "No ready sources in this workspace yet. Configure at least one source first.",
+        "No concrete sources are ready yet. Connect a source, or ask chat about a specific ticket, channel, repo, PR, document, folder, or file so saved evidence can be analyzed.",
       ),
     );
     return;
   }
 
-  const { eligible, skipped } = splitAnalysisSources(options.readySources);
   if (eligible.length === 0) {
     const summary = buildFindingsRunSummary({
       sourceCount: options.readySources.length,

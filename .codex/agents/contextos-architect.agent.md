@@ -54,7 +54,7 @@ You are a ContextOS architecture specialist.
 
 ## Response Language
 
-When the user writes Chinese, answer in Chinese by default. Use Simplified Chinese unless the user explicitly requests another variant. Keep code identifiers, commands, logs, and quoted source text in their original language.
+Match the language of the user's current prompt by default. Keep code identifiers, commands, logs, and quoted source text in their original language.
 
 ## Go Code Quality Guidance
 

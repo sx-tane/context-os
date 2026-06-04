@@ -68,6 +68,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		WorkspacePath:    req.WorkspacePath,
 		Message:          req.Message,
 		Connector:        req.Connector,
+		Connectors:       req.Connectors,
 		SourceURI:        req.SourceURI,
 		Timezone:         req.Timezone,
 		LocalDate:        req.LocalDate,
@@ -133,6 +134,7 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 			WorkspacePath:    req.WorkspacePath,
 			Message:          req.Message,
 			Connector:        req.Connector,
+			Connectors:       req.Connectors,
 			SourceURI:        req.SourceURI,
 			Timezone:         req.Timezone,
 			LocalDate:        req.LocalDate,
@@ -169,6 +171,48 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 			sw.Event("status", string(body))
 		}
 	}
+}
+
+// ResetSession handles POST /chat/session/reset.
+//
+// @Summary      Reset workspace chat session
+// @Description  Deletes persisted workspace-scoped Codex chat session metadata without deleting Codex global session files.
+// @Tags         chat
+// @Accept       json
+// @Produce      json
+// @Param        body  body      request.ChatSessionReset  true  "Chat session reset request"
+// @Success      200   {object}  map[string]bool
+// @Failure      400   {object}  map[string]string
+// @Failure      404   {object}  map[string]string
+// @Failure      405   {object}  map[string]string
+// @Failure      503   {object}  map[string]string
+// @Router       /chat/session/reset [post]
+func (h *Handler) ResetSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+		return
+	}
+
+	if h.service == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "chat store is unavailable")
+		return
+	}
+
+	var req request.ChatSessionReset
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+
+	err := h.service.ResetSession(r.Context(), internalchat.Query{
+		WorkspaceID:   req.WorkspaceID,
+		WorkspacePath: req.WorkspacePath,
+	})
+	if err != nil {
+		writeQueryError(w, err)
+		return
+	}
+	response.WriteJSON(w, http.StatusOK, map[string]bool{"reset": true})
 }
 
 func (h *Handler) startAsyncEvidenceSave(ctx context.Context, result response.ChatQuery) response.ChatQuery {

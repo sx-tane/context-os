@@ -59,10 +59,11 @@ flowchart LR
 ```
 
 - Source setup saves connector scope so chat knows which live tool to use.
-- Chat queries live tools first for plugin-backed sources.
+- Chat queries live tools first for plugin-backed sources, and meaningful prompts without an explicit connector fan out across connected live scopes.
 - Concrete live answers save into the Local DB when the answer exposes specific provenance such as document URLs, Jira keys, Slack references, GitHub URLs, Notion URLs, or SharePoint/OneDrive URLs.
 - Activity updates automatically after concrete live evidence is saved.
 - Graph updates automatically from the saved live answer evidence.
+- Optional graph verification can compare saved Local DB evidence across sources when `CONTEXTOS_GRAPH_VERIFIER=codex` is set.
 - Findings are manual analysis outputs and update only when analysis/findings is run.
 - Broad connector lookups remain read-only unless concrete sources are detected in the live answer.
 
@@ -71,7 +72,7 @@ flowchart LR
 - Broad prompts can still be read-only if no concrete provenance appears in the answer.
 - Multi-source saves depend on visible answer provenance.
 - Connector permissions such as Rovo 403 still limit live reads.
-- Graph quality depends on extraction from saved answer text.
+- Graph quality depends on extraction from saved answer text unless optional graph verification is enabled.
 
 ## Quick Start
 

@@ -6,10 +6,10 @@ Pure helpers for the homepage insight surface. Keep cross-tab freshness and stat
 
 `buildInsightStatus` derives the shared model used by the insight status strip and footer:
 
-- concrete analysis-ready source count vs chat-only live connector scopes;
+- concrete analysis-ready source count, including chat/Activity-derived evidence, vs chat-only live connector scopes;
 - latest Activity evidence timestamp and event count;
 - Graph node/link counts plus an empty/ready/waiting label;
 - last manual Findings analysis freshness;
 - Findings state: `not_run`, `current`, `stale`, or `no_concrete_sources`.
 
-Findings remain manual. Chat and evidence saves may refresh Activity and Graph immediately, but the status helper marks Findings stale until the user runs analysis again.
+Findings remain manual. Chat and evidence saves may refresh Activity and Graph immediately, and concrete saved evidence is counted as analysis-ready even when the Sources setup list only contains broad connector scopes. The status helper still marks Findings stale until the user runs analysis again.

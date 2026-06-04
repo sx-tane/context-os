@@ -30,12 +30,13 @@ If the user request is unclear, the agent should restate the interpreted prompt 
 
 ## Response Language
 
-Both agents answer in Chinese by default when the user writes Chinese, using Simplified Chinese unless another variant is requested. Code identifiers, commands, logs, and quoted source text stay in their original language.
+Both agents match the language of the user's current prompt by default. Code identifiers, commands, logs, and quoted source text stay in their original language.
 
 ## Agent Selection Rule
 
 - Use ContextOS Implementer when the task asks to change files, run tests, add docs, create skills, or fix behavior.
 - The implementer is wired to `contextos-frontend-design` for Svelte UI layout, spacing, buttons, graph/source/chat visuals, and current frontend component patterns.
+- The implementer is wired to `contextos-benchmark-auditor` with `contextos-harness-engineering` for misalignment benchmark quality audits and reasoning benchmark scenarios.
 - Use ContextOS Architect when the task asks for planning, sequencing, system design, tradeoffs, or issue breakdown without edits.
 
 ## README Alignment

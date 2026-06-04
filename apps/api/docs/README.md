@@ -21,6 +21,7 @@ Last regenerated to include workspace-scoped source, chat, graph, presentation, 
 
 - Ingest request schemas include `workspace_id` so direct and Codex-backed sources persist into the active workspace.
 - `request.ChatQuery`, `repository.Workspace`, and `repository.ConnectorSync` are present for local chat, workspace status, and connector sync responses.
+- `request.ChatQuery.connectors` documents optional multi-connector live chat search while preserving single `connector` and `source_uri` routing.
 - `response.ChatQuery.provider` indicates whether chat answered from local artifacts or Codex-backed live source context.
 - `response.ChatQuery.answer_sections` documents structured source cards returned by live chat.
 - `response.ChatQuery.evidence_save_status`, `evidence_event_count`, and `evidence_save_error` document live-chat evidence persistence into the Local DB.

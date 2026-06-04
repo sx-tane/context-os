@@ -42,6 +42,7 @@ type Query struct {
 	WorkspacePath    string
 	Message          string
 	Connector        string
+	Connectors       []string
 	SourceURI        string
 	Timezone         string
 	LocalDate        string
@@ -84,6 +85,8 @@ type AnswerSection struct {
 
 // LiveQuery is one optional live source question routed through Codex-backed connectors.
 type LiveQuery struct {
+	WorkspaceID      string
+	WorkspacePath    string
 	Connector        string
 	SourceURI        string
 	Message          string
@@ -94,6 +97,11 @@ type LiveQuery struct {
 // LiveAnswerer answers a source question from a live connector account.
 type LiveAnswerer interface {
 	Answer(ctx context.Context, query LiveQuery) (string, error)
+}
+
+// LiveSessionResetter clears workspace-scoped live chat conversation metadata.
+type LiveSessionResetter interface {
+	ResetSession(ctx context.Context, workspaceID string) error
 }
 
 // Service routes local chat queries to workspace repositories.
@@ -132,7 +140,8 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 	}
 
 	explicitSourceURI := firstNonEmpty(strings.TrimSpace(query.SourceURI), inferSourceURI(message))
-	connector := normalizeConnector(firstNonEmpty(query.Connector, inferConnector(message), inferConnectorFromURI(explicitSourceURI)))
+	explicitConnector := normalizeConnector(query.Connector)
+	connector := normalizeConnector(firstNonEmpty(explicitConnector, inferConnector(message), inferConnectorFromURI(explicitSourceURI)))
 	sourceURI := explicitSourceURI
 	if sourceURI == "" {
 		if match := inferSyncSource(message, connector, syncs); match.SourceURI != "" {
@@ -144,6 +153,15 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 	}
 	since, until := inferTimeRange(query, message)
 	intent := classifyIntent(message, connector, sourceURI)
+	var liveScopes []repository.ConnectorSync
+	if s.live != nil {
+		liveScopes = liveFanoutScopes(message, query.Connectors, explicitConnector, explicitSourceURI, connector, syncs)
+	}
+	if len(liveScopes) > 0 {
+		intent = intentArtifacts
+		connector = "multiple"
+		sourceURI = ""
+	}
 
 	result := Result{
 		Intent:        intent,
@@ -159,6 +177,9 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 
 	switch intent {
 	case intentArtifacts:
+		if result.Connector == "multiple" {
+			return s.answerLiveFanout(ctx, workspace.ID, query, result, message, liveScopes)
+		}
 		return s.answerArtifacts(ctx, workspace.ID, query, result, message)
 	case intentStatus:
 		result.Answer = buildStatusAnswer(syncs, query.ResponseLanguage)
@@ -181,10 +202,25 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 	}
 }
 
+// ResetSession clears persisted live Codex chat session metadata for one workspace.
+func (s *Service) ResetSession(ctx context.Context, query Query) error {
+	workspace, err := s.resolveWorkspace(ctx, query)
+	if err != nil {
+		return err
+	}
+	resetter, ok := s.live.(LiveSessionResetter)
+	if !ok || resetter == nil {
+		return nil
+	}
+	return resetter.ResetSession(ctx, workspace.ID)
+}
+
 func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query Query, result Result, message string) (Result, error) {
 	liveFailure := ""
 	if s.shouldAskLiveFirst(result) {
 		answer, err := s.live.Answer(ctx, LiveQuery{
+			WorkspaceID:      result.WorkspaceID,
+			WorkspacePath:    result.WorkspacePath,
 			Connector:        result.Connector,
 			SourceURI:        result.SourceURI,
 			Message:          message,
@@ -255,6 +291,78 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 	return result, nil
 }
 
+func (s *Service) answerLiveFanout(ctx context.Context, workspaceID string, query Query, result Result, message string, scopes []repository.ConnectorSync) (Result, error) {
+	if s.live == nil || len(scopes) == 0 {
+		return s.answerArtifacts(ctx, workspaceID, query, result, message)
+	}
+
+	failures := []string{}
+	for _, scope := range scopes {
+		connector := normalizeConnector(scope.Connector)
+		sourceURI := strings.TrimSpace(scope.SourceURI)
+		if connector == "" || sourceURI == "" || connector == "filesystem" || !supportsLiveConnector(connector) {
+			continue
+		}
+		emitProgress(query.Progress, fmt.Sprintf("› Live Codex: %s connected-source lookup", connector))
+		answer, err := s.live.Answer(ctx, LiveQuery{
+			WorkspaceID:      result.WorkspaceID,
+			WorkspacePath:    result.WorkspacePath,
+			Connector:        connector,
+			SourceURI:        sourceURI,
+			Message:          message,
+			ResponseLanguage: query.ResponseLanguage,
+			Progress:         query.Progress,
+		})
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %s", connector, compactLiveError(err)))
+			emitProgress(query.Progress, fmt.Sprintf("• %s live lookup failed; continuing.", connector))
+			continue
+		}
+		answer = strings.TrimSpace(answer)
+		if answer == "" {
+			failures = append(failures, fmt.Sprintf("%s: no live answer", connector))
+			continue
+		}
+		liveAnswer, sections := parseLiveAnswer(answer, connector, sourceURI)
+		if len(sections) == 0 && liveAnswer != "" {
+			sections = []AnswerSection{{
+				SourceLabel: connectorDisplayName(connector),
+				Connector:   connector,
+				SourceURI:   sourceURI,
+				Summary:     liveAnswer,
+				Confidence:  0.75,
+			}}
+		}
+		result.AnswerSections = append(result.AnswerSections, sections...)
+	}
+
+	if len(result.AnswerSections) > 0 {
+		result.Provider = "codex"
+		result.Answer = buildFanoutAnswer(result.AnswerSections, failures, query.ResponseLanguage)
+		result.Summary = summarizeFanout(result.AnswerSections, query.ResponseLanguage)
+		return result, nil
+	}
+
+	fallback := result
+	fallback.Connector = ""
+	fallback.SourceURI = ""
+	fallback.Provider = "local"
+	fallbackResult, err := s.answerArtifacts(ctx, workspaceID, query, fallback, message)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(failures) > 0 {
+		fallbackResult.Answer = localized(
+			query.ResponseLanguage,
+			"Connected live sources did not return usable answers.\n\n",
+			"已连接的 live sources 没有返回可用答案。\n\n",
+			"接続済み live sources から利用できる回答は返りませんでした。\n\n",
+			"연결된 live sources에서 사용할 수 있는 답변을 반환하지 않았습니다.\n\n",
+		) + fallbackResult.Answer
+	}
+	return fallbackResult, nil
+}
+
 func emitProgress(progress func(string), line string) {
 	if progress != nil && strings.TrimSpace(line) != "" {
 		progress(line)
@@ -322,6 +430,97 @@ func classifyIntent(message, connector, sourceURI string) string {
 		return intentFindings
 	}
 	return intentUnsupported
+}
+
+func liveFanoutScopes(message string, requested []string, explicitConnector, explicitSourceURI, inferredConnector string, syncs []repository.ConnectorSync) []repository.ConnectorSync {
+	if explicitConnector != "" || explicitSourceURI != "" || inferredConnector != "" {
+		return nil
+	}
+	connectors := normalizedConnectorSet(requested)
+	if len(connectors) == 0 && !shouldAutoFanoutPrompt(message) {
+		return nil
+	}
+	return connectedLiveScopes(syncs, connectors)
+}
+
+func normalizedConnectorSet(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range values {
+		connector := normalizeConnector(value)
+		if connector == "" || connector == "filesystem" || !supportsLiveConnector(connector) {
+			continue
+		}
+		out[connector] = true
+	}
+	return out
+}
+
+func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bool) []repository.ConnectorSync {
+	byConnector := map[string]repository.ConnectorSync{}
+	for _, sync := range syncs {
+		connector := normalizeConnector(sync.Connector)
+		sourceURI := strings.TrimSpace(sync.SourceURI)
+		if connector == "" || sourceURI == "" || connector == "filesystem" || !supportsLiveConnector(connector) {
+			continue
+		}
+		if len(allowed) > 0 && !allowed[connector] {
+			continue
+		}
+		if !isUsableLiveSync(sync.Status) {
+			continue
+		}
+		if existing, ok := byConnector[connector]; ok && isConnectorScopeURI(connector, existing.SourceURI) && !isConnectorScopeURI(connector, sourceURI) {
+			byConnector[connector] = sync
+			continue
+		}
+		if _, ok := byConnector[connector]; !ok {
+			byConnector[connector] = sync
+		}
+	}
+	order := []string{"jira", "github", "slack", "googledrive", "notion", "sharepoint"}
+	out := make([]repository.ConnectorSync, 0, len(byConnector))
+	for _, connector := range order {
+		if sync, ok := byConnector[connector]; ok {
+			out = append(out, sync)
+		}
+	}
+	return out
+}
+
+func isUsableLiveSync(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "", "connected", "idle", "syncing":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldAutoFanoutPrompt(message string) bool {
+	lower := strings.ToLower(message)
+	trimmed := strings.TrimSpace(lower)
+	if trimmed == "" {
+		return false
+	}
+	if trimmed == "help" || trimmed == "what can you do" || isLanguageControlPrompt(trimmed) {
+		return false
+	}
+	switch trimmed {
+	case "status", "source status", "local source status", "ready", "configured", "synced",
+		"findings", "finding", "mismatches", "mismatch", "analyze", "analyse", "analysis":
+		return false
+	}
+	return len([]rune(trimmed)) >= 3
+}
+
+func isLanguageControlPrompt(trimmedLower string) bool {
+	normalized := strings.Join(strings.Fields(trimmedLower), " ")
+	switch normalized {
+	case "answer me in english", "respond in english", "use english", "speak english",
+		"reply in english", "english please", "please answer in english":
+		return true
+	}
+	return hasAny(normalized, "请用中文回答", "用中文回答", "中文回答", "日本語で答えて", "韓国語で答えて", "한국어로 답변")
 }
 
 func inferConnector(message string) string {
@@ -625,6 +824,59 @@ func summarizeArtifacts(artifacts []repository.IngestEvent, language string) str
 	) + strings.Join(items, " | ")
 }
 
+func buildFanoutAnswer(sections []AnswerSection, failures []string, language string) string {
+	answer := fmt.Sprintf(localized(
+		language,
+		"Found live source context from %d connected source(s).",
+		"从 %d 个已连接 source 找到 live context。",
+		"%d 件の接続済み source から live context が見つかりました。",
+		"%d개의 연결된 source에서 live context를 찾았습니다.",
+	), len(sections))
+	for _, section := range sections {
+		label := firstNonEmpty(section.SourceLabel, section.SourceURI, section.Connector)
+		summary := strings.TrimSpace(section.Summary)
+		if summary == "" && len(section.Facts) > 0 {
+			summary = section.Facts[0]
+		}
+		if summary == "" {
+			continue
+		}
+		answer += "\n- " + label + ": " + previewText(summary, 180)
+	}
+	if len(failures) > 0 {
+		answer += fmt.Sprintf(localized(
+			language,
+			"\n\n%d connected source(s) failed or returned no usable answer; see stream for details.",
+			"\n\n%d 个已连接 source 失败或没有返回可用答案；详情见 stream。",
+			"\n\n%d 件の接続済み source は失敗または利用できる回答なしでした。詳細は stream を確認してください。",
+			"\n\n%d개의 연결된 source가 실패했거나 사용할 수 있는 답변을 반환하지 않았습니다. 자세한 내용은 stream을 확인하세요.",
+		), len(failures))
+	}
+	return answer
+}
+
+func summarizeFanout(sections []AnswerSection, language string) string {
+	connectors := map[string]struct{}{}
+	for _, section := range sections {
+		if connector := normalizeConnector(section.Connector); connector != "" {
+			connectors[connector] = struct{}{}
+		}
+	}
+	names := make([]string, 0, len(connectors))
+	for _, connector := range []string{"jira", "github", "slack", "googledrive", "notion", "sharepoint"} {
+		if _, ok := connectors[connector]; ok {
+			names = append(names, connectorDisplayName(connector))
+		}
+	}
+	return fmt.Sprintf(localized(
+		language,
+		"Live source context: %s",
+		"Live source context：%s",
+		"Live source context: %s",
+		"Live source context: %s",
+	), strings.Join(names, ", "))
+}
+
 func compactArtifactTitle(artifact repository.IngestEvent) string {
 	title := strings.TrimSpace(artifact.Title)
 	if title == "" || len(strings.Fields(title)) > 18 {
@@ -718,6 +970,25 @@ func compactLiveError(err error) string {
 		}
 	}
 	return previewText(text, 180)
+}
+
+func connectorDisplayName(connector string) string {
+	switch normalizeConnector(connector) {
+	case "github":
+		return "GitHub"
+	case "jira":
+		return "Jira"
+	case "slack":
+		return "Slack"
+	case "googledrive":
+		return "Google Drive"
+	case "notion":
+		return "Notion"
+	case "sharepoint":
+		return "SharePoint"
+	default:
+		return connector
+	}
 }
 
 func buildStatusAnswer(syncs []repository.ConnectorSync, language string) string {

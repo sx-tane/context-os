@@ -40,6 +40,36 @@ Relationship benchmark gates use:
 - `relationship_recall_min`
 - `relationship_false_positive_rate_max`
 
+## Misalignment Benchmark Audit
+
+Misalignment benchmark quality is audited with `.codex/skills/contextos-benchmark-auditor/` and implemented through the existing reasoning harness layout:
+
+```text
+tests/harness/
+  scenarios/reasoning/<case-id>.yaml
+  fixtures/reasoning/<case-id>/
+    input.txt
+    source-metadata.json
+  golden/reasoning/<case-id>.json
+```
+
+The expected case mix covers clean agreement, missing required fields, ticket/API/frontend route drift, stale README/API claims, ambiguous performance requirements, false-friend keyword guards, high-severity evidence loss, and evidence-location guards. Every executable case should test contradiction detection or calibrated restraint, not generic summarization.
+
+Audit score dimensions are:
+
+- `precision`
+- `recall`
+- `false_positive_rate`
+- evidence accuracy
+- severity calibration
+- deterministic stability
+
+Run reasoning misalignment scenarios through the shared harness:
+
+```sh
+GOCACHE=/tmp/context-os-gocache go test ./tests
+```
+
 Run the full Go suite after changing scenarios, fixtures, goldens, or stage behavior:
 
 ```sh

@@ -473,6 +473,39 @@ export interface paths {
       };
     };
   };
+  "/graph/cleanup": {
+    /** Permanently removes backend-classified low-signal graph entity and relationship rows for a workspace without deleting source artifacts, findings, chat history, or connected sources. */
+    post: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id: string;
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["graph.cleanupResponse"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/health": {
     /** Returns ok when the API process is running. */
     get: {
@@ -1092,6 +1125,14 @@ export interface definitions {
     | "relationship.created"
     | "mismatch.detected"
     | "codex.analysis.completed";
+  "graph.cleanupResponse": {
+    deleted_entity_count?: number;
+    deleted_relationship_count?: number;
+    matched_entity_count?: number;
+    matched_relationship_count?: number;
+    workspace_id?: string;
+    workspace_path?: string;
+  };
   "repository.ConnectorSync": {
     /** @description Connector is the source connector name. */
     connector?: string;
@@ -1129,6 +1170,15 @@ export interface definitions {
      */
     connector?: string;
     /**
+     * @description Connectors optionally pins the query to several live connectors.
+     * @example [
+     *   "jira",
+     *   "github",
+     *   "slack"
+     * ]
+     */
+    connectors?: string[];
+    /**
      * @description Limit caps returned artifacts.
      * @example 20
      */
@@ -1143,6 +1193,11 @@ export interface definitions {
      * @example give me today's Slack messages
      */
     message?: string;
+    /**
+     * @description ResponseLanguage is a short language hint used to match the user's current prompt language.
+     * @example zh
+     */
+    response_language?: string;
     /**
      * @description SourceURI optionally pins the query to a channel, repository, folder, or document URI.
      * @example #delivery-team

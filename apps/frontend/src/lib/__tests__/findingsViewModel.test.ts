@@ -12,8 +12,10 @@ import {
   findingRecommendedAction,
   findingSummary,
   groupArtifactsBySource,
+  markdownBulletList,
   messageLines,
   normalizeActivityTimeFilter,
+  previewMarkdownText,
   previewText,
   severityLabel,
 } from "../findings/viewModel";
@@ -68,6 +70,13 @@ describe("messageLines", () => {
       { kind: "section", text: "Jira" },
       { kind: "bullet", text: "Issue: BKGDEV-8096" },
       { kind: "bullet", text: "予約一覧" },
+    ]);
+  });
+
+  it("preserves raw URLs, inline code, and non-English markdown text", () => {
+    expect(messageLines("See `field_id` at https://example.test/docs\n- Google Drive")).toEqual([
+      { kind: "body", text: "See `field_id` at https://example.test/docs" },
+      { kind: "section", text: "Google Drive" },
     ]);
   });
 });
@@ -157,7 +166,7 @@ describe("activity display helpers", () => {
     const artifact = makeArtifact({
       title: "Slack decision",
       body: [
-        "- Alice confirmed the API field mapping",
+        "- **Alice** confirmed the API `field` mapping",
         "- Bob asked QA to wait for the backend deploy",
         "Message link: https://slack.example.test/archives/C1/p1",
       ].join("\n"),
@@ -167,12 +176,13 @@ describe("activity display helpers", () => {
     const summary = activityEventSummary(artifact);
 
     expect(summary.preview).toBe("Slack decision");
+    expect(summary.detailText).toBe("Slack decision");
     expect(summary.facts).toEqual([
-      "Alice confirmed the API field mapping",
+      "**Alice** confirmed the API `field` mapping",
       "Bob asked QA to wait for the backend deploy",
     ]);
     expect(summary.links).toEqual(["https://slack.example.test/archives/C1/p1"]);
-    expect(summary.rawText).toContain("Alice confirmed");
+    expect(summary.rawText).toContain("**Alice** confirmed");
   });
 });
 
@@ -180,6 +190,38 @@ describe("previewText", () => {
   it("cleans markdown and truncates long previews", () => {
     expect(previewText("**Important** `field`", 20)).toBe("Important field");
     expect(previewText("one two three four", 8)).toBe("one two...");
+  });
+});
+
+describe("previewMarkdownText", () => {
+  it("preserves markdown markers while truncating expanded detail text", () => {
+    expect(previewMarkdownText("**Important** `field`", 40)).toBe(
+      "**Important** `field`",
+    );
+    expect(previewMarkdownText("**Important** `field`", 14)).toBe(
+      "**Important**...",
+    );
+  });
+});
+
+describe("markdownBulletList", () => {
+  it("turns source arrays into safe markdown bullet text", () => {
+    expect(
+      markdownBulletList([
+        "**Fact** uses `field_id`",
+        "- Existing bullet",
+        "1. Existing step",
+        "",
+        "中文 `字段`",
+      ]),
+    ).toBe(
+      [
+        "- **Fact** uses `field_id`",
+        "- Existing bullet",
+        "1. Existing step",
+        "- 中文 `字段`",
+      ].join("\n"),
+    );
   });
 });
 

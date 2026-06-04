@@ -991,6 +991,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/graph/cleanup": {
+            "post": {
+                "description": "Permanently removes backend-classified low-signal graph entity and relationship rows for a workspace without deleting source artifacts, findings, chat history, or connected sources.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "graph"
+                ],
+                "summary": "Clean noisy graph data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/graph.cleanupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Returns ok when the API process is running.",
@@ -2302,6 +2367,29 @@ const docTemplate = `{
                 "CodexAnalysisComplete"
             ]
         },
+        "graph.cleanupResponse": {
+            "type": "object",
+            "properties": {
+                "deleted_entity_count": {
+                    "type": "integer"
+                },
+                "deleted_relationship_count": {
+                    "type": "integer"
+                },
+                "matched_entity_count": {
+                    "type": "integer"
+                },
+                "matched_relationship_count": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "type": "string"
+                },
+                "workspace_path": {
+                    "type": "string"
+                }
+            }
+        },
         "repository.ConnectorSync": {
             "type": "object",
             "properties": {
@@ -2372,6 +2460,18 @@ const docTemplate = `{
                     "type": "string",
                     "example": "slack"
                 },
+                "connectors": {
+                    "description": "Connectors optionally pins the query to several live connectors.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "jira",
+                        "github",
+                        "slack"
+                    ]
+                },
                 "limit": {
                     "description": "Limit caps returned artifacts.",
                     "type": "integer",
@@ -2386,6 +2486,11 @@ const docTemplate = `{
                     "description": "Message is the user question to answer from local ContextOS data.",
                     "type": "string",
                     "example": "give me today's Slack messages"
+                },
+                "response_language": {
+                    "description": "ResponseLanguage is a short language hint used to match the user's current prompt language.",
+                    "type": "string",
+                    "example": "zh"
                 },
                 "source_uri": {
                     "description": "SourceURI optionally pins the query to a channel, repository, folder, or document URI.",

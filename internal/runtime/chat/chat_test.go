@@ -89,7 +89,7 @@ func TestQuerySupportsNonSlackConnectors(t *testing.T) {
 	}
 }
 
-// TestQueryLocalAnswersUseResponseLanguage verifies deterministic local answers follow the requested language.
+// TestQueryLocalAnswersUseResponseLanguage verifies deterministic local answers follow the current prompt language hint.
 func TestQueryLocalAnswersUseResponseLanguage(t *testing.T) {
 	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, &fakeSyncRepository{})
 
@@ -354,6 +354,131 @@ func TestQueryUsesConnectorLevelLiveAnswerer(t *testing.T) {
 	}
 }
 
+// TestQueryFansOutConnectedSourcesForGenericPrompt verifies meaningful prompts search connected live sources without keyword routing.
+func TestQueryFansOutConnectedSourcesForGenericPrompt(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "Related implementation context was found."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "kkg payment 決済GW",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if result.Connector != "multiple" {
+		t.Fatalf("Connector = %q, want multiple", result.Connector)
+	}
+	if live.calls != 3 {
+		t.Fatalf("live calls = %d, want 3", live.calls)
+	}
+	if len(result.AnswerSections) != 3 {
+		t.Fatalf("answer sections = %d, want 3", len(result.AnswerSections))
+	}
+}
+
+// TestQueryRequestedConnectorsFanOutOnlyThoseLiveScopes verifies explicit connector lists constrain broad live fanout.
+func TestQueryRequestedConnectorsFanOutOnlyThoseLiveScopes(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "Related implementation context was found."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "kkg payment 決済GW",
+		Connectors:  []string{"jira", "slack"},
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Connector != "multiple" {
+		t.Fatalf("Connector = %q, want multiple", result.Connector)
+	}
+	if live.calls != 2 {
+		t.Fatalf("live calls = %d, want 2", live.calls)
+	}
+	if len(result.AnswerSections) != 2 {
+		t.Fatalf("answer sections = %d, want 2", len(result.AnswerSections))
+	}
+	if result.AnswerSections[0].Connector != "jira" || result.AnswerSections[1].Connector != "slack" {
+		t.Fatalf("answer connectors = %#v, want jira then slack", result.AnswerSections)
+	}
+}
+
+// TestQueryExplicitRouteDisablesRequestedConnectorFanout verifies concrete route fields take precedence over connector lists.
+func TestQueryExplicitRouteDisablesRequestedConnectorFanout(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "BKGDEV-8466 is in implementation review."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "BKGDEV-8466 check this",
+		Connector:   "jira",
+		Connectors:  []string{"jira", "github", "slack"},
+		SourceURI:   "BKGDEV-8466",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Connector != "jira" {
+		t.Fatalf("Connector = %q, want jira", result.Connector)
+	}
+	if live.calls != 1 {
+		t.Fatalf("live calls = %d, want 1", live.calls)
+	}
+	if live.query.SourceURI != "BKGDEV-8466" {
+		t.Fatalf("live SourceURI = %q, want BKGDEV-8466", live.query.SourceURI)
+	}
+}
+
+// TestQueryDoesNotFanOutLanguageOnlyPrompt verifies language-control prompts stay out of live source search.
+func TestQueryDoesNotFanOutLanguageOnlyPrompt(t *testing.T) {
+	for _, message := range []string{"answer me in english", "请用中文回答"} {
+		t.Run(message, func(t *testing.T) {
+			events := &fakeEventRepository{}
+			syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+				{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+			}}
+			live := &fakeLiveAnswerer{answer: "should not be used"}
+			service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+			result, err := service.Query(context.Background(), internalchat.Query{
+				WorkspaceID: "/workspace",
+				Message:     message,
+			})
+			if err != nil {
+				t.Fatalf("Query() error = %v", err)
+			}
+			if live.calls != 0 {
+				t.Fatalf("live calls = %d, want 0", live.calls)
+			}
+			if result.Provider == "codex" {
+				t.Fatalf("Provider = %q, want non-codex", result.Provider)
+			}
+		})
+	}
+}
+
 // TestQueryUsesLiveAnswererForOwnerRepoPrompt verifies owner/repo text routes to live GitHub through a saved connector row.
 func TestQueryUsesLiveAnswererForOwnerRepoPrompt(t *testing.T) {
 	events := &fakeEventRepository{}
@@ -547,8 +672,8 @@ Message link: https://example.invalid/slack`
 	}
 }
 
-// TestQueryUnsupportedUsesChineseResponseLanguage verifies unsupported local answers use Simplified Chinese when requested.
-func TestQueryUnsupportedUsesChineseResponseLanguage(t *testing.T) {
+// TestQueryUnsupportedMatchesPromptLanguage verifies unsupported local answers match the current prompt language hint.
+func TestQueryUnsupportedMatchesPromptLanguage(t *testing.T) {
 	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, &fakeSyncRepository{})
 
 	result, err := service.Query(context.Background(), internalchat.Query{
@@ -560,12 +685,12 @@ func TestQueryUnsupportedUsesChineseResponseLanguage(t *testing.T) {
 		t.Fatalf("Query() error = %v", err)
 	}
 	if !strings.Contains(result.Answer, "我可以回答本地来源问题") {
-		t.Fatalf("Answer = %q, want Simplified Chinese unsupported wrapper", result.Answer)
+		t.Fatalf("Answer = %q, want prompt-language unsupported wrapper", result.Answer)
 	}
 }
 
-// TestQueryNoArtifactsUsesChineseResponseLanguage verifies empty artifact answers use Simplified Chinese when requested.
-func TestQueryNoArtifactsUsesChineseResponseLanguage(t *testing.T) {
+// TestQueryNoArtifactsMatchesPromptLanguage verifies empty artifact answers match the current prompt language hint.
+func TestQueryNoArtifactsMatchesPromptLanguage(t *testing.T) {
 	service := internalchat.NewService(fakeWorkspaces(), &fakeEventRepository{}, nil)
 
 	result, err := service.Query(context.Background(), internalchat.Query{
@@ -579,12 +704,12 @@ func TestQueryNoArtifactsUsesChineseResponseLanguage(t *testing.T) {
 		t.Fatalf("Query() error = %v", err)
 	}
 	if !strings.Contains(result.Answer, "没有找到本地") {
-		t.Fatalf("Answer = %q, want Simplified Chinese no-artifact wrapper", result.Answer)
+		t.Fatalf("Answer = %q, want prompt-language no-artifact wrapper", result.Answer)
 	}
 }
 
-// TestQueryLiveFailureFallbackUsesChineseResponseLanguage verifies live failure prefixes use Simplified Chinese without translating artifact content.
-func TestQueryLiveFailureFallbackUsesChineseResponseLanguage(t *testing.T) {
+// TestQueryLiveFailureFallbackMatchesPromptLanguage verifies live failure prefixes match the prompt language without translating artifact content.
+func TestQueryLiveFailureFallbackMatchesPromptLanguage(t *testing.T) {
 	events := &fakeEventRepository{events: []repository.IngestEvent{{
 		ID:          "evt-github",
 		WorkspaceID: "ws1",
@@ -609,7 +734,7 @@ func TestQueryLiveFailureFallbackUsesChineseResponseLanguage(t *testing.T) {
 		t.Fatalf("Query() error = %v", err)
 	}
 	if !strings.Contains(result.Answer, "Live Codex 查询失败：plugin unavailable") {
-		t.Fatalf("Answer = %q, want Simplified Chinese live failure prefix", result.Answer)
+		t.Fatalf("Answer = %q, want prompt-language live failure prefix", result.Answer)
 	}
 	if !strings.Contains(result.Answer, "Repository fallback summary") {
 		t.Fatalf("Answer = %q, want original artifact title preserved", result.Answer)

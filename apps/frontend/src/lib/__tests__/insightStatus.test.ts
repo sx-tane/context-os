@@ -1,6 +1,7 @@
 import { buildInsightStatus } from "../insights/status";
 import type {
   Artifact,
+  ChatQueryResult,
   ConnectorKnowledge,
   FindingsResult,
   GraphData,
@@ -13,7 +14,7 @@ describe("buildInsightStatus", () => {
     expect(status.concreteSourceCount).toBe(0);
     expect(status.chatOnlySourceCount).toBe(0);
     expect(status.findingsState).toBe("no_concrete_sources");
-    expect(status.findingsMessage).toContain("Add a concrete source");
+    expect(status.findingsMessage).toContain("specific ticket");
   });
 
   it("counts connector-only live scopes as chat-only instead of analysis-ready", () => {
@@ -32,6 +33,53 @@ describe("buildInsightStatus", () => {
       "github",
       "slack",
     ]);
+    expect(status.findingsMessage).toContain("Ask about a specific ticket");
+  });
+
+  it("counts chat-derived concrete evidence as analysis-ready", () => {
+    const status = buildInsightStatus({
+      readySources: [readySource("github", "github")],
+      lastChatResult: chatResult({
+        answer_sections: [
+          {
+            source_label: "GitHub PR",
+            connector: "github",
+            source_uri: "https://github.com/context-os/app/pull/43",
+          },
+        ],
+      }),
+    });
+
+    expect(status.concreteSourceCount).toBe(1);
+    expect(status.derivedConcreteSourceCount).toBe(1);
+    expect(status.chatOnlySourceCount).toBe(1);
+    expect(status.findingsState).toBe("not_run");
+    expect(status.sourceScopeLabel).toBe(
+      "1 concrete evidence source, 1 chat-only scope",
+    );
+  });
+
+  it("counts Activity-derived live evidence as analysis-ready", () => {
+    const status = buildInsightStatus({
+      readySources: [readySource("slack", "slack")],
+      recentArtifacts: [
+        artifact("2026-06-04T08:00:00.000Z", {
+          connector: "slack",
+          source_uri: "https://acme.slack.com/archives/C123/p1717449300000000",
+          metadata: {
+            evidence_kind: "live_chat_answer",
+          },
+        }),
+      ],
+    });
+
+    expect(status.concreteSourceCount).toBe(1);
+    expect(status.derivedConcreteSourceCount).toBe(1);
+    expect(status.chatOnlySourceCount).toBe(1);
+    expect(status.findingsState).toBe("not_run");
+    expect(status.sourceScopeLabel).toBe(
+      "1 concrete evidence source, 1 chat-only scope",
+    );
   });
 
   it("marks concrete sources with graph context as not run before manual analysis", () => {
@@ -90,7 +138,7 @@ function readySource(
   };
 }
 
-function artifact(ingestedAt: string): Artifact {
+function artifact(ingestedAt: string, overrides: Partial<Artifact> = {}): Artifact {
   return {
     id: `artifact-${ingestedAt}`,
     workspace_id: "workspace",
@@ -103,6 +151,21 @@ function artifact(ingestedAt: string): Artifact {
     content_hash: "hash",
     schema_version: "1",
     ingested_at: ingestedAt,
+    ...overrides,
+  };
+}
+
+function chatResult(overrides: Partial<ChatQueryResult>): ChatQueryResult {
+  return {
+    intent: "artifacts",
+    workspace_id: "workspace",
+    workspace_path: "workspace",
+    provider: "codex",
+    answer: "Answer",
+    summary: "Summary",
+    artifact_count: 0,
+    artifacts: [],
+    ...overrides,
   };
 }
 

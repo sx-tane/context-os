@@ -113,11 +113,13 @@
             : (lastChatResult?.artifacts ?? []);
     $: insightStatus = buildInsightStatus({
         readySources,
+        lastChatResult,
         recentArtifacts,
         graphData,
         lastFindings,
         lastAnalysisAt,
     });
+    $: hasAnalysisInput = hasSources || insightStatus.concreteSourceCount > 0;
     $: protectedWorkspace =
         workspacePath === DEFAULT_WORKSPACE_PATH ||
         workspacePath === DEMO_WORKSPACE_PATH;
@@ -402,7 +404,7 @@
     async function routeCommand(text: string) {
         const action = classifyChatCommand(text);
         if (action === "clear") {
-            clearChat();
+            await clearChat();
             lastChatResult = null;
             lastFindings = null;
             addMessage(
@@ -424,6 +426,9 @@
         await runChatQuery({
             text,
             workspacePath,
+            readySources: getProject().connectors.filter(
+                (source) => source.status === "ready",
+            ),
             addMessage,
             replaceMessage,
             setBusy: (value) => (busy = value),
@@ -440,6 +445,8 @@
             readySources: getProject().connectors.filter(
                 (source) => source.status === "ready",
             ),
+            lastChatResult,
+            recentArtifacts,
             addMessage,
             replaceMessage,
             setBusy: (value) => (busy = value),
@@ -699,7 +706,7 @@
                     <button
                         type="button"
                         on:click={runFindings}
-                        disabled={!hasSources || busy}
+                        disabled={!hasAnalysisInput || busy}
                         >{busy ? "Running" : "Run Analysis"}</button
                     >
                 </div>
@@ -738,7 +745,7 @@
                         {recentArtifacts}
                         readySourceCount={readySources.length}
                         {workspaceStatus}
-                        {hasSources}
+                        hasSources={hasAnalysisInput}
                         {insightStatus}
                     />
                 {:else if activeInsightTab === "graph"}

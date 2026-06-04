@@ -13,12 +13,16 @@ Static connector, Codex, health, and Swagger routes are always registered. Conne
 
 Relationship assistance is disabled by default. Set `CONTEXTOS_AI_RELATIONSHIPS=codex` to wire a cached local Codex CLI relationship assistant into persistent ingest. Accepted proposals are still validated by `internal/stages/relationship`, and failed Codex calls fall back to deterministic relationship edges.
 
+Cross-source graph verification is also disabled by default. Set `CONTEXTOS_GRAPH_VERIFIER=codex` to wire a Codex CLI Local DB snapshot verifier after live chat evidence saves. The verifier does not re-read external connectors; it only compares saved events, entities, and existing relationships.
+
 ```mermaid
 flowchart TD
   DB[(SQL DB)] --> B[bootstrap.Routes]
   B --> S[Persistent stores]
   ENV[CONTEXTOS_AI_RELATIONSHIPS=codex] --> A[Cached Codex relationship assistant]
+  GENV[CONTEXTOS_GRAPH_VERIFIER] --> V[Graph verifier]
   A --> S
+  V --> S
   S --> H[DB-backed handlers]
   H --> M[HTTP mux]
   C[Static connector handlers] --> M

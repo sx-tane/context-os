@@ -1,12 +1,13 @@
 import type {
   Artifact,
+  ChatQueryResult,
   ConnectorKnowledge,
   FindingsResult,
   GraphData,
 } from "$lib/types";
 import {
+  buildAnalysisSources,
   type SkippedAnalysisSource,
-  splitAnalysisSources,
 } from "$lib/sources/analysisEligibility";
 
 export type FindingsInsightState =
@@ -17,6 +18,7 @@ export type FindingsInsightState =
 
 export interface InsightStatusInput {
   readySources?: ConnectorKnowledge[];
+  lastChatResult?: ChatQueryResult | null;
   recentArtifacts?: Artifact[];
   graphData?: GraphData | null;
   lastFindings?: FindingsResult | null;
@@ -26,6 +28,7 @@ export interface InsightStatusInput {
 export interface InsightStatus {
   readySourceCount: number;
   concreteSourceCount: number;
+  derivedConcreteSourceCount: number;
   chatOnlySourceCount: number;
   chatOnlySources: SkippedAnalysisSource[];
   sourceScopeLabel: string;
@@ -50,12 +53,17 @@ export interface InsightStatus {
 
 export function buildInsightStatus({
   readySources = [],
+  lastChatResult = null,
   recentArtifacts = [],
   graphData = null,
   lastFindings = null,
   lastAnalysisAt = "",
 }: InsightStatusInput): InsightStatus {
-  const { eligible, skipped } = splitAnalysisSources(readySources);
+  const { eligible, skipped, derived } = buildAnalysisSources({
+    readySources,
+    lastChatResult,
+    recentArtifacts,
+  });
   const latestActivityAt = latestArtifactTimestamp(recentArtifacts);
   const graphNodeCount = graphData?.entity_count ?? graphData?.count ?? graphData?.entities?.length ?? 0;
   const graphLinkCount = graphData?.relationship_count ?? graphData?.relationships?.length ?? 0;
@@ -67,7 +75,11 @@ export function buildInsightStatus({
     lastAnalysisAt,
     hasAnalysisResult: lastFindings !== null,
   });
-  const sourceScopeLabel = buildSourceScopeLabel(eligible.length, skipped.length);
+  const sourceScopeLabel = buildSourceScopeLabel(
+    eligible.length,
+    skipped.length,
+    derived.length,
+  );
   const activityLabel = buildActivityLabel(recentArtifacts.length);
   const activityFreshnessLabel = latestActivityAt
     ? `latest ${formatInsightTimestamp(latestActivityAt)}`
@@ -93,6 +105,7 @@ export function buildInsightStatus({
   return {
     readySourceCount: readySources.length,
     concreteSourceCount: eligible.length,
+    derivedConcreteSourceCount: derived.length,
     chatOnlySourceCount: skipped.length,
     chatOnlySources: skipped,
     sourceScopeLabel,
@@ -166,9 +179,16 @@ function buildActivityLabel(count: number) {
   return plural(count, "event");
 }
 
-function buildSourceScopeLabel(concreteCount: number, chatOnlyCount: number) {
-  if (chatOnlyCount === 0) return plural(concreteCount, "concrete source");
-  return `${plural(concreteCount, "concrete source")}, ${plural(chatOnlyCount, "chat-only scope")}`;
+function buildSourceScopeLabel(
+  concreteCount: number,
+  chatOnlyCount: number,
+  derivedConcreteCount: number,
+) {
+  const sourceLabel = derivedConcreteCount > 0
+    ? plural(concreteCount, "concrete evidence source")
+    : plural(concreteCount, "concrete source");
+  if (chatOnlyCount === 0) return sourceLabel;
+  return `${sourceLabel}, ${plural(chatOnlyCount, "chat-only scope")}`;
 }
 
 function buildFindingsDetailLabel(
@@ -198,8 +218,8 @@ function buildFindingsMessage(
   }
   if (state === "no_concrete_sources") {
     return chatOnlySourceCount > 0
-      ? "Chat-only live connectors can answer chat, but Findings needs a concrete repo, project, issue, channel, document, folder, or file."
-      : "Add a concrete source before running Findings analysis.";
+      ? "Chat-only live connectors can answer chat. Ask about a specific ticket, channel, repo, PR, document, folder, or file so saved evidence becomes analysis-ready."
+      : "Connect a concrete source, or ask chat about a specific ticket, channel, repo, PR, document, folder, or file before running Findings.";
   }
   if (state === "not_run") {
     return hasGraphContext

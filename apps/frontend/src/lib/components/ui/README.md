@@ -37,6 +37,30 @@ Emits `cancel` and `confirm` events. Use for workspace removal, source reset, an
 
 ---
 
+### InlineText
+
+Safe inline text renderer for Markdown links, raw URLs, inline code, and bold spans. It renders structured Svelte nodes and never injects raw HTML.
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `text` | `string` | `""` | Inline text to tokenize safely. |
+
+---
+
+### SafeMarkdownBlock
+
+Safe lightweight Markdown-style block renderer used by chat answers and Activity details.
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `text` | `string` | `""` | Source text to render. |
+| `emptyText` | `string` | `""` | Fallback text when `text` is empty. |
+| `variant` | `"message" \| "plain" \| "source" \| "detail"` | `"message"` | Spacing and paragraph treatment for the host surface. |
+
+Supports headings, connector/source section rows, bullets, numbered lines, raw URLs, Markdown links, inline code, and bold spans. Do not use for full Markdown tables or raw HTML.
+
+---
+
 ### FormField
 
 Labelled input wrapper. Renders a `<label>` and an `<input>` (or `<textarea>`) in a consistent vertical stack.

@@ -45,6 +45,11 @@ When `Stores.RelationshipAssistant` is set, the relationship stage calls
 same-document relationships on top of deterministic edges. Assistant failures do not fail the
 pipeline run; output falls back to deterministic relationships.
 
+Cross-source verification is not part of `RunEvents`. When enabled with
+`CONTEXTOS_GRAPH_VERIFIER`, persistent live-evidence saves run `internal/stages/graphverify` after
+graph-only persistence so the verifier can compare Local DB events and existing entities across
+source documents without re-reading live connectors.
+
 ## Maintenance Checklist
 
 - Update this README when orchestration sequence or wiring changes.

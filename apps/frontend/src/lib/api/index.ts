@@ -4,6 +4,7 @@ import type {
   ActivityCleanupResult,
   ChatQueryRequest,
   ChatQueryResult,
+  ChatSessionResetRequest,
   CodexConnectorKind,
   CodexSourceList,
   ConnectorKind,
@@ -722,6 +723,34 @@ export async function streamChatQuery(
       handlers.onError?.(parsed?.message ?? message.data);
     }
   });
+}
+
+export async function resetChatSession(
+  body: ChatSessionResetRequest,
+  options: RequestOptions = {},
+): Promise<{ ok: boolean; status: number; body?: ApiErrorBody }> {
+  try {
+    const res = await apiFetch(`${API_URL}/chat/session/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: options.signal,
+    });
+    if (res.ok) {
+      return { ok: true, status: res.status };
+    }
+    return { ok: false, status: res.status, body: await readJSON(res) };
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message: "API is unreachable. Chat was cleared locally only.",
+      },
+    };
+  }
 }
 
 /** Fetch entity graph data for a workspace, optionally filtered by entity type. */

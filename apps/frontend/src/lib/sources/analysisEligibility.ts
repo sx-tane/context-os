@@ -180,16 +180,14 @@ function sourceFromAnswerSection(
   for (const sourceURI of [
     section.source_uri,
     concreteSectionLink(section),
-    result?.source_uri,
+    result.source_uri,
   ]) {
     const cleanURI = trimSourceURI(sourceURI ?? "");
-    const connector = normalizeConnector(
-      firstNonEmpty(
-        section.connector,
-        connectorFromURI(cleanURI),
-        connectorFromSectionLinks(section),
-        result?.connector,
-      ),
+    const connector = firstConnector(
+      connectorFromURI(cleanURI),
+      section.connector,
+      connectorFromSectionLinks(section),
+      result.connector,
     );
     const source = makeReadySource(connector, cleanURI);
     if (source && isAnalysisEligibleSource(source)) return source;
@@ -205,12 +203,10 @@ function sourceFromArtifact(artifact: Artifact): ConnectorKnowledge | null {
     artifact.metadata?.url,
   ]) {
     const cleanURI = trimSourceURI(sourceURI ?? "");
-    const connector = normalizeConnector(
-      firstNonEmpty(
-        artifact.connector,
-        artifact.metadata?.connector,
-        connectorFromURI(cleanURI),
-      ),
+    const connector = firstConnector(
+      artifact.connector,
+      artifact.metadata?.connector,
+      connectorFromURI(cleanURI),
     );
     const source = makeReadySource(connector, cleanURI);
     if (source && isAnalysisEligibleSource(source)) return source;
@@ -280,6 +276,14 @@ function normalizeConnector(value?: string): ConnectorKind | "" {
   return allConnectors.has(clean as ConnectorKind) ? (clean as ConnectorKind) : "";
 }
 
+function firstConnector(...values: Array<string | undefined>) {
+  for (const value of values) {
+    const connector = normalizeConnector(value);
+    if (connector) return connector;
+  }
+  return "";
+}
+
 function connectorFromURI(value?: string): ConnectorKind | "" {
   const clean = trimSourceURI(value ?? "");
   if (!clean) return "";
@@ -287,9 +291,6 @@ function connectorFromURI(value?: string): ConnectorKind | "" {
   if (/^[a-z][a-z0-9]+-\d+$/i.test(clean)) return "jira";
   if (/^#[a-z0-9_.-]+$/i.test(clean) || lower.startsWith("slack://")) {
     return "slack";
-  }
-  if (/^[a-z0-9_.-]+\/[a-z0-9_.-]+(?:\/(?:pull|issues)\/\d+)?$/i.test(clean)) {
-    return "github";
   }
   try {
     const parsed = new URL(clean);
@@ -313,14 +314,6 @@ function connectorFromURI(value?: string): ConnectorKind | "" {
     }
   } catch {
     return "";
-  }
-  return "";
-}
-
-function firstNonEmpty(...values: Array<string | undefined>) {
-  for (const value of values) {
-    const clean = trimSourceURI(value ?? "");
-    if (clean) return clean;
   }
   return "";
 }

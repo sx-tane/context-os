@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Artifact } from "$lib/types";
   import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
+  import SafeMarkdownBlock from "$lib/components/ui/SafeMarkdownBlock.svelte";
   import {
     activityFilterLabel,
     activityEventSummary,
@@ -11,7 +12,9 @@
     formatTime,
     filterArtifactsByTime,
     groupArtifactsBySource,
+    markdownBulletList,
     normalizeActivityTimeFilter,
+    previewMarkdownText,
     previewText,
     type ActivityTimeFilter,
   } from "$lib/findings/viewModel";
@@ -47,6 +50,18 @@
 
   function toggleArtifact(artifact: Artifact) {
     selectedArtifactID = selectedArtifactID === artifact.id ? "" : artifact.id;
+  }
+
+  function connectorClass(connector?: string) {
+    const normalized = (connector ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (normalized === "jira") return "source-jira";
+    if (normalized === "github") return "source-github";
+    if (normalized === "slack") return "source-slack";
+    if (normalized === "googledrive" || normalized === "google") return "source-googledrive";
+    if (normalized === "notion") return "source-notion";
+    if (normalized === "sharepoint" || normalized === "onedrive") return "source-sharepoint";
+    if (normalized === "filesystem") return "source-filesystem";
+    return "source-default";
   }
 
   async function confirmCleanup() {
@@ -118,9 +133,12 @@
 
   {#if sourceGroups.length}
     {#each sourceGroups as group (group.key)}
-      <section class="source-group" aria-label={`Activity for ${group.label}`}>
+      <section
+        class={`source-group ${connectorClass(group.artifacts[0]?.connector)}`}
+        aria-label={`Activity for ${group.label}`}
+      >
         <div class="source-head">
-          <strong>{group.label}</strong>
+          <strong class="source-title">{group.label}</strong>
           <span
             >{group.artifacts.length} event{group.artifacts.length === 1
               ? ""
@@ -132,7 +150,10 @@
           {@const selected = selectedArtifactID === artifact.id}
           {@const link = artifactLink(artifact)}
           {@const summary = activityEventSummary(artifact)}
-          <article class:selected>
+          <article
+            class:selected
+            class={connectorClass(artifact.connector)}
+          >
             <button
               type="button"
               class="activity-event"
@@ -145,7 +166,7 @@
                   >{artifact.connector} | {artifactProvider(artifact)}</small
                 >
               </div>
-              <strong>{artifact.title || artifact.source_uri}</strong>
+              <strong class="source-title">{artifact.title || artifact.source_uri}</strong>
               <p>{selected ? previewText(summary.preview, 720) : previewText(summary.preview, 220)}</p>
               <div class="activity-foot">
                 <small>{artifact.event_type}</small>
@@ -157,14 +178,19 @@
               <div class="activity-detail">
                 <div class="detail-copy">
                   <strong>Event summary</strong>
-                  <p>{summary.preview || "No summary text was saved for this event."}</p>
+                  <SafeMarkdownBlock
+                    text={summary.detailText}
+                    emptyText="No summary text was saved for this event."
+                    variant="detail"
+                  />
                 </div>
                 {#if summary.facts.length}
                   <div class="detail-list">
                     <strong>Key lines</strong>
-                    {#each summary.facts as fact}
-                      <p>{fact}</p>
-                    {/each}
+                    <SafeMarkdownBlock
+                      text={markdownBulletList(summary.facts)}
+                      variant="detail"
+                    />
                   </div>
                 {/if}
                 {#if summary.links.length}
@@ -190,7 +216,10 @@
                 {#if summary.rawText}
                   <details class="raw-event">
                     <summary>Raw event text</summary>
-                    <p>{previewText(summary.rawText, 1800)}</p>
+                    <SafeMarkdownBlock
+                      text={previewMarkdownText(summary.rawText, 1800)}
+                      variant="detail"
+                    />
                   </details>
                 {/if}
               </div>
@@ -246,7 +275,7 @@
     z-index: 1;
     border-bottom: 1px solid #d7d2c8;
     background: #ebe8e0;
-    padding: 10px 0;
+    padding: 10px 16px;
   }
 
   .activity-toolbar strong,
@@ -287,7 +316,7 @@
 
   .cleanup-message {
     border-bottom: 1px solid #d7d2c8;
-    padding: 12px 0;
+    padding: 12px 16px;
   }
 
   .cleanup-message {
@@ -304,11 +333,40 @@
 
   .source-head {
     color: #1c1b18;
-    padding: 4px 0 8px;
+    padding: 4px 16px 8px;
   }
 
-  .source-head strong {
+  .source-title {
+    color: #1c1b18;
     overflow-wrap: anywhere;
+  }
+
+  .source-jira .source-title {
+    color: #0c66e4;
+  }
+
+  .source-github .source-title {
+    color: #24292f;
+  }
+
+  .source-slack .source-title {
+    color: #4a154b;
+  }
+
+  .source-googledrive .source-title {
+    color: #1a73e8;
+  }
+
+  .source-notion .source-title {
+    color: #1c1b18;
+  }
+
+  .source-sharepoint .source-title {
+    color: #036c70;
+  }
+
+  .source-filesystem .source-title {
+    color: #8a6a20;
   }
 
   .source-head span,
@@ -325,8 +383,12 @@
     padding: 0;
   }
 
+  .empty-state {
+    padding: 16px;
+  }
+
   .activity-view article.selected {
-    background: rgba(248, 246, 239, 0.48);
+    background: transparent;
   }
 
   .activity-event {
@@ -389,19 +451,19 @@
     display: grid;
     gap: 12px;
     border-top: 1px solid #d7d2c8;
-    padding: 14px 16px 16px;
+    padding: 16px;
+  }
+
+  .detail-copy {
+    display: grid;
+    gap: 7px;
   }
 
   .detail-list {
     display: grid;
-    gap: 6px;
+    gap: 7px;
     border-top: 1px solid #e4ded2;
     padding-top: 10px;
-  }
-
-  .detail-list p {
-    margin: 0;
-    overflow-wrap: anywhere;
   }
 
   .activity-detail dl {
@@ -447,12 +509,16 @@
   }
 
   .raw-event {
+    display: grid;
+    gap: 8px;
     border-top: 1px solid #e4ded2;
     padding-top: 10px;
   }
 
-  .raw-event p {
-    overflow-wrap: anywhere;
+  .raw-event summary {
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
   }
 
   @media (max-width: 640px) {

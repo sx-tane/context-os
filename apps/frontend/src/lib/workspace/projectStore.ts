@@ -10,6 +10,7 @@ import type {
 } from "$lib/types";
 import {
   getWorkspaces,
+  resetChatSession,
   upsertWorkspace,
   getWorkspaceStatus,
 } from "$lib/api";
@@ -547,7 +548,11 @@ export function replaceMessage(id: string, msg: ChatMessage): void {
   _messages.update((m) => m.map((x) => (x.id === id ? msg : x)));
 }
 
-/** Clear all chat history for the current project. */
-export function clearChat(): void {
+/** Clear all chat history and best-effort backend chat session memory for the current project. */
+export async function clearChat(): Promise<void> {
+  const workspaceID = getProject().workspacePath;
+  if (workspaceID && workspaceID !== DEMO_WORKSPACE_PATH) {
+    await resetChatSession({ workspace_id: workspaceID });
+  }
   _messages.set([]);
 }

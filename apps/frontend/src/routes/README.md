@@ -33,8 +33,8 @@ Controls should use the same restrained mono theme:
 - Relationship context is selective: the focused graph draws links for the selected entity instead of all graph links at once. The detail panel groups incoming and outgoing relationships by relationship kind.
 - Graph receives a separate confirmation-gated cleanup action from the route. The route calls `POST /graph/cleanup`, then refreshes workspace status, Activity, and Graph. This permanent cleanup removes backend-classified low-signal persisted graph rows only; source artifacts, chat history, findings, and connected sources are not deleted.
 - Run Analysis preserves backend JSON errors and surfaces frontend API connectivity failures as an explicit message to start `scripts/start-local.sh` or check the `/api` proxy.
-- Run Analysis aggregates successful findings from every ready source, shows per-source failures inline, and uses an explicit zero-finding message when analysis completed without mismatch signals.
-- The insight status strip derives one shared Activity / Graph / Findings model from `$lib/insights/status`, including concrete analysis-ready sources versus chat-only live connector scopes.
+- Run Analysis aggregates successful findings from every concrete ready source, plus concrete sources derived from the latest chat result and Activity artifacts. Broad live connector rows remain chat-only scopes and are reported separately.
+- The insight status strip derives one shared Activity / Graph / Findings model from `$lib/insights/status`, including concrete analysis-ready sources from Sources, chat evidence, and Activity evidence versus chat-only live connector scopes.
 - Findings render as flat rows with separated severity/title, detected/evidence times, description, and recommended action blocks. Findings are displayed in English by default, and all source text in this route is kept in English.
 
 ## Responsibilities

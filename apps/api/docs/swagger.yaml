@@ -92,6 +92,21 @@ definitions:
     - RelationshipCreated
     - MismatchDetected
     - CodexAnalysisComplete
+  graph.cleanupResponse:
+    properties:
+      deleted_entity_count:
+        type: integer
+      deleted_relationship_count:
+        type: integer
+      matched_entity_count:
+        type: integer
+      matched_relationship_count:
+        type: integer
+      workspace_id:
+        type: string
+      workspace_path:
+        type: string
+    type: object
   repository.ConnectorSync:
     properties:
       connector:
@@ -148,6 +163,15 @@ definitions:
           github, jira, or filesystem.
         example: slack
         type: string
+      connectors:
+        description: Connectors optionally pins the query to several live connectors.
+        example:
+        - jira
+        - github
+        - slack
+        items:
+          type: string
+        type: array
       limit:
         description: Limit caps returned artifacts.
         example: 20
@@ -159,6 +183,11 @@ definitions:
       message:
         description: Message is the user question to answer from local ContextOS data.
         example: give me today's Slack messages
+        type: string
+      response_language:
+        description: ResponseLanguage is a short language hint used to match the user's
+          current prompt language.
+        example: zh
         type: string
       source_uri:
         description: SourceURI optionally pins the query to a channel, repository,
@@ -1486,6 +1515,51 @@ paths:
               type: string
             type: object
       summary: Query workspace entity graph
+      tags:
+      - graph
+  /graph/cleanup:
+    post:
+      description: Permanently removes backend-classified low-signal graph entity
+        and relationship rows for a workspace without deleting source artifacts, findings,
+        chat history, or connected sources.
+      parameters:
+      - description: Workspace path or ID
+        in: query
+        name: workspace_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/graph.cleanupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Clean noisy graph data
       tags:
       - graph
   /health:

@@ -10,6 +10,7 @@ export type ActivitySourceGroup = {
 
 export type ActivityEventSummary = {
   preview: string;
+  detailText: string;
   facts: string[];
   links: string[];
   rawText: string;
@@ -125,6 +126,21 @@ export function previewText(value?: string, max = 360) {
   return `${text.slice(0, max).trim()}...`;
 }
 
+export function previewMarkdownText(value?: string, max = 360) {
+  const text = (value ?? "").replace(/\r/g, "").trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max).trim()}...`;
+}
+
+export function markdownBulletList(items: string[] = []) {
+  return items
+    .flatMap((item) => item.replace(/\r/g, "").split("\n"))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => (/^([-*]\s+|\d+\.\s+)/.test(item) ? item : `- ${item}`))
+    .join("\n");
+}
+
 export function artifactOrigin(artifact: Artifact) {
   return artifact.connector === "filesystem" ? "LOCAL" : "SOURCE";
 }
@@ -174,12 +190,14 @@ export function artifactLink(artifact: Artifact) {
 
 export function activityEventSummary(artifact: Artifact): ActivityEventSummary {
   const rawText = artifact.body || artifact.preview || "";
-  const preview = previewText(artifact.preview || artifact.title || rawText, 280);
+  const summaryText = artifact.preview || artifact.title || rawText;
+  const preview = previewText(summaryText, 720);
+  const detailText = previewMarkdownText(summaryText, 1200);
   const links = uniqueValues(extractLinks(rawText || artifact.preview || artifact.source_uri));
   const facts = extractFactLines(rawText)
     .filter((line) => !links.some((link) => line.includes(link)))
     .slice(0, 6);
-  return { preview, facts, links, rawText };
+  return { preview, detailText, facts, links, rawText };
 }
 
 export function activityFilterLabel(filter: ActivityTimeFilter) {
@@ -283,7 +301,7 @@ function extractLinks(value: string) {
 function extractFactLines(value: string) {
   return value
     .split("\n")
-    .map((line) => cleanMarkdown(line).trim())
+    .map((line) => line.replace(/\r/g, "").trim())
     .map((line) => line.replace(/^[-*]\s+/, "").trim())
     .filter((line) => line.length > 0)
     .filter((line) => !/^source:|^message link:|^channel link:/i.test(line))

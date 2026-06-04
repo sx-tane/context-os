@@ -33,6 +33,7 @@ Load the relevant skill from `.codex/skills/<skill>/SKILL.md` before specialized
 - `contextos-frontend-connector`: Svelte connector components and connector registration.
 - `frontend-jest-swc-patterns`: frontend `*.test.ts` files, `$lib` mocks, fetch mocks, and setter lifecycle tests.
 - `contextos-harness-engineering`: fixtures, scenarios, goldens, benchmarks, and regression gates.
+- `contextos-benchmark-auditor`: correctness audits for the core misalignment benchmark, including contradiction evidence, precision, recall, false positives, severity, and stability.
 - `contextos-identity-resolution-benchmark`: identity merge rules, thresholds, aliases, and matching metrics.
 - `contextos-misalignment-report`: cross-layer mismatch reports with evidence, confidence, impact, and recommended action.
 - `contextos-issue-workflow`: GitHub parent-child issue groups and labels.
@@ -47,6 +48,7 @@ The Copilot `applyTo` globs were migrated into `.codex/instructions/`. Codex sho
 - `apps/api/**/*.go`: follow API handler instructions and use `contextos-api-handler`.
 - `internal/source/**/*.go`: follow connector instructions and use `contextos-api-handler`.
 - `{domain,internal,tests}/**/*.go`: follow Go pipeline instructions and use `go-best-practices` plus `go-test-patterns`.
+- `tests/harness/scenarios/reasoning/**`, `tests/harness/fixtures/reasoning/**`, and `tests/harness/golden/reasoning/**`: use `contextos-benchmark-auditor` with `contextos-harness-engineering` when adding or reviewing misalignment benchmark scenarios.
 - `internal/{reasoning,presentation,graph}/**/*.go`: follow reasoning output instructions and use `contextos-misalignment-report`.
 - `apps/frontend/src/**/*.test.ts`: follow frontend test instructions and use `frontend-jest-swc-patterns`.
 - `apps/frontend/src/**/*.svelte`: follow frontend design instructions and use `contextos-frontend-design`; add `contextos-frontend-connector` only for connector components.
@@ -92,7 +94,7 @@ When explaining architecture, workflows, pipeline stages, skill routing, state t
 
 ## Response Language
 
-When the user writes Chinese, answer in Chinese by default. Use Simplified Chinese unless the user explicitly requests another variant. Keep code identifiers, commands, logs, and quoted source text in their original language.
+Match the language of the user's current prompt by default. Keep code identifiers, commands, logs, and quoted source text in their original language.
 
 ## Ambiguity
 

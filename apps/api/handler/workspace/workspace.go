@@ -13,6 +13,7 @@ import (
 
 	"context-os/apps/api/response"
 	"context-os/domain/repository"
+	internalchat "context-os/internal/runtime/chat"
 )
 
 const workspaceRequestTimeout = 10 * time.Second
@@ -27,6 +28,7 @@ type Handler struct {
 	audit       repository.AuditRepository
 	parsedDir   string
 	snapshotDir string
+	sessionDir  string
 }
 
 // NewHandler returns a Handler wired to the provided repositories.
@@ -56,6 +58,12 @@ func (h *Handler) WithAuditRepository(audit repository.AuditRepository) *Handler
 func (h *Handler) WithLocalArtifactDirs(parsedDir, snapshotDir string) *Handler {
 	h.parsedDir = parsedDir
 	h.snapshotDir = snapshotDir
+	return h
+}
+
+// WithCodexChatSessionDir configures workspace-scoped Codex chat session metadata cleanup.
+func (h *Handler) WithCodexChatSessionDir(sessionDir string) *Handler {
+	h.sessionDir = sessionDir
 	return h
 }
 
@@ -283,12 +291,25 @@ func (h *Handler) deleteLocalWorkspaceArtifacts(workspaceID string) error {
 		}
 	}
 	if h.snapshotDir == "" {
-		return nil
+		return h.deleteCodexChatSession(workspaceID)
 	}
 	if err := removeSnapshotFiles(h.snapshotDir, workspaceID+".json"); err != nil {
 		return err
 	}
-	return removeSnapshotFiles(h.snapshotDir, workspaceID+"_*.json")
+	if err := removeSnapshotFiles(h.snapshotDir, workspaceID+"_*.json"); err != nil {
+		return err
+	}
+	return h.deleteCodexChatSession(workspaceID)
+}
+
+func (h *Handler) deleteCodexChatSession(workspaceID string) error {
+	if h.sessionDir == "" {
+		return nil
+	}
+	if err := internalchat.NewCodexSessionStore(h.sessionDir).Delete(workspaceID); err != nil {
+		return fmt.Errorf("delete codex chat session metadata: %w", err)
+	}
+	return nil
 }
 
 func removeSnapshotFiles(dir, pattern string) error {

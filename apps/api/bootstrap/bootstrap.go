@@ -25,10 +25,12 @@ import (
 	"context-os/apps/api/handler/shared"
 	handlerworkspace "context-os/apps/api/handler/workspace"
 	"context-os/apps/api/middleware"
+	"context-os/domain/repository"
 	"context-os/internal/persistence/store"
 	internalchat "context-os/internal/runtime/chat"
 	internalsync "context-os/internal/runtime/sync"
 	"context-os/internal/stages/execution"
+	"context-os/internal/stages/graphverify"
 	"context-os/internal/stages/identity"
 	"context-os/internal/stages/normalization"
 	"context-os/internal/stages/relationship"
@@ -120,6 +122,7 @@ func Routes(sqlDB *sql.DB) []Route {
 		routes = append(routes,
 			Route{Pattern: "/chat/query", Handler: http.HandlerFunc(handlers.chat.Query), CORS: true},
 			Route{Pattern: "/chat/query/stream", Handler: http.HandlerFunc(handlers.chat.StreamQuery), CORS: true},
+			Route{Pattern: "/chat/session/reset", Handler: http.HandlerFunc(handlers.chat.ResetSession), CORS: true},
 		)
 	}
 	return routes
@@ -167,6 +170,7 @@ func newHandlers(sqlDB *sql.DB) handlers {
 		shared.WithPersistentParsedWriter(parsedWriter),
 		shared.WithPersistentSemanticMatcher(identity.WorkerMatcher{Embedder: aiClient}),
 		shared.WithPersistentRelationshipAssistant(relationshipAssistantFromEnv()),
+		shared.WithPersistentGraphVerifier(graphVerifierFromEnv(evStore, entityStore)),
 	))
 
 	syncWorker := internalsync.NewWorker(wsStore, syncStore, evStore)
@@ -175,7 +179,8 @@ func newHandlers(sqlDB *sql.DB) handlers {
 	return handlers{
 		workspace: handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore).
 			WithAuditRepository(auditStore).
-			WithLocalArtifactDirs("storage/parsed", "storage/snapshots"),
+			WithLocalArtifactDirs("storage/parsed", "storage/snapshots").
+			WithCodexChatSessionDir("storage/codex-chat-sessions"),
 		presentation: presentation.NewHandler(
 			wsStore, evStore, mismatchStore, entityStore, syncStore,
 			presentation.WithParsedWriter(parsedWriter),
@@ -194,4 +199,23 @@ func relationshipAssistantFromEnv() relationship.Assistant {
 		return nil
 	}
 	return relationship.NewCachedAssistant("storage/relationship-cache", relationship.NewCodexAssistant())
+}
+
+func graphVerifierFromEnv(events repository.EventRepository, entities repository.EntityRepository) *graphverify.Service {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("CONTEXTOS_GRAPH_VERIFIER")))
+	if mode == "" {
+		return nil
+	}
+	switch mode {
+	case "data_analytics", "data-analytics":
+	case "codex", "codex_cli":
+	default:
+		return nil
+	}
+	return &graphverify.Service{
+		Events:    events,
+		Entities:  entities,
+		Assistant: graphverify.NewCodexAssistant(),
+		Limit:     80,
+	}
 }

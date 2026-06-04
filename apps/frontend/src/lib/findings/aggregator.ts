@@ -70,7 +70,7 @@ export function buildFindingsRunSummary(params: {
   const findingWord = mismatchCount === 1 ? "finding" : "findings";
   let base = "";
   if (analysisSourceCount === 0) {
-    base = `Analysis skipped: 0 concrete sources were ready. Findings need a repo, project, issue, channel, thread, document, folder, or file.`;
+    base = `Analysis skipped: 0 concrete sources were ready. Ask chat about a specific ticket, channel, repo, PR, document, folder, or file so saved evidence can become analysis-ready.`;
   } else if (mismatchCount > 0) {
     base = `Analysis complete for ${params.completedCount}/${analysisSourceCount} concrete ${sourceWord}. Found ${mismatchCount} ${findingWord}.`;
   } else {

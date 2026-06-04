@@ -1,7 +1,13 @@
 import { postChatQuery, streamChatQuery } from "$lib/api";
 import { demoChatQueryResult } from "$lib/chat/demoWorkspace";
 import { DEMO_WORKSPACE_PATH } from "$lib/workspace/projectStore";
-import type { Artifact, ChatMessage, ChatQueryResult, ChatStreamState } from "$lib/types";
+import type {
+  Artifact,
+  ChatMessage,
+  ChatQueryResult,
+  ChatStreamState,
+  ConnectorKnowledge,
+} from "$lib/types";
 
 export type ChatCommandAction =
   | "clear"
@@ -18,6 +24,7 @@ export type ChatQueryOptions = {
   setLastChatResult: (result: ChatQueryResult | null) => void;
   setActivityArtifacts: (artifacts: Artifact[]) => void;
   refreshWorkspace: () => Promise<void>;
+  readySources?: Pick<ConnectorKnowledge, "connector" | "uri" | "status">[];
 };
 
 export function makeId() {
@@ -176,6 +183,9 @@ export async function runChatQuery(options: ChatQueryOptions) {
       workspace_id: options.workspacePath,
       message: options.text,
       ...(route.connector ? { connector: route.connector } : {}),
+      ...(!route.connector && !route.sourceURI
+        ? liveConnectorHint(options.readySources)
+        : {}),
       ...(route.sourceURI ? { source_uri: route.sourceURI } : {}),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       local_date: localDateString(new Date()),
@@ -393,6 +403,28 @@ function skipReasonLabel(result: ChatQueryResult) {
   }
   if (result.provider !== "codex") return "local-only answer";
   return "evidence save";
+}
+
+export function liveConnectorHint(
+  readySources: Pick<ConnectorKnowledge, "connector" | "uri" | "status">[] | undefined,
+) {
+  const connectors = readyLiveConnectors(readySources);
+  return connectors.length > 0 ? { connectors } : {};
+}
+
+function readyLiveConnectors(
+  readySources: Pick<ConnectorKnowledge, "connector" | "uri" | "status">[] | undefined,
+) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const source of readySources ?? []) {
+    if (source.status !== "ready") continue;
+    if (source.connector === "filesystem") continue;
+    if (seen.has(source.connector)) continue;
+    seen.add(source.connector);
+    out.push(source.connector);
+  }
+  return out;
 }
 
 type PendingLiveRoute = {

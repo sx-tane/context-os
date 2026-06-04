@@ -3,13 +3,17 @@ package chat
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
+	"sync"
+	"time"
 )
 
 var codexBinCandidates = []string{
@@ -22,16 +26,20 @@ var codexBinCandidates = []string{
 
 // CodexAnswerer answers chat questions by invoking Codex CLI with installed plugins.
 type CodexAnswerer struct {
-	command string
+	command  string
+	sessions *codexSessionStore
 }
 
 // NewCodexAnswerer returns a live answerer backed by the local Codex CLI.
 func NewCodexAnswerer() CodexAnswerer {
-	return CodexAnswerer{command: resolveCodexCommand()}
+	return CodexAnswerer{command: resolveCodexCommand(), sessions: NewCodexSessionStore(defaultCodexSessionDir)}
 }
 
 // Answer asks a live Codex plugin for source-specific context.
 func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, error) {
+	if a.sessions == nil {
+		a.sessions = NewCodexSessionStore(defaultCodexSessionDir)
+	}
 	plugin := livePlugin(query.Connector)
 	if plugin == "" {
 		return "", fmt.Errorf("unsupported live connector %q", query.Connector)
@@ -40,7 +48,17 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	if sourceURI == "" {
 		return "", errors.New("source_uri is required for live chat")
 	}
+	workspaceID := strings.TrimSpace(firstNonEmpty(query.WorkspaceID, query.WorkspacePath))
+	if workspaceID == "" {
+		return "", errors.New("workspace_id is required for live chat")
+	}
 
+	unlock := a.sessions.lockWorkspace(workspaceID)
+	defer unlock()
+	sessionID, err := a.sessions.Load(workspaceID)
+	if err != nil {
+		return "", err
+	}
 	out, err := os.CreateTemp("", "contextos-chat-codex-*.txt")
 	if err != nil {
 		return "", err
@@ -52,40 +70,36 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	defer func() { _ = os.Remove(outPath) }()
 
 	prompt := livePrompt(plugin, sourceURI, query.Message, query.ResponseLanguage)
-	cmd := exec.Command(a.command, "exec", "--sandbox", "read-only", "--ephemeral", "--color", "never", "-o", outPath, prompt) //nolint:gosec
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	var log bytes.Buffer
-	progressLog := &progressBuffer{buf: &log, progress: query.Progress}
 	emitProgress(query.Progress, fmt.Sprintf("› Live Codex: %s plugin lookup", plugin))
 	emitProgress(query.Progress, fmt.Sprintf("• Source: %s", sourceURI))
-	emitProgress(query.Progress, "• Starting Codex CLI exec.")
-	cmd.Stdout = progressLog
-	cmd.Stderr = progressLog
-	if err := cmd.Start(); err != nil {
-		return "", err
-	}
 
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	select {
-	case err := <-done:
-		progressLog.Flush()
-		if err != nil {
-			text := strings.TrimSpace(log.String())
-			if text == "" {
-				text = err.Error()
+	var log bytes.Buffer
+	if sessionID != "" {
+		emitProgress(query.Progress, "• Resuming Codex CLI chat session.")
+		err = a.runCodex(ctx, []string{"exec", "resume", "--json", "-o", outPath, sessionID, prompt}, &log, query.Progress)
+		if err != nil && isResumeSessionUnavailable(log.String(), err) {
+			emitProgress(query.Progress, "• Stored Codex session is unavailable; starting a fresh chat session.")
+			if deleteErr := a.sessions.Delete(workspaceID); deleteErr != nil {
+				return "", deleteErr
 			}
-			return "", fmt.Errorf("codex live chat failed: %s", text)
+			sessionID = ""
+			log.Reset()
+		} else if err != nil {
+			return "", err
 		}
-	case <-ctx.Done():
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	if sessionID == "" {
+		emitProgress(query.Progress, "• Starting new Codex CLI chat session.")
+		if err := a.runCodex(ctx, []string{"exec", "--sandbox", "read-only", "--json", "--color", "never", "-o", outPath, prompt}, &log, query.Progress); err != nil {
+			return "", err
 		}
-		<-done
-		progressLog.Flush()
-		return "", fmt.Errorf("codex live chat canceled: %w", ctx.Err())
+		nextSessionID := parseSessionMetaID(log.String())
+		if nextSessionID == "" {
+			return "", errors.New("codex did not report a session_meta id")
+		}
+		if err := a.sessions.Save(workspaceID, nextSessionID); err != nil {
+			return "", err
+		}
 	}
 	emitProgress(query.Progress, "• Codex CLI completed; reading answer.")
 
@@ -101,6 +115,55 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 		return "", errors.New("codex returned no live chat answer")
 	}
 	return answer, nil
+}
+
+// ResetSession deletes stored Codex chat session metadata for a workspace.
+func (a CodexAnswerer) ResetSession(ctx context.Context, workspaceID string) error {
+	if a.sessions == nil {
+		a.sessions = NewCodexSessionStore(defaultCodexSessionDir)
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	unlock := a.sessions.lockWorkspace(workspaceID)
+	defer unlock()
+	return a.sessions.Delete(workspaceID)
+}
+
+func (a CodexAnswerer) runCodex(ctx context.Context, args []string, log *bytes.Buffer, progress func(string)) error {
+	cmd := exec.Command(a.command, args...) //nolint:gosec
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	progressLog := &progressBuffer{buf: log, progress: progress}
+	cmd.Stdout = progressLog
+	cmd.Stderr = progressLog
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case err := <-done:
+		progressLog.Flush()
+		if err != nil {
+			text := strings.TrimSpace(log.String())
+			if text == "" {
+				text = err.Error()
+			}
+			return fmt.Errorf("codex live chat failed: %s", text)
+		}
+		return nil
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		<-done
+		progressLog.Flush()
+		return fmt.Errorf("codex live chat canceled: %w", ctx.Err())
+	}
 }
 
 type progressBuffer struct {
@@ -132,6 +195,9 @@ func (p *progressBuffer) emit(line string) {
 	if line == "" || p.progress == nil {
 		return
 	}
+	if strings.HasPrefix(line, "{") {
+		return
+	}
 	if strings.HasPrefix(line, "›") || strings.HasPrefix(line, "•") {
 		p.progress(line)
 		return
@@ -159,6 +225,151 @@ func resolveCodexCommand() string {
 		}
 	}
 	return "codex"
+}
+
+const defaultCodexSessionDir = "storage/codex-chat-sessions"
+
+// NewCodexSessionStore returns a file-backed Codex chat session metadata store.
+func NewCodexSessionStore(dir string) *codexSessionStore {
+	return &codexSessionStore{dir: dir, locks: map[string]*sync.Mutex{}}
+}
+
+type codexSessionStore struct {
+	dir   string
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+type codexSessionMetadata struct {
+	WorkspaceID string    `json:"workspace_id"`
+	SessionID   string    `json:"session_id"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (s *codexSessionStore) Load(workspaceID string) (string, error) {
+	path, err := s.path(workspaceID)
+	if err != nil {
+		return "", err
+	}
+	body, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read codex chat session: %w", err)
+	}
+	var meta codexSessionMetadata
+	if err := json.Unmarshal(body, &meta); err != nil {
+		return "", fmt.Errorf("decode codex chat session: %w", err)
+	}
+	return strings.TrimSpace(meta.SessionID), nil
+}
+
+func (s *codexSessionStore) Save(workspaceID, sessionID string) error {
+	workspaceID = strings.TrimSpace(workspaceID)
+	sessionID = strings.TrimSpace(sessionID)
+	if workspaceID == "" {
+		return errors.New("workspace_id is required")
+	}
+	if sessionID == "" {
+		return errors.New("session_id is required")
+	}
+	path, err := s.path(workspaceID)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create codex chat session dir: %w", err)
+	}
+	body, err := json.MarshalIndent(codexSessionMetadata{
+		WorkspaceID: workspaceID,
+		SessionID:   sessionID,
+		UpdatedAt:   time.Now().UTC(),
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode codex chat session: %w", err)
+	}
+	return os.WriteFile(path, append(body, '\n'), 0o600)
+}
+
+func (s *codexSessionStore) Delete(workspaceID string) error {
+	path, err := s.path(workspaceID)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("delete codex chat session: %w", err)
+	}
+	return nil
+}
+
+func (s *codexSessionStore) lockWorkspace(workspaceID string) func() {
+	key := strings.TrimSpace(workspaceID)
+	s.mu.Lock()
+	lock := s.locks[key]
+	if lock == nil {
+		lock = &sync.Mutex{}
+		s.locks[key] = lock
+	}
+	s.mu.Unlock()
+	lock.Lock()
+	return lock.Unlock
+}
+
+func (s *codexSessionStore) path(workspaceID string) (string, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return "", errors.New("workspace_id is required")
+	}
+	if strings.TrimSpace(s.dir) == "" {
+		return "", errors.New("codex chat session dir is required")
+	}
+	return filepath.Join(s.dir, safeSessionFilename(workspaceID)+".json"), nil
+}
+
+var safeSessionCharPattern = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
+
+func safeSessionFilename(workspaceID string) string {
+	name := safeSessionCharPattern.ReplaceAllString(workspaceID, "_")
+	name = strings.Trim(name, "_.-")
+	if name == "" {
+		return "workspace"
+	}
+	if len(name) > 180 {
+		name = name[:180]
+	}
+	return name
+}
+
+func parseSessionMetaID(log string) string {
+	for _, line := range strings.Split(log, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var event struct {
+			Type    string `json:"type"`
+			Payload struct {
+				ID string `json:"id"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			continue
+		}
+		if event.Type == "session_meta" && strings.TrimSpace(event.Payload.ID) != "" {
+			return strings.TrimSpace(event.Payload.ID)
+		}
+	}
+	return ""
+}
+
+func isResumeSessionUnavailable(log string, err error) bool {
+	text := strings.ToLower(strings.TrimSpace(log + " " + err.Error()))
+	return strings.Contains(text, "missing") ||
+		strings.Contains(text, "not found") ||
+		strings.Contains(text, "archived") ||
+		strings.Contains(text, "unreadable") ||
+		strings.Contains(text, "permission denied")
 }
 
 func supportsLiveConnector(connector string) bool {

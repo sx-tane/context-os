@@ -10,7 +10,7 @@ This folder defines HTTP request payload contracts consumed by API handlers.
 
 ## Current Files
 
-- `chat.go`: `ChatQuery` request body for `/chat/query` and `/chat/query/stream`, including workspace scope, connector/source hints, timezone, local date, response-language hint, and result limit.
+- `chat.go`: `ChatQuery` request body for `/chat/query` and `/chat/query/stream`, including workspace scope, single or multi-connector source hints, timezone, local date, response-language hint, and result limit.
 - `ingest.go`: request shapes used by ingest endpoints — `GithubIngest`, `SlackIngest`, `JiraIngest`, `GoogleDriveIngest`, `NotionIngest`, `SharePointIngest`, and `FilesystemIngest`.
 - `presentation.go`: `PresentationFindings` request body for `/presentation/findings`, including workspace scope, connector input, role, provider, force refresh, and execution toggle.
 
@@ -25,7 +25,7 @@ This folder defines HTTP request payload contracts consumed by API handlers.
 | `NotionIngest`      | `POST /notion/ingest`      | `uri`, `token`, `provider`, `cursor`, `metadata`                                        |
 | `SharePointIngest`  | `POST /sharepoint/ingest`  | `uri`, `access_token`, client credential fields, `provider`, `metadata`                 |
 | `FilesystemIngest`  | `POST /filesystem/ingest`  | `uri`, `content`, `cursor`, `include`, `exclude`                                        |
-| `ChatQuery`         | `POST /chat/query` and `POST /chat/query/stream` | `workspace_id`, `workspace_path`, `message`, `connector`, `source_uri`, `timezone`, `local_date`, `response_language`, `limit` |
+| `ChatQuery`         | `POST /chat/query` and `POST /chat/query/stream` | `workspace_id`, `workspace_path`, `message`, `connector`, `connectors`, `source_uri`, `timezone`, `local_date`, `response_language`, `limit` |
 | `PresentationFindings` | `POST /presentation/findings` | `workspace_id`, `connector`, `uri`, `content`, `cursor`, `provider`, `role`, `include_execution`, `force_refresh`, `metadata` |
 
 ## Maintenance Checklist

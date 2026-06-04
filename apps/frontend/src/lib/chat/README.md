@@ -18,6 +18,7 @@ Chat orchestration helpers and demo workspace fixtures.
 ## Maintenance Notes
 
 - Keep source-card data in `ChatQueryResult.answer_sections`; do not parse answer prose in the frontend.
+- Send `connectors` only for broad prompts with no inferred concrete connector/source route, using ready non-filesystem workspace sources as the allow-list for backend live fanout.
 - Keep demo chat scenarios table-driven or helper-driven as they grow. Demo prompts should cover planning mode, agent mode, functions/notes, sources/source cards, findings, graph, Activity cleanup, and stream behavior without calling the backend.
 - Keep long stream transcripts bounded before they enter persisted project state.
 - Run `bun run test` for chat controller behavior changes.

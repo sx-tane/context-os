@@ -13,6 +13,7 @@ import {
   isNearBottom,
   localDateString,
   localDBStatusLine,
+  liveConnectorHint,
   runChatQuery,
   userMsg,
 } from "../chat/controller";
@@ -79,11 +80,16 @@ describe("localDateString", () => {
 });
 
 describe("detectResponseLanguage", () => {
-  it("detects Chinese, Japanese, Korean, and English prompts", () => {
+  it("matches Chinese, Japanese, Korean, and English prompt language", () => {
     expect(detectResponseLanguage("请用中文回答")).toBe("zh");
     expect(detectResponseLanguage("帳票項目のマッピング確認")).toBe("ja");
     expect(detectResponseLanguage("최근 메시지 확인")).toBe("ko");
     expect(detectResponseLanguage("check recent activity")).toBe("en");
+  });
+
+  it("uses the non-English script in mixed-language prompts", () => {
+    expect(detectResponseLanguage("BKGDEV-8096 帳票項目のマッピング確認.xlsx Jira Slack")).toBe("ja");
+    expect(detectResponseLanguage("GitHub 最近有什么变化")).toBe("zh");
   });
 });
 
@@ -140,6 +146,18 @@ describe("stream helpers", () => {
   it("reports whether a scroll pane is near the bottom", () => {
     expect(isNearBottom({ scrollHeight: 1000, scrollTop: 820, clientHeight: 120 } as HTMLElement)).toBe(true);
     expect(isNearBottom({ scrollHeight: 1000, scrollTop: 700, clientHeight: 120 } as HTMLElement)).toBe(false);
+  });
+});
+
+describe("liveConnectorHint", () => {
+  it("returns unique ready live connectors and skips filesystem sources", () => {
+    expect(liveConnectorHint([
+      { connector: "jira", uri: "jira", status: "ready" },
+      { connector: "github", uri: "sx-tane/context-os", status: "ready" },
+      { connector: "github", uri: "github", status: "ready" },
+      { connector: "filesystem", uri: "docs", status: "ready" },
+      { connector: "slack", uri: "slack", status: "ingesting" },
+    ])).toEqual({ connectors: ["jira", "github"] });
   });
 });
 
@@ -229,6 +247,38 @@ describe("runChatQuery", () => {
     });
   });
 
+  it("sends ready live connectors for broad prompts without an inferred route", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({ connector: "multiple", provider: "codex" }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "kkg payment 決済GW",
+      workspacePath: "workspace",
+      readySources: [
+        { connector: "jira", uri: "jira", status: "ready" },
+        { connector: "github", uri: "github", status: "ready" },
+        { connector: "filesystem", uri: "docs", status: "ready" },
+      ],
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["jira", "github"],
+    });
+    expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["jira", "github"],
+    });
+  });
+
   it("streams Codex progress and uses the streamed result", async () => {
     mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
       handlers.onLog("› Live Codex: GitHub plugin lookup");
@@ -313,6 +363,10 @@ describe("runChatQuery", () => {
     await runChatQuery({
       text: "BKGDEV-8466 check this",
       workspacePath: "workspace",
+      readySources: [
+        { connector: "jira", uri: "jira", status: "ready" },
+        { connector: "github", uri: "github", status: "ready" },
+      ],
       addMessage: state.addMessage,
       replaceMessage: state.replaceMessage,
       setBusy: state.setBusy,
@@ -325,10 +379,12 @@ describe("runChatQuery", () => {
       connector: "jira",
       source_uri: "BKGDEV-8466",
     });
+    expect(mockStreamChatQuery.mock.calls[0][0].connectors).toBeUndefined();
     expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({
       connector: "jira",
       source_uri: "BKGDEV-8466",
     });
+    expect(mockPostChatQuery.mock.calls[0][0].connectors).toBeUndefined();
     expect(state.lastChatResult?.source_uri).toBe("BKGDEV-8466");
   });
 
