@@ -8,6 +8,7 @@ export interface APIRequestDescription {
 declare const __CONTEXTOS_DEBUG_LOGS__: string | undefined;
 
 let requestSequence = 0;
+let helperInstalled = false;
 
 export function prepareAPIRequest(
   input: RequestInfo | URL,
@@ -51,6 +52,7 @@ export function logAPIRequestError(
 }
 
 export function frontendDebugEnabled(): boolean {
+  installAPITraceHelper();
   if (viteDebugEnabled()) return true;
   const storage = globalThisLocalStorage();
   return storage?.getItem("contextos_debug_api") === "1";
@@ -118,4 +120,26 @@ function viteDebugEnabled(): boolean {
 function globalThisLocalStorage(): Storage | null {
   const maybeStorage = (globalThis as { localStorage?: Storage }).localStorage;
   return maybeStorage ?? null;
+}
+
+function installAPITraceHelper(): void {
+  if (helperInstalled || typeof window === "undefined") return;
+  helperInstalled = true;
+  const target = window as Window & {
+    contextosAPITrace?: (enabled?: boolean) => void;
+  };
+  if (target.contextosAPITrace) return;
+  target.contextosAPITrace = (enabled = true) => {
+    const storage = globalThisLocalStorage();
+    if (!storage) return;
+    if (enabled) {
+      storage.setItem("contextos_debug_api", "1");
+      console.info(
+        "[api] browser request tracing enabled. Reload or keep using the app; logs include method, /api path, body preview, status, duration, and X-ContextOS-Request-ID.",
+      );
+      return;
+    }
+    storage.removeItem("contextos_debug_api");
+    console.info("[api] browser request tracing disabled.");
+  };
 }

@@ -117,6 +117,14 @@ CONTEXTOS_PROXY_LOGS=1 ./scripts/start-all.sh         # Vite proxy request/respo
 VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-all.sh    # Browser API request logs in dev console
 ```
 
+To correlate a browser action to backend logs, enable both frontend and API request logs:
+
+```bash
+CONTEXTOS_API_REQUEST_LOGS=1 VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-all.sh
+```
+
+The browser console prints lines such as `[api] -> POST /api/chat/query/stream id=web-...`, and the API terminal prints matching `http request start/done: id=web-...` lines. Without restarting, open the browser console and run `contextosAPITrace(true)` to enable browser-side request logs in localStorage, or `contextosAPITrace(false)` to disable them.
+
 Once running:
 
 - **http://localhost:5173** — ContextOS chat-first UI (homepage is now the chat interface)

@@ -56,7 +56,7 @@ All streaming functions use a shared `readEventStream` helper that parses SSE bl
 
 ### api/logger.ts
 
-Centralizes frontend request correlation. API calls receive an `X-ContextOS-Request-ID` header even when logging is disabled. Browser console request logs are quiet by default; enable them with `localStorage.contextos_debug_api = "1"` or `VITE_CONTEXTOS_DEBUG_LOGS=1`.
+Centralizes frontend request correlation. API calls receive an `X-ContextOS-Request-ID` header even when logging is disabled. Browser console request logs are quiet by default; enable them with `contextosAPITrace(true)` in the browser console, `localStorage.contextos_debug_api = "1"`, or `VITE_CONTEXTOS_DEBUG_LOGS=1`. Match the browser `id=web-...` value to API terminal request logs when `CONTEXTOS_API_REQUEST_LOGS=1` is enabled.
 
 ---
 

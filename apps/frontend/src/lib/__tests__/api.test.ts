@@ -58,6 +58,7 @@ const fetchMock = jest.fn<
 beforeEach(() => {
   fetchMock.mockReset();
   delete (globalThis as { localStorage?: Storage }).localStorage;
+  delete (globalThis as { window?: Window }).window;
   jest.restoreAllMocks();
 });
 
@@ -106,6 +107,28 @@ describe("apiFetch", () => {
     expect(debug).toHaveBeenCalledWith(
       expect.stringContaining("[api] <- 200 GET /api/health id=web-"),
     );
+  });
+
+  it("installs a browser console helper for toggling API request tracing", async () => {
+    const storage = {
+      getItem: jest.fn(() => null),
+      setItem: jest.fn(),
+      removeItem: jest.fn(),
+    };
+    (globalThis as { localStorage?: unknown }).localStorage = storage;
+    (globalThis as { window?: unknown }).window = {};
+    jest.spyOn(console, "info").mockImplementation(() => {});
+    fetchMock.mockResolvedValue(makeResponse({}, true, 200));
+
+    await apiFetch("/api/health");
+    const helper = (globalThis.window as { contextosAPITrace?: (enabled?: boolean) => void })
+      .contextosAPITrace;
+    helper?.(true);
+    helper?.(false);
+
+    expect(helper).toEqual(expect.any(Function));
+    expect(storage.setItem).toHaveBeenCalledWith("contextos_debug_api", "1");
+    expect(storage.removeItem).toHaveBeenCalledWith("contextos_debug_api");
   });
 });
 
