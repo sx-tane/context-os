@@ -18,13 +18,17 @@ type Handler struct {
 }
 
 type queryResponse struct {
-	WorkspaceID       string              `json:"workspace_id"`
-	EntityType        string              `json:"entity_type,omitempty"`
-	Count             int                 `json:"count"`
-	EntityCount       int                 `json:"entity_count"`
-	RelationshipCount int                 `json:"relationship_count"`
-	Entities          []graphEntity       `json:"entities"`
-	Relationships     []graphRelationship `json:"relationships"`
+	WorkspaceID               string              `json:"workspace_id"`
+	EntityType                string              `json:"entity_type,omitempty"`
+	Count                     int                 `json:"count"`
+	EntityCount               int                 `json:"entity_count"`
+	RelationshipCount         int                 `json:"relationship_count"`
+	FilteredEntityCount       int                 `json:"filtered_entity_count"`
+	FilteredRelationshipCount int                 `json:"filtered_relationship_count"`
+	TotalEntityCount          int                 `json:"total_entity_count"`
+	TotalRelationshipCount    int                 `json:"total_relationship_count"`
+	Entities                  []graphEntity       `json:"entities"`
+	Relationships             []graphRelationship `json:"relationships"`
 }
 
 type graphEntity struct {
@@ -74,6 +78,7 @@ func NewHandler(workspaces repository.WorkspaceRepository, entities repository.E
 // @Produce      json
 // @Param        workspace_id  query     string  true   "Workspace path or ID"
 // @Param        entity_type   query     string  false  "Filter by entity type (e.g. feature, person, service)"
+// @Param        include_noise query     bool    false  "Include low-signal regex entities and co-occurrence-only relationships"
 // @Success      200           {object}  map[string]interface{}
 // @Failure      400           {object}  map[string]string
 // @Failure      405           {object}  map[string]string
@@ -91,6 +96,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entityType := strings.TrimSpace(r.URL.Query().Get("entity_type"))
+	includeNoise := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_noise")), "true")
 
 	// Resolve workspace path to stored ID via WorkspaceRepository.
 	ws, err := h.workspaces.GetByPath(r.Context(), workspaceID)
@@ -109,27 +115,43 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	graphEntities := mapEntities(canonical)
+	allGraphEntities := mapEntities(canonical)
+	graphEntities := allGraphEntities
+	if !includeNoise {
+		graphEntities = filterSignalEntities(graphEntities)
+	}
 	relationships, err := h.entities.ListRelationships(r.Context(), resolvedID, entityIDs(canonical))
 	if err != nil {
 		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
+	allGraphRelationships := mapRelationships(relationships, allGraphEntities)
 	graphRelationships := mapRelationships(relationships, graphEntities)
+	if !includeNoise {
+		graphRelationships = filterSignalRelationships(graphRelationships)
+	}
 	response.WriteJSON(w, http.StatusOK, queryResponse{
-		WorkspaceID:       resolvedID,
-		EntityType:        entityType,
-		Count:             len(graphEntities),
-		EntityCount:       len(graphEntities),
-		RelationshipCount: len(graphRelationships),
-		Entities:          graphEntities,
-		Relationships:     graphRelationships,
+		WorkspaceID:               resolvedID,
+		EntityType:                entityType,
+		Count:                     len(graphEntities),
+		EntityCount:               len(graphEntities),
+		RelationshipCount:         len(graphRelationships),
+		FilteredEntityCount:       len(allGraphEntities) - len(graphEntities),
+		FilteredRelationshipCount: len(allGraphRelationships) - len(graphRelationships),
+		TotalEntityCount:          len(allGraphEntities),
+		TotalRelationshipCount:    len(allGraphRelationships),
+		Entities:                  graphEntities,
+		Relationships:             graphRelationships,
 	})
 }
 
 func mapEntities(canonical []entities.CanonicalEntity) []graphEntity {
 	out := make([]graphEntity, 0, len(canonical))
 	for _, ce := range canonical {
+		metadata := cloneMetadata(ce.Entity.Metadata)
+		if ce.Entity.ExtractionMethod != "" {
+			metadata["extraction_method"] = ce.Entity.ExtractionMethod
+		}
 		candidates := make([]graphMergeCandidate, 0, len(ce.Candidates))
 		for _, candidate := range ce.Candidates {
 			candidates = append(candidates, graphMergeCandidate{
@@ -153,7 +175,7 @@ func mapEntities(canonical []entities.CanonicalEntity) []graphEntity {
 			Evidence:       ce.Evidence,
 			Aliases:        ce.Entity.Aliases,
 			Candidates:     candidates,
-			Metadata:       ce.Entity.Metadata,
+			Metadata:       metadata,
 		})
 	}
 	return out
@@ -191,6 +213,63 @@ func mapRelationships(relationships []types.Relationship, graphEntities []graphE
 			Evidence:   rel.Evidence,
 			Metadata:   rel.Metadata,
 		})
+	}
+	return out
+}
+
+func filterSignalEntities(entities []graphEntity) []graphEntity {
+	out := make([]graphEntity, 0, len(entities))
+	for _, entity := range entities {
+		if isNoisyEntity(entity) {
+			continue
+		}
+		out = append(out, entity)
+	}
+	return out
+}
+
+func filterSignalRelationships(relationships []graphRelationship) []graphRelationship {
+	out := make([]graphRelationship, 0, len(relationships))
+	for _, relationship := range relationships {
+		if relationship.Kind == string(types.CoOccursInDocument) && relationship.Confidence < 0.6 {
+			continue
+		}
+		out = append(out, relationship)
+	}
+	return out
+}
+
+func isNoisyEntity(entity graphEntity) bool {
+	method := strings.TrimSpace(entity.Metadata["extraction_method"])
+	if method == "" {
+		method = strings.TrimSpace(entity.Metadata["method"])
+	}
+	name := strings.ToLower(strings.TrimSpace(entity.Name))
+	if entity.Confidence >= 0.6 {
+		return false
+	}
+	if isCommonGraphLabel(name) {
+		return true
+	}
+	if method != "regex_token" {
+		return false
+	}
+	return name == "" || len(name) < 3
+}
+
+func isCommonGraphLabel(name string) bool {
+	switch name {
+	case "and", "also", "among", "source", "read", "fields", "field", "type", "status", "content":
+		return true
+	default:
+		return false
+	}
+}
+
+func cloneMetadata(metadata map[string]string) map[string]string {
+	out := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		out[key] = value
 	}
 	return out
 }

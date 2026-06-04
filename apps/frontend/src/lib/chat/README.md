@@ -6,7 +6,7 @@ Chat orchestration helpers and demo workspace fixtures.
 
 - Route chat commands into source setup, findings analysis, clear history, or source queries.
 - Keep streaming chat state out of Svelte components by managing `ChatMessage.stream` updates in helpers.
-- Preserve local demo workspace behavior for product inspection without live connectors.
+- Preserve local demo workspace behavior for product inspection without live connectors, including planning-first agent notes and structured source-card answers.
 
 ## Files
 
@@ -18,5 +18,6 @@ Chat orchestration helpers and demo workspace fixtures.
 ## Maintenance Notes
 
 - Keep source-card data in `ChatQueryResult.answer_sections`; do not parse answer prose in the frontend.
+- Keep demo chat scenarios table-driven or helper-driven as they grow. Demo prompts should cover planning mode, agent mode, functions/notes, sources/source cards, findings, graph, Activity cleanup, and stream behavior without calling the backend.
 - Keep long stream transcripts bounded before they enter persisted project state.
 - Run `bun run test` for chat controller behavior changes.

@@ -6,6 +6,7 @@ Graph view-model helpers for focused entity displays.
 
 - Shape backend graph entities and relationships into UI-friendly link lists.
 - Keep graph rendering focused on the selected entity and its direct relationships.
+- Filter weak `co_occurs_in_document` relationships from display links and sort explicit signal relationships ahead of low-value co-occurrence links.
 - Avoid backend fetches; network calls belong in `$lib/api`.
 
 ## Files

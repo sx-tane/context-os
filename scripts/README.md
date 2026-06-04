@@ -39,7 +39,8 @@ What it does:
 - Reuses committed OpenAPI docs and frontend TypeScript types during normal startup
 - Regenerates OpenAPI docs only when `apps/api/docs/swagger.json` is missing or `UPDATE_API_DOCS=1` is set
 - Regenerates frontend TypeScript types only when missing, older than `swagger.json`, or `UPDATE_API_TYPES=1` is set
-- Fails fast when API `8080`, worker `8081`, or frontend `5173` is already in use and prints the owning process
+- Reuses an already-running healthy ContextOS stack on API `8080`, worker `8081`, and frontend `5173` by printing the existing URLs and log location instead of starting a second stack
+- Fails fast when a required port is occupied by something that does not pass the expected ContextOS health check and prints the owning process
 - Checks all required Codex plugins. Missing plugins are reported without prompting; to install them during startup, run `INSTALL_CODEX_PLUGINS=1 ./scripts/start-all.sh`:
   - `github@openai-curated`
   - `atlassian-rovo@openai-curated`
@@ -83,7 +84,19 @@ Press Ctrl+C to stop all processes.
 [frontend] <frontend log line>
 ```
 
-If startup reports that a port is already in use, stop the existing local stack first. To inspect owners:
+If the stack is already running, startup prints the existing frontend/API/worker URLs and exits successfully. To inspect current local service health at any time:
+
+```bash
+./scripts/status-local.sh
+```
+
+`start-all.sh` writes service logs to `.tmp/contextos/logs/` for the current run. When an existing healthy stack is reused, tail those files from another terminal:
+
+```bash
+tail -F .tmp/contextos/logs/api.log .tmp/contextos/logs/worker.log .tmp/contextos/logs/frontend.log
+```
+
+If startup reports that a port is occupied but the stack is not healthy, stop or move the owning process first. To inspect owners:
 
 ```bash
 ss -ltnp | grep -E ':(8080|8081|5173)\b'
@@ -135,9 +148,26 @@ Infra endpoints:
 
 ---
 
+## status-local.sh
+
+Prints local API, worker, and frontend port status without starting or stopping anything. Use it when the browser says `API Offline`, `Worker Ready`, or `Codex Unavailable` and you need to separate a real backend failure from a stale or already-running terminal session.
+
+```bash
+./scripts/status-local.sh
+```
+
+Statuses:
+
+- `[ok]` — the expected ContextOS health check or frontend page responded.
+- `[free]` — no process is listening on that service port.
+- `[blocked]` — a process owns the port, but it did not respond like ContextOS.
+
+---
+
 ## Order of use
 
 ```
 1. ./scripts/setup-local.sh   # first time only
-2. ./scripts/start-local.sh    # every time you want to run locally
+2. ./scripts/start-local.sh    # every time you want to run locally; reuses a healthy existing stack
+3. ./scripts/status-local.sh   # optional status check when a page or terminal looks stale
 ```

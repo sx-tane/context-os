@@ -36,7 +36,7 @@ For each same-source pair:
 
 - Skip the pair if `SourceID` differs.
 - Orient and type the edge using the relationship-kind vocabulary below.
-- Fall back to `co_occurs_in_document` when no typed delivery rule applies.
+- Fall back to `co_occurs_in_document` when no typed delivery rule applies and the pair is not low-confidence regex-only noise.
 - Create relationship ID as `from.ID + "->" + to.ID + ":" + kind` so distinct edge kinds never collide.
 - Set `Confidence` (0.8 for typed edges, 0.5 for co-occurrence) and `Evidence` (`source#name` for both endpoints).
 - Store `source_id` metadata.
@@ -78,7 +78,8 @@ contextGraph.AddRelationships(relationships)
 
 ## Implementation Notes
 
-- Typed edges model real delivery semantics (requirement → api → db, service → dependency); untyped pairs degrade to co-occurrence.
+- Typed edges model real delivery semantics (requirement → api → db, service → dependency); untyped pairs degrade to co-occurrence only when they have enough provenance signal.
+- Low-confidence `regex_token` dependency pairs no longer emit generic `co_occurs_in_document` links, which keeps stopword-like persisted entities from outranking delivery entities.
 - Relationship kinds are a stable `types.RelationshipKind` vocabulary documented above.
 - Confidence and evidence are populated on every edge so reasoning findings can point back to source evidence.
 - `Validate` enforces graph constraints so invalid edges do not silently enter persistent storage.

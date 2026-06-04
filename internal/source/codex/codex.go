@@ -290,21 +290,22 @@ func (c connector) commandError(err error, output string) error {
 }
 
 func promptFor(plugin, uri string) string {
+	labelRules := ` At the end, include one line starting with CONTEXTOS_LABELS_JSON: followed by compact JSON shaped as {"entities":{"requirement":[{"name":"...","evidence":"short quote or source fact","confidence":0.0}],"api_field":[],"service":[],"dependency":[],"enum":[],"db_column":[]},"risks":[],"decisions":[],"status":[]}. Only label items with explicit source evidence and provenance; omit generic prose tokens.`
 	switch plugin {
 	case PluginSlack:
-		return "Use the Slack Codex plugin to read the Slack context identified by " + uri + ". Return the relevant channel or message content with source identifiers, timestamps, participants, and links when available. Do not modify Slack."
+		return "Use the Slack Codex plugin to read the Slack context identified by " + uri + ". Return the relevant channel or message content with source identifiers, timestamps, participants, and links when available. Do not modify Slack." + labelRules
 	case PluginGitHub:
-		return "Use the GitHub Codex plugin to read the GitHub artifact identified by " + uri + ". Return the relevant repository, issue, pull request, or commit content with source identifiers, timestamps, authors, and links when available. Do not modify GitHub."
+		return "Use the GitHub Codex plugin to read the GitHub artifact identified by " + uri + ". Return the relevant repository, issue, pull request, or commit content with source identifiers, timestamps, authors, and links when available. Do not modify GitHub." + labelRules
 	case PluginAtlassianRovo:
-		return "Use the Atlassian Rovo Codex plugin to read the Jira context identified by " + uri + ". Return the relevant issue or project content with issue keys, summaries, statuses, descriptions, comments, links, fields, changelog entries, timestamps, authors, and source URLs when available. Do not modify Jira or Atlassian data."
+		return "Use the Atlassian Rovo Codex plugin to read the Jira context identified by " + uri + ". Return the relevant issue or project content with issue keys, summaries, statuses, descriptions, comments, links, fields, changelog entries, timestamps, authors, and source URLs when available. Do not modify Jira or Atlassian data." + labelRules
 	case PluginGoogleDrive:
-		return "Use the Google Drive Codex plugin to read files from the Google Drive folder identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, and links when available. Do not modify any files."
+		return "Use the Google Drive Codex plugin to read files from the Google Drive folder identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, and links when available. Do not modify any files." + labelRules
 	case PluginNotion:
-		return "Use the Notion Codex plugin to read pages and database entries from " + uri + ". Return the relevant content with source identifiers, page IDs, titles, properties, and links when available. Do not modify Notion."
+		return "Use the Notion Codex plugin to read pages and database entries from " + uri + ". Return the relevant content with source identifiers, page IDs, titles, properties, and links when available. Do not modify Notion." + labelRules
 	case PluginSharePoint:
-		return "Use the SharePoint Codex plugin to read files and pages from the SharePoint or OneDrive location identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, authors, and links when available. Do not modify any files or pages."
+		return "Use the SharePoint Codex plugin to read files and pages from the SharePoint or OneDrive location identified by " + uri + ". Return the relevant document content with source identifiers, file names, modification times, authors, and links when available. Do not modify any files or pages." + labelRules
 	default:
-		return "Read source context for " + uri + " using the installed Codex plugin."
+		return "Read source context for " + uri + " using the installed Codex plugin." + labelRules
 	}
 }
 

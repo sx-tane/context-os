@@ -47,6 +47,7 @@
         demoChatQueryResult,
         demoFindings,
         demoGraphData,
+        demoPlanningTourResult,
         demoWorkspaceStatus,
     } from "$lib/chat/demoWorkspace";
     import { buildGraphLinks } from "$lib/graph/viewModel";
@@ -244,6 +245,16 @@
         sourcePanelOpen = false;
         activeInsightTab = "findings";
         await switchWorkspace(DEMO_WORKSPACE_PATH);
+        if ($chatMessages.length === 0) {
+            const result = demoPlanningTourResult();
+            lastChatResult = result;
+            addMessage(
+                assistantMsg(result.answer, {
+                    kind: "query",
+                    chatResult: result,
+                }),
+            );
+        }
     }
 
     async function createWorkspace() {

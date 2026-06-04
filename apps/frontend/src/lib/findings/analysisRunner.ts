@@ -120,7 +120,7 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
             detail: `${res.body.event_count ?? 0} events, ${res.body.mismatch_count ?? res.body.mismatches?.length ?? 0} findings`,
           };
         } else {
-          const message = res.body.message ?? res.body.error ?? "unknown error";
+          const message = findingsErrorMessage(res.body);
           failures.push({
             connector: source.connector,
             uri: source.uri,
@@ -206,6 +206,15 @@ export function analysisProvider(connector: ConnectorKind) {
     "googledrive",
   ]);
   return codexConnectors.has(connector) ? "codex" : "token";
+}
+
+function findingsErrorMessage(body: { error?: string; message?: string; examples?: string[] }) {
+  if (body.error !== "source_too_broad") {
+    return body.message ?? body.error ?? "unknown error";
+  }
+  const examples = body.examples?.filter(Boolean).slice(0, 3) ?? [];
+  const suffix = examples.length ? ` Examples: ${examples.join(", ")}` : "";
+  return `Choose a specific repo, project, issue, channel, thread, document, or folder.${suffix}`;
 }
 
 function isAbortError(error: unknown) {

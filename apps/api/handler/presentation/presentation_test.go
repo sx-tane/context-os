@@ -80,6 +80,31 @@ func TestFindingsRejectsUnknownConnector(t *testing.T) {
 	}
 }
 
+// TestFindingsRejectsBroadCodexSource verifies connector-only Codex analysis fails before starting ingestion.
+func TestFindingsRejectsBroadCodexSource(t *testing.T) {
+	body := `{"connector":"github","uri":"github","provider":"codex","include_execution":false}`
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/presentation/findings", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	presentation.Findings(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("Findings() status = %d, want 400", recorder.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if payload["error"] != "source_too_broad" {
+		t.Fatalf("error = %v, want source_too_broad", payload["error"])
+	}
+	examples, ok := payload["examples"].([]any)
+	if !ok || len(examples) == 0 {
+		t.Fatalf("examples = %#v, want non-empty array", payload["examples"])
+	}
+}
+
 // TestFindingsBuildsRoleOutput verifies graph-backed findings output includes role views, PMO model, and execution evidence.
 func TestFindingsBuildsRoleOutput(t *testing.T) {
 	body := `{"connector":"filesystem","uri":"inline.txt","content":"frontend expects refundStatus but backend exposes missingRefundState","role":"pmo"}`
@@ -111,6 +136,9 @@ func TestFindingsBuildsRoleOutput(t *testing.T) {
 	}
 	if payload.TraceID == "" {
 		t.Fatal("TraceID = empty, want stable trace id")
+	}
+	if payload.EntityCount == 0 {
+		t.Fatal("EntityCount = 0, want extracted entities")
 	}
 }
 

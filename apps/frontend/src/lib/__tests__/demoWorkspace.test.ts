@@ -7,6 +7,7 @@ import {
   demoChatQueryResult,
   demoFindings,
   demoGraphData,
+  demoPlanningTourResult,
   demoWorkspaceStatus,
 } from "../chat/demoWorkspace";
 
@@ -46,10 +47,11 @@ describe("demoArtifacts", () => {
   it("returns recent activity artifacts for multiple connectors", () => {
     const artifacts = demoArtifacts();
 
-    expect(artifacts).toHaveLength(4);
+    expect(artifacts.length).toBeGreaterThanOrEqual(6);
     expect(new Set(artifacts.map((artifact) => artifact.connector))).toEqual(
-      new Set(["jira", "github", "slack"]),
+      new Set(["demo", "jira", "github", "slack"]),
     );
+    expect(artifacts[0].title).toContain("Planning mode");
   });
 });
 
@@ -60,6 +62,51 @@ describe("demoChatQueryResult", () => {
     expect(result.workspace_id).toBe("contextos-demo");
     expect(result.intent).toBe("findings");
     expect(result.answer).toContain("requirement gap");
+    expect(result.answer_sections?.[0].source_label).toContain("Finding");
+    expect(result.artifact_count).toBe(result.artifacts.length);
+  });
+
+  it("answers planning prompts with source-card demo notes", () => {
+    const result = demoChatQueryResult("show planning mode functions");
+
+    expect(result.intent).toBe("demo_tour");
+    expect(result.answer).toContain("Demo planning mode");
+    expect(result.answer_sections?.[0].source_label).toBe(
+      "Demo · Planning notes",
+    );
+    expect(result.answer_sections?.[0].facts?.join("\n")).toContain(
+      "Agent chat",
+    );
+  });
+
+  it("answers source-card prompts with grouped connector sections", () => {
+    const result = demoChatQueryResult("show source cards");
+
+    expect(result.intent).toBe("status");
+    expect(result.answer_sections?.map((section) => section.connector)).toEqual(
+      ["jira", "github", "slack"],
+    );
+  });
+
+  it("answers activity cleanup prompts without mutating demo data", () => {
+    const result = demoChatQueryResult("activity cleanup");
+
+    expect(result.summary).toContain("cleanup");
+    expect(result.answer_sections?.[0].open_items?.join("\n")).toContain(
+      "Cleanup never runs automatically",
+    );
+  });
+});
+
+describe("demoPlanningTourResult", () => {
+  it("builds the seeded demo chat result with structured planning notes", () => {
+    const result = demoPlanningTourResult();
+
+    expect(result.workspace_id).toBe("contextos-demo");
+    expect(result.answer_sections).toHaveLength(1);
+    expect(result.answer_sections?.[0].coding_notes?.join("\n")).toContain(
+      "Ask for planning mode",
+    );
     expect(result.artifact_count).toBe(result.artifacts.length);
   });
 });

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/scripts/lib/local-stack.sh"
 [[ -d /usr/local/go/bin ]] && export PATH="/usr/local/go/bin:$PATH"
 [[ -d "$HOME/go/bin" ]] && export PATH="$HOME/go/bin:$PATH"
 API_PID=""
@@ -14,6 +15,7 @@ WORKER_LOG_PID=""
 API_ADDR="${API_ADDR:-:8080}"
 WORKER_PORT="${WORKER_PORT:-8081}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+CONTEXTOS_LOG_DIR="${CONTEXTOS_LOG_DIR:-$ROOT_DIR/.tmp/contextos/logs}"
 cleanup() {
   local exit_code=$?
 
@@ -52,20 +54,10 @@ prefix_logs() {
   awk -v label="$label" '{ print "[" label "] " $0; fflush(); }'
 }
 
-port_from_addr() {
-  local addr="$1"
-  printf '%s\n' "${addr##*:}"
-}
-
-port_owner() {
-  local port="$1"
-  ss -ltnp 2>/dev/null | awk -v port=":$port" '$4 ~ port "$" { print }'
-}
-
 require_port_available() {
   local name="$1" port="$2" owner=""
 
-  owner="$(port_owner "$port")"
+  owner="$(contextos_port_owner "$port")"
   if [[ -z "$owner" ]]; then
     return 0
   fi
@@ -78,14 +70,20 @@ require_port_available() {
 check_required_ports() {
   local failed=0
 
-  require_port_available "API" "$(port_from_addr "$API_ADDR")" || failed=1
+  if contextos_stack_reusable; then
+    contextos_print_reuse_summary
+    exit 0
+  fi
+
+  require_port_available "API" "$(contextos_port_from_addr "$API_ADDR")" || failed=1
   require_port_available "AI worker" "$WORKER_PORT" || failed=1
   require_port_available "Frontend" "$FRONTEND_PORT" || failed=1
 
   if [[ "$failed" == "1" ]]; then
     echo
-    echo "Another ContextOS stack appears to be running. Stop it first, then rerun this script."
-    echo "Useful check: ss -ltnp | grep -E ':($(port_from_addr "$API_ADDR")|${WORKER_PORT}|${FRONTEND_PORT})\\b'"
+    echo "One or more required ports are occupied, but the full ContextOS stack is not healthy."
+    echo "Run scripts/status-local.sh for service health and owner details."
+    echo "Useful check: ss -ltnp | grep -E ':($(contextos_port_from_addr "$API_ADDR")|${WORKER_PORT}|${FRONTEND_PORT})\\b'"
     exit 1
   fi
 }
@@ -94,7 +92,8 @@ start_logged_service() {
   local pid_var="$1" log_pid_var="$2" label="$3" cwd="$4" log_file=""
   shift 4
 
-  log_file="$(mktemp -t "contextos-${label}.XXXXXX.log")"
+  mkdir -p "$CONTEXTOS_LOG_DIR"
+  log_file="$CONTEXTOS_LOG_DIR/${label}.log"
   : >"$log_file"
   tail -n +1 -F "$log_file" 2>/dev/null | prefix_logs "$label" &
   printf -v "$log_pid_var" '%s' "$!"

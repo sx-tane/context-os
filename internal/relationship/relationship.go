@@ -69,6 +69,9 @@ func classify(a, b types.Entity) types.Relationship {
 	if kind, from, to, ok := typedKind(a, b); ok {
 		return edge(from, to, kind, 0.8)
 	}
+	if isLowConfidenceRegexOnly(a, b) {
+		return types.Relationship{}
+	}
 	return edge(a, b, types.CoOccursInDocument, 0.5)
 }
 
@@ -111,4 +114,11 @@ func edge(from, to types.Entity, kind types.RelationshipKind, confidence float64
 		},
 		Metadata: map[string]string{"source_id": from.SourceID}, // record which document produced this edge
 	}
+}
+
+func isLowConfidenceRegexOnly(a, b types.Entity) bool {
+	if a.ExtractionMethod != "regex_token" || b.ExtractionMethod != "regex_token" {
+		return false
+	}
+	return a.Confidence < 0.6 || b.Confidence < 0.6
 }

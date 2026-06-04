@@ -173,6 +173,14 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusBadRequest, "invalid_request", "uri or content is required")
 		return
 	}
+	if broad, examples := broadCodexSource(req); broad {
+		response.WriteJSON(w, http.StatusBadRequest, map[string]any{
+			"error":    "source_too_broad",
+			"message":  "Choose a specific repo, project, issue, channel, thread, document, or folder before running Codex-backed local analysis.",
+			"examples": examples,
+		})
+		return
+	}
 
 	// ── workspace wiring ───────────────────────────────────────────────────────
 	workspaceID := strings.TrimSpace(req.WorkspaceID)
@@ -350,19 +358,21 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.WriteJSON(w, http.StatusOK, response.PresentationFindings{
-		Connector:     strings.ToLower(strings.TrimSpace(req.Connector)),
-		URI:           strings.TrimSpace(req.URI),
-		Role:          string(role),
-		TraceID:       traceID,
-		Summary:       stagepresentation.RenderSummary(role, result.Mismatches),
-		EventCount:    result.EventCount,
-		MismatchCount: len(result.Mismatches),
-		SeverityCount: severityCount(result.Mismatches),
-		MismatchIDs:   mismatchIDs,
-		Mismatches:    result.Mismatches,
-		Views:         views,
-		PMO:           buildPMOSummary(result.Mismatches),
-		Execution:     executionEvidence,
+		Connector:         strings.ToLower(strings.TrimSpace(req.Connector)),
+		URI:               strings.TrimSpace(req.URI),
+		Role:              string(role),
+		TraceID:           traceID,
+		Summary:           stagepresentation.RenderSummary(role, result.Mismatches),
+		EventCount:        result.EventCount,
+		EntityCount:       len(result.Entities),
+		RelationshipCount: len(result.Relationships),
+		MismatchCount:     len(result.Mismatches),
+		SeverityCount:     severityCount(result.Mismatches),
+		MismatchIDs:       mismatchIDs,
+		Mismatches:        result.Mismatches,
+		Views:             views,
+		PMO:               buildPMOSummary(result.Mismatches),
+		Execution:         executionEvidence,
 	})
 }
 
@@ -487,6 +497,33 @@ func resolveConnector(req request.PresentationFindings, metadata map[string]stri
 		return sharepointsource.NewConnector(), nil
 	default:
 		return nil, fmt.Errorf("unsupported connector %q", connector)
+	}
+}
+
+func broadCodexSource(req request.PresentationFindings) (bool, []string) {
+	if !strings.EqualFold(strings.TrimSpace(req.Provider), "codex") {
+		return false, nil
+	}
+	connector := strings.ToLower(strings.TrimSpace(req.Connector))
+	uri := strings.ToLower(strings.TrimSpace(req.URI))
+	if uri == "" || uri != connector {
+		return false, nil
+	}
+	switch connector {
+	case "github":
+		return true, []string{"https://github.com/owner/repo", "https://github.com/owner/repo/pull/123", "https://github.com/owner/repo/issues/123"}
+	case "jira":
+		return true, []string{"BKGDEV-8466", "https://example.atlassian.net/browse/BKGDEV-8466", "project:BKGDEV"}
+	case "slack":
+		return true, []string{"slack://C12345678", "slack://C12345678/p1717000000000000"}
+	case "googledrive":
+		return true, []string{"https://drive.google.com/file/d/FILE_ID/view", "https://drive.google.com/drive/folders/FOLDER_ID"}
+	case "notion":
+		return true, []string{"https://www.notion.so/workspace/Page-0123456789abcdef0123456789abcdef", "notion://page/0123456789abcdef0123456789abcdef"}
+	case "sharepoint":
+		return true, []string{"sharepoint://sites/site-id/items/item-id", "https://tenant.sharepoint.com/sites/team/Shared%20Documents/spec.docx"}
+	default:
+		return false, nil
 	}
 }
 

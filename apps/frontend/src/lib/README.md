@@ -196,8 +196,10 @@ Central type registry for the frontend.
 | `DirectSourceConnectorKind` | Complement of `CodexConnectorKind`; connectors that only use direct POST. |
 | `CodexPlugin` | Name, `installed`, and `enabled` flags from the Codex status API. |
 | `IngestRequest` | Unified request envelope sent to `postIngest`; collapses per-connector swagger types. |
-| `ApiErrorBody` | Shape of `{ error?, message? }` returned on non-2xx responses. |
+| `ApiErrorBody` | Shape of `{ error?, message?, examples? }` returned on non-2xx responses, including source-scope examples for broad connector failures. |
 | `SourceMetadataField` | Descriptor for a metadata field rendered inside `SourceConnector`. |
+| `FindingsResult` | Aggregated findings response with mismatch, event, entity, and relationship counts for the insight panel. |
+| `GraphData` | Graph response contract with flattened entities, relationships, summary stats, filtered/total counts, and display metadata used by the graph view model. |
 | `SupportedFormat` | One row in a supported-formats table. |
 | `SourceConnectorConfig` | Full static config that drives a `SourceConnector` card. |
 | `WorkspaceList` | API response for registered local workspaces. |
@@ -207,7 +209,6 @@ Central type registry for the frontend.
 | `ChatQueryResult` | Chat answer with intent, provider, answer text, artifact evidence, range, sync state, live evidence save status, and graph update status. |
 | `ChatStreamState` | Frontend-only live query stream transcript with latest line, status, optional summary, and collapsed/expanded preference. |
 | `GraphRelationship` | Persisted graph edge exposed by `/graph`, including source and evidence identifiers. |
-| `GraphData` | Graph response with flattened entities, relationships, and summary stats. |
 
 ---
 

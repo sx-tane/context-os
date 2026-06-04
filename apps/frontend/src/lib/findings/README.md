@@ -19,4 +19,5 @@ Findings analysis orchestration and display view-model helpers.
 ## Maintenance Notes
 
 - Prefer metadata-backed source labels such as `source_label` for Activity grouping.
+- Preserve backend JSON errors from analysis calls. For `source_too_broad`, show concrete repo, project, issue, channel, thread, document, or folder guidance with backend examples instead of a generic failure.
 - Run `bun run test` after helper or analysis lifecycle changes.

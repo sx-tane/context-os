@@ -1,6 +1,7 @@
 package extraction
 
 import (
+	"encoding/json"
 	"fmt"     // used to build deterministic entity IDs
 	"regexp"  // used to match token patterns in the document body
 	"strings" // used for trimming and lowercasing names
@@ -17,6 +18,7 @@ const (
 	MethodSpreadsheet = "spreadsheet"  // parsed from spreadsheet cell content
 	MethodJiraField   = "jira_field"   // parsed from a Jira issue payload
 	MethodGitHubField = "github_field" // parsed from a GitHub issue or pull request payload
+	MethodCodexLabel  = "codex_label"  // parsed from an auditable Codex label block
 )
 
 // Connector metadata keys used to route a document to a structured extractor.
@@ -28,12 +30,36 @@ const (
 	formatSpreadsheet     = "spreadsheet"       // filesystem_format value for CSV/XLSX
 	connectorJira         = "jira"              // connector name for Jira
 	connectorGitHub       = "github"            // connector name for GitHub
-	regexTokenConfidence  = 0.5                 // confidence assigned to generic regex matches
+	regexTokenConfidence  = 0.58                // confidence assigned to generic regex matches
 	structuredConfidence  = 0.9                 // confidence assigned to structured extractions
 )
 
-// tokenPattern matches identifiers that look like named concepts (e.g. refundStatus, UserID, paymentFlag).
-var tokenPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9_]*(?:Status|State|ID|Id|Type|Flag|Field|Column)?`)
+// tokenPattern matches identifiers that look like named concepts (e.g. refundStatus, UserID, paymentFlag, BKGDEV-8466).
+var tokenPattern = regexp.MustCompile(`[A-Z][A-Z0-9]+-\d+|[A-Za-z][A-Za-z0-9_]*(?:Status|State|ID|Id|Type|Flag|Field|Column)?|\b[A-Z]{2,}\d{2,}\b`)
+var issueKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]+-\d+$`)
+var alphaIDPattern = regexp.MustCompile(`^[A-Z]{2,}\d{2,}$`)
+var camelCasePattern = regexp.MustCompile(`[a-z][A-Z]`)
+
+const codexLabelPrefix = "CONTEXTOS_LABELS_JSON:"
+
+var commonTokenStopwords = map[string]struct{}{
+	"also": {}, "among": {}, "and": {}, "are": {}, "content": {}, "field": {}, "fields": {},
+	"from": {}, "read": {}, "source": {}, "status": {}, "the": {}, "this": {}, "type": {},
+	"using": {}, "with": {},
+}
+
+type codexLabels struct {
+	Entities  map[string][]codexLabelItem `json:"entities"`
+	Risks     []codexLabelItem            `json:"risks"`
+	Decisions []codexLabelItem            `json:"decisions"`
+	Status    []codexLabelItem            `json:"status"`
+}
+
+type codexLabelItem struct {
+	Name       string  `json:"name"`
+	Evidence   string  `json:"evidence"`
+	Confidence float64 `json:"confidence"`
+}
 
 // Extract turns a classified document into structured entities, routing to a structured
 // extractor when the source metadata identifies one and falling back to generic token
@@ -58,6 +84,9 @@ func Extract(doc types.ClassifiedDocument) []types.Entity {
 			return entities
 		}
 	}
+	if entities := extractCodexLabels(doc); len(entities) > 0 {
+		return entities
+	}
 	return extractTokens(doc) // deterministic fallback for unstructured or unparseable content
 }
 
@@ -70,7 +99,7 @@ func extractTokens(doc types.ClassifiedDocument) []types.Entity {
 		raw := doc.Document.Body[loc[0]:loc[1]] // original matched text including any casing
 		name := strings.TrimSpace(raw)          // clean surrounding whitespace from the token
 		key := strings.ToLower(name)            // normalise to lowercase for deduplication
-		if len(name) < 3 || seen[key] {         // skip tokens that are too short or already captured
+		if !isSignalToken(name) || seen[key] {  // skip prose/common words and duplicates
 			continue
 		}
 		seen[key] = true // mark this key so future duplicates are skipped
@@ -80,8 +109,83 @@ func extractTokens(doc types.ClassifiedDocument) []types.Entity {
 	return entities // return the deduplicated list of extracted entities
 }
 
+func extractCodexLabels(doc types.ClassifiedDocument) []types.Entity {
+	block, ok := codexLabelBlock(doc.Document.Body)
+	if !ok {
+		return nil
+	}
+	var labels codexLabels
+	if err := json.Unmarshal([]byte(block), &labels); err != nil {
+		return nil
+	}
+	out := []types.Entity{}
+	seen := map[string]struct{}{}
+	appendItems := func(entityType types.EntityType, items []codexLabelItem) {
+		for _, item := range items {
+			name := strings.TrimSpace(item.Name)
+			if name == "" {
+				continue
+			}
+			key := strings.ToLower(name)
+			if _, ok := seen[string(entityType)+":"+key]; ok {
+				continue
+			}
+			seen[string(entityType)+":"+key] = struct{}{}
+			confidence := item.Confidence
+			if confidence <= 0 {
+				confidence = structuredConfidence
+			}
+			entity := newEntity(doc, string(entityType)+":"+key, name, name, entityType, MethodCodexLabel, confidence)
+			entity.Metadata["assistive"] = "true"
+			entity.Metadata["evidence"] = strings.TrimSpace(item.Evidence)
+			entity.Metadata["extraction_method"] = MethodCodexLabel
+			out = append(out, entity)
+		}
+	}
+	for key, items := range labels.Entities {
+		if entityType, ok := codexEntityType(key); ok {
+			appendItems(entityType, items)
+		}
+	}
+	appendItems(types.Requirement, labels.Risks)
+	appendItems(types.Requirement, labels.Decisions)
+	appendItems(types.Enum, labels.Status)
+	return out
+}
+
+func codexLabelBlock(body string) (string, bool) {
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, codexLabelPrefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, codexLabelPrefix)), true
+		}
+	}
+	return "", false
+}
+
+func codexEntityType(value string) (types.EntityType, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case string(types.Requirement):
+		return types.Requirement, true
+	case string(types.APIField):
+		return types.APIField, true
+	case string(types.Service):
+		return types.Service, true
+	case string(types.Dependency):
+		return types.Dependency, true
+	case string(types.Enum):
+		return types.Enum, true
+	case string(types.DBColumn):
+		return types.DBColumn, true
+	default:
+		return "", false
+	}
+}
+
 // newEntity builds an entity with consistent provenance, confidence, and span fields.
 func newEntity(doc types.ClassifiedDocument, key, name, raw string, entityType types.EntityType, method string, confidence float64, spans ...types.SourceSpan) types.Entity {
+	metadata := entityMetadata(doc)
+	metadata["extraction_method"] = method
 	return types.Entity{
 		ID:               fmt.Sprintf("%s:%s", doc.Document.ID, key), // combine document ID and key for a stable entity ID
 		Type:             entityType,                                 // determine what kind of concept this token represents
@@ -91,7 +195,7 @@ func newEntity(doc types.ClassifiedDocument, key, name, raw string, entityType t
 		Confidence:       confidence,                                 // how certain this extraction is
 		ExtractionMethod: method,                                     // how the entity was produced
 		Spans:            spans,                                      // offsets or pointers locating the mention
-		Metadata:         entityMetadata(doc),                        // carry classification and source evidence forward
+		Metadata:         metadata,                                   // carry classification and source evidence forward
 	}
 }
 
@@ -138,4 +242,35 @@ func isLikelyAPIFieldName(name, lower string) bool {
 		return true
 	}
 	return name != lower
+}
+
+func isSignalToken(name string) bool {
+	if len(name) < 3 {
+		return false
+	}
+	lower := strings.ToLower(name)
+	if _, ok := commonTokenStopwords[lower]; ok {
+		return false
+	}
+	if strings.Contains(name, "_") {
+		return true
+	}
+	if issueKeyPattern.MatchString(name) {
+		return true
+	}
+	if alphaIDPattern.MatchString(name) {
+		return true
+	}
+	if camelCasePattern.MatchString(name) {
+		return true
+	}
+	if strings.ContainsAny(lower, ".:/") {
+		return true
+	}
+	return strings.Contains(lower, "status") ||
+		strings.Contains(lower, "state") ||
+		strings.Contains(lower, "flag") ||
+		strings.Contains(lower, "field") ||
+		strings.Contains(lower, "column") ||
+		strings.Contains(lower, "service")
 }

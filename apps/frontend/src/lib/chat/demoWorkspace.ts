@@ -1,4 +1,5 @@
 import type {
+  AnswerSection,
   Artifact,
   ChatQueryResult,
   FindingsResult,
@@ -229,6 +230,14 @@ export function demoGraphData(): GraphData {
 export function demoArtifacts(): Artifact[] {
   return [
     demoArtifact(
+      "demo-artifact-0",
+      "demo",
+      "contextos-demo://planning-notes",
+      "Planning mode and agent chat tour",
+      "Demo notes describe the planning-first workflow, source cards, Activity cleanup, stream transcript behavior, findings, graph, and agent chat mode.",
+      "2026-01-01T09:10:00.000Z",
+    ),
+    demoArtifact(
       "demo-artifact-1",
       "jira",
       "DEMO-42",
@@ -260,7 +269,56 @@ export function demoArtifacts(): Artifact[] {
       "Frontend uses refundStatus while service notes mention refund_state.",
       "2026-01-01T09:10:00.000Z",
     ),
+    demoArtifact(
+      "demo-artifact-5",
+      "demo",
+      "contextos-demo://activity-cleanup",
+      "Activity cleanup example",
+      "The demo keeps Activity read-only but shows how live evidence cleanup is exposed for old noisy local records.",
+      "2026-01-01T09:29:00.000Z",
+    ),
   ];
+}
+
+export function demoPlanningTourResult(): ChatQueryResult {
+  const artifacts = demoArtifacts();
+  const answer =
+    "Demo planning mode starts here. Use the agent chat to inspect source cards, notes, findings, graph, Activity, stream progress, and cleanup behavior without connecting live sources.";
+  return {
+    intent: "demo_tour",
+    workspace_id: DEMO_WORKSPACE_PATH,
+    workspace_path: DEMO_WORKSPACE_PATH,
+    provider: "local",
+    answer,
+    summary: "Demo planning and function tour",
+    answer_sections: [
+      {
+        source_label: "Demo · Planning notes",
+        connector: "demo",
+        source_uri: "contextos-demo://planning-notes",
+        summary:
+          "The demo opens with planning mode first so the available functions are visible before live setup.",
+        facts: [
+          "Agent chat can answer against demo Jira, GitHub, Slack, graph, findings, and Activity data.",
+          "Structured source cards are rendered from answer_sections instead of parsing prose.",
+          "The demo is local-only and does not require API, worker, or Codex availability.",
+        ],
+        open_items: [
+          "Real backend agent planning mode is not implemented in this demo pass.",
+        ],
+        coding_notes: [
+          "Ask for planning mode, agent mode, functions, source cards, stream, cleanup, findings, graph, or sources.",
+        ],
+        links: ["contextos-demo://planning-notes"],
+        timestamps: ["2026-01-01T09:10:00.000Z"],
+        confidence: 1,
+        status: "demo",
+      },
+    ],
+    artifact_count: artifacts.length,
+    artifacts,
+    syncs: demoWorkspaceStatus().syncs,
+  };
 }
 
 export function demoChatQueryResult(text: string): ChatQueryResult {
@@ -270,8 +328,17 @@ export function demoChatQueryResult(text: string): ChatQueryResult {
     "Demo workspace is working locally. It has Jira, GitHub, and Slack evidence saved for the same workspace, so you can inspect findings, graph, and recent activity without connecting real sources.";
   let summary = "Demo workspace status";
   let intent = "status";
+  let answer_sections: AnswerSection[] = demoStatusSections();
 
   if (
+    lower.includes("planning") ||
+    lower.includes("plan mode") ||
+    lower.includes("agent") ||
+    lower.includes("function") ||
+    lower.includes("note")
+  ) {
+    return demoPlanningTourResult();
+  } else if (
     lower.includes("finding") ||
     lower.includes("mismatch") ||
     lower.includes("refund")
@@ -280,6 +347,7 @@ export function demoChatQueryResult(text: string): ChatQueryResult {
     summary = "Demo refund status delivery risk";
     answer =
       "Jira says refund status must ship this sprint, GitHub currently covers the UI state, and Slack still has an unresolved backend ownership question. ContextOS flags that as a high-confidence requirement gap, with a second medium finding for refundStatus/refund_state contract drift.";
+    answer_sections = demoFindingSections();
   } else if (
     lower.includes("graph") ||
     lower.includes("entity") ||
@@ -289,8 +357,10 @@ export function demoChatQueryResult(text: string): ChatQueryResult {
     summary = "Demo graph evidence";
     answer =
       "The demo graph links Checkout, Refund Status, Payments API, Checkout UI, QA Release Plan, Launch Review, Service Owner, and the refundStatus contract. The weakest link is service ownership, which is why the finding appears.";
+    answer_sections = demoGraphSections();
   } else if (
     lower.includes("source") ||
+    lower.includes("card") ||
     lower.includes("connected") ||
     lower.includes("ingest")
   ) {
@@ -298,6 +368,23 @@ export function demoChatQueryResult(text: string): ChatQueryResult {
     summary = "Demo source status";
     answer =
       "This demo workspace has 3 ready sources: Jira DEMO, GitHub context-os/demo-api, and Slack #launch-review. They are frontend demo records, so querying the demo does not call the backend workspace API.";
+    answer_sections = demoStatusSections();
+  } else if (
+    lower.includes("activity") ||
+    lower.includes("cleanup") ||
+    lower.includes("clean noisy")
+  ) {
+    intent = "artifacts";
+    summary = "Demo Activity and cleanup behavior";
+    answer =
+      "Demo Activity is read-only and shows clean source labels for the seeded notes, Jira issue, GitHub PRs, and Slack thread. The cleanup action is visible for live workspaces and removes old noisy live-evidence rows only after confirmation.";
+    answer_sections = demoActivitySections();
+  } else if (lower.includes("stream") || lower.includes("progress")) {
+    intent = "status";
+    summary = "Demo stream behavior";
+    answer =
+      "Live workspaces show compact stream progress while Codex runs and cap expanded transcript rendering for readability. The demo explains the behavior without starting a backend stream.";
+    answer_sections = demoStreamSections();
   }
 
   return {
@@ -307,10 +394,166 @@ export function demoChatQueryResult(text: string): ChatQueryResult {
     provider: "local",
     answer,
     summary,
+    answer_sections,
     artifact_count: artifacts.length,
     artifacts,
     syncs: demoWorkspaceStatus().syncs,
   };
+}
+
+function demoStatusSections(): AnswerSection[] {
+  return [
+    {
+      source_label: "Jira · DEMO",
+      connector: "jira",
+      source_uri: "DEMO",
+      summary:
+        "Seeded Jira evidence provides the refund status requirement and QA release plan.",
+      facts: [
+        "DEMO-42 asks for refund status in checkout before launch review.",
+        "DEMO-51 tracks QA validation for the API response field.",
+      ],
+      open_items: ["Backend ownership is still unresolved."],
+      links: ["DEMO-42", "DEMO-51"],
+      timestamps: ["2026-01-01T09:25:00.000Z"],
+      confidence: 0.9,
+      status: "ready",
+    },
+    {
+      source_label: "GitHub · context-os/demo-api",
+      connector: "github",
+      source_uri: "context-os/demo-api",
+      summary:
+        "Seeded GitHub evidence shows UI implementation and API contract naming discussion.",
+      facts: [
+        "PR #18 covers the refund status UI state.",
+        "PR #21 references refundStatus while service notes still mention refund_state.",
+      ],
+      coding_notes: [
+        "Normalize the API field name before QA locks the release plan.",
+      ],
+      links: ["context-os/demo-api#18", "context-os/demo-api#21"],
+      timestamps: ["2026-01-01T09:15:00.000Z"],
+      confidence: 0.84,
+      status: "ready",
+    },
+    {
+      source_label: "Slack · #launch-review",
+      connector: "slack",
+      source_uri: "#launch-review",
+      summary:
+        "Seeded Slack evidence captures the unresolved service ownership question.",
+      facts: ["Launch review is blocked until the Payments API owner is confirmed."],
+      open_items: ["Assign the owner and update Jira acceptance criteria."],
+      links: ["#launch-review"],
+      timestamps: ["2026-01-01T09:20:00.000Z"],
+      confidence: 0.82,
+      status: "ready",
+    },
+  ];
+}
+
+function demoFindingSections(): AnswerSection[] {
+  return [
+    {
+      source_label: "Finding · Requirement gap",
+      connector: "multiple",
+      source_uri: "demo-finding-1",
+      summary:
+        "Refund status is required this sprint, but backend service ownership is still missing.",
+      facts: [
+        "Jira DEMO-42 defines the PMO requirement.",
+        "GitHub PR #18 covers UI state only.",
+        "Slack #launch-review leaves backend ownership unresolved.",
+      ],
+      open_items: [
+        "Assign a Payments API owner before release review.",
+        "Update Jira acceptance criteria after ownership is confirmed.",
+      ],
+      links: ["DEMO-42", "context-os/demo-api#18", "#launch-review"],
+      confidence: 0.88,
+      status: "high",
+    },
+    {
+      source_label: "Finding · Contract drift",
+      connector: "multiple",
+      source_uri: "demo-finding-2",
+      summary:
+        "Frontend and service notes disagree on refundStatus versus refund_state.",
+      facts: [
+        "Frontend discussion references refundStatus.",
+        "Service notes still describe refund_state.",
+      ],
+      coding_notes: [
+        "Choose one response field and add it to the QA release plan.",
+      ],
+      links: ["context-os/demo-api#21", "#launch-review"],
+      confidence: 0.76,
+      status: "medium",
+    },
+  ];
+}
+
+function demoGraphSections(): AnswerSection[] {
+  return [
+    {
+      source_label: "Graph · Refund Status",
+      connector: "graph",
+      source_uri: "contextos-demo://graph/refund-status",
+      summary:
+        "The graph connects the refund requirement to UI, API, QA, PMO, and owner entities.",
+      facts: [
+        "8 entities and 7 relationships are seeded.",
+        "The weakest relationship is Service Owner owns Payments API.",
+      ],
+      open_items: ["Confirm the service owner to strengthen the graph signal."],
+      confidence: 0.84,
+      status: "demo",
+    },
+  ];
+}
+
+function demoActivitySections(): AnswerSection[] {
+  return [
+    {
+      source_label: "Activity · Clean source records",
+      connector: "demo",
+      source_uri: "contextos-demo://activity",
+      summary:
+        "Activity uses one readable source record per seeded note, issue, PR, or thread.",
+      facts: [
+        "Demo Activity is read-only.",
+        "Live workspaces expose a confirmation-gated cleanup action.",
+      ],
+      open_items: [
+        "Cleanup never runs automatically; the user must choose it from Activity.",
+      ],
+      links: ["contextos-demo://activity-cleanup"],
+      confidence: 1,
+      status: "demo",
+    },
+  ];
+}
+
+function demoStreamSections(): AnswerSection[] {
+  return [
+    {
+      source_label: "Agent stream · Live workspace behavior",
+      connector: "codex",
+      source_uri: "contextos-demo://stream",
+      summary:
+        "Live Codex queries show compact progress and keep expanded stream output bounded.",
+      facts: [
+        "The latest stream line remains visible while collapsed.",
+        "Expanded stream rendering is capped to avoid Show/Hide lag.",
+      ],
+      coding_notes: [
+        "Demo mode does not call /chat/query/stream; it describes the behavior locally.",
+      ],
+      confidence: 1,
+      status: "demo",
+    },
+  ];
 }
 
 function demoArtifact(

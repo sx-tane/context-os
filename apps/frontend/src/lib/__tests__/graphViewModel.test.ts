@@ -47,6 +47,37 @@ describe("buildGraphLinks — relationship data", () => {
       strength: 0.9,
     });
   });
+
+  it("filters low-confidence co-occurrence links and prioritizes typed delivery relationships", () => {
+    const entities = makeEntities();
+    const relationships: GraphRelationship[] = [
+      {
+        id: "co",
+        from_id: "feature",
+        to_id: "api",
+        kind: "co_occurs_in_document",
+        confidence: 0.95,
+      },
+      {
+        id: "noisy",
+        from_id: "feature",
+        to_id: "owner",
+        kind: "co_occurs_in_document",
+        confidence: 0.5,
+      },
+      {
+        id: "typed",
+        from_id: "feature",
+        to_id: "refund",
+        kind: "requirement_affects_api",
+        confidence: 0.7,
+      },
+    ];
+
+    const links = buildGraphLinks(entities, relationships);
+
+    expect(links.map((link) => link.id)).toEqual(["typed", "co"]);
+  });
 });
 
 describe("buildGraphLinks — inferred data", () => {

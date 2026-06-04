@@ -105,6 +105,9 @@ contextGraph.AddRelationships(relationships)
   regression baselines under `storage/snapshots/`.
 - Snapshots preserve aliases, provenance, version history, and relationship evidence because they
   serialize the full canonical entity and typed relationship records.
+- The `/graph` API exposes a filtered signal graph by default without deleting snapshot or database
+  rows. Use `include_noise=true` on the handler endpoint to inspect low-signal regex entities and
+  co-occurrence-only relationships from older runs.
 
 ## Production Requirements
 

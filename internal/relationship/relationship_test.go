@@ -125,6 +125,20 @@ func TestBuildFallsBackToCoOccurrence(t *testing.T) {
 	}
 }
 
+// TestBuildSkipsLowConfidenceRegexOnlyCoOccurrence verifies generic regex-only dependency pairs do not create noisy edges.
+func TestBuildSkipsLowConfidenceRegexOnlyCoOccurrence(t *testing.T) {
+	input := []entities.CanonicalEntity{
+		{Entity: types.Entity{ID: "d:dep1", SourceID: "d", Type: types.Dependency, Name: "kafka", ExtractionMethod: "regex_token", Confidence: 0.58}},
+		{Entity: types.Entity{ID: "d:dep2", SourceID: "d", Type: types.Dependency, Name: "redis", ExtractionMethod: "regex_token", Confidence: 0.58}},
+	}
+
+	got := relationship.Build(input)
+
+	if _, ok := findKind(got, types.CoOccursInDocument); ok {
+		t.Fatalf("Build() emitted low-confidence regex co-occurrence edge: %+v", got)
+	}
+}
+
 // TestBuildCapsGenericCoOccurrenceEdges verifies large same-document inputs do
 // not explode into dense generic all-pairs graphs.
 func TestBuildCapsGenericCoOccurrenceEdges(t *testing.T) {

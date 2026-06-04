@@ -51,6 +51,7 @@ export function buildGraphLinks(
 ) {
   if (relationships.length > 0) {
     return relationships
+      .filter(isSignalRelationship)
       .map((relationship) => ({
         id: relationship.id,
         source: relationship.from_id,
@@ -59,7 +60,7 @@ export function buildGraphLinks(
         strength: relationship.confidence ?? 0.5,
         evidence: relationship.evidence,
       }))
-      .sort((a, b) => b.strength - a.strength)
+      .sort(compareGraphLinks)
       .filter(
         (link) =>
           entities.some((entity) => entity.id === link.source) &&
@@ -273,6 +274,23 @@ export function typeAccentStyle(type: string) {
 
 export function relationshipLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function isSignalRelationship(relationship: GraphRelationship) {
+  return !(
+    relationship.kind === "co_occurs_in_document" &&
+    (relationship.confidence ?? 0) < 0.6
+  );
+}
+
+function compareGraphLinks(a: GraphLink, b: GraphLink) {
+  const priority = relationshipPriority(b.label) - relationshipPriority(a.label);
+  if (priority !== 0) return priority;
+  return b.strength - a.strength;
+}
+
+function relationshipPriority(label: string) {
+  return label === "co_occurs_in_document" ? 0 : 1;
 }
 
 function connectGroups(

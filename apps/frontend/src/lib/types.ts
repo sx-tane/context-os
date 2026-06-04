@@ -75,6 +75,7 @@ export interface IngestRequest {
 export interface ApiErrorBody {
   error?: string;
   message?: string;
+  examples?: string[];
 }
 
 export interface SourceMetadataField {
@@ -182,6 +183,7 @@ export interface FindingsResult {
   pmo?: FindingsPMO;
   execution?: FindingsExecution;
   entity_count?: number;
+  relationship_count?: number;
   error?: string;
 }
 
@@ -351,6 +353,7 @@ export interface GraphEntity {
   evidence?: string[];
   aliases?: string[];
   candidates?: GraphEntityCandidate[];
+  metadata?: Record<string, string>;
 }
 
 export interface GraphRelationship {
@@ -369,6 +372,10 @@ export interface GraphData {
   count: number;
   entity_count?: number;
   relationship_count?: number;
+  filtered_entity_count?: number;
+  filtered_relationship_count?: number;
+  total_entity_count?: number;
+  total_relationship_count?: number;
   entities: GraphEntity[];
   relationships?: GraphRelationship[];
 }

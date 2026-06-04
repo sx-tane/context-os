@@ -75,24 +75,82 @@ func TestExtractTokenPathRecordsMethodConfidenceAndSpans(t *testing.T) {
 	}
 }
 
-// TestExtractDoesNotTreatLowercaseStatusAsAPIField verifies plain-language lowercase status tokens do not become API fields.
-func TestExtractDoesNotTreatLowercaseStatusAsAPIField(t *testing.T) {
+// TestExtractSkipsPlainLanguageStatusToken verifies plain-language lowercase status tokens are not fallback entities.
+func TestExtractSkipsPlainLanguageStatusToken(t *testing.T) {
 	doc := types.ClassifiedDocument{
 		Document: types.NormalizedDocument{ID: "doc-1", Body: "refundStatus status"},
 	}
 
 	got := extraction.Extract(doc)
-	if len(got) != 2 {
-		t.Fatalf("Extract() length = %d, want 2", len(got))
+	if len(got) != 1 {
+		t.Fatalf("Extract() length = %d, want 1", len(got))
 	}
 	if got[0].Name != "refundStatus" || got[0].Type != types.APIField {
 		t.Fatalf("first entity = %#v, want refundStatus api_field", got[0])
 	}
-	if got[1].Name != "status" {
-		t.Fatalf("second entity name = %q, want status", got[1].Name)
+}
+
+// TestExtractRegexFallbackKeepsIdentifiersAndSkipsStopwords verifies token fallback favors code and ticket identifiers over prose.
+func TestExtractRegexFallbackKeepsIdentifiersAndSkipsStopwords(t *testing.T) {
+	doc := types.ClassifiedDocument{
+		Document: types.NormalizedDocument{
+			ID:   "doc-1",
+			Body: "Source Read fields and also among type travel_fee_commission_target_flag travelFeeCommissionTargetFlag BA015 BKGDEV-8466",
+		},
 	}
-	if got[1].Type == types.APIField {
-		t.Fatalf("second entity type = %q, want non-api_field", got[1].Type)
+
+	got := extraction.Extract(doc)
+	names := map[string]bool{}
+	for _, entity := range got {
+		names[entity.Name] = true
+	}
+	for _, want := range []string{"travel_fee_commission_target_flag", "travelFeeCommissionTargetFlag", "BA015", "BKGDEV-8466"} {
+		if !names[want] {
+			t.Fatalf("Extract() missing %q in %+v", want, got)
+		}
+	}
+	for _, noisy := range []string{"Source", "Read", "fields", "and", "also", "among", "type"} {
+		if names[noisy] {
+			t.Fatalf("Extract() included noisy token %q in %+v", noisy, got)
+		}
+	}
+}
+
+// TestExtractCodexLabelsProducesAssistiveTypedEntities verifies structured Codex labels become evidence-backed metadata.
+func TestExtractCodexLabelsProducesAssistiveTypedEntities(t *testing.T) {
+	doc := types.ClassifiedDocument{
+		Document: types.NormalizedDocument{
+			ID: "codex-1",
+			Body: `Human summary.
+CONTEXTOS_LABELS_JSON: {"entities":{"requirement":[{"name":"Travel fee commission target","evidence":"Jira BKGDEV-8466 names the requirement","confidence":0.82}],"api_field":[{"name":"travelFeeCommissionTargetFlag","evidence":"API field listed in source","confidence":0.91}],"service":[{"name":"booking-service","evidence":"service owner comment","confidence":0.7}],"dependency":[],"enum":[{"name":"BA015","evidence":"status value in sheet","confidence":0.8}],"db_column":[{"name":"travel_fee_commission_target_flag","evidence":"DB column in mapping","confidence":0.88}]},"risks":[],"decisions":[],"status":[]}`,
+			Metadata: map[string]string{
+				contracts.MetadataSourceURI: "https://example.atlassian.net/browse/BKGDEV-8466",
+			},
+		},
+	}
+
+	got := extraction.Extract(doc)
+	if len(got) != 5 {
+		t.Fatalf("Extract() length = %d, want 5", len(got))
+	}
+	byName := map[string]types.Entity{}
+	for _, entity := range got {
+		byName[entity.Name] = entity
+		if entity.ExtractionMethod != extraction.MethodCodexLabel {
+			t.Errorf("ExtractionMethod = %q, want %q", entity.ExtractionMethod, extraction.MethodCodexLabel)
+		}
+		if entity.Metadata["assistive"] != "true" {
+			t.Errorf("Metadata[assistive] = %q, want true", entity.Metadata["assistive"])
+		}
+		if entity.Metadata["evidence"] == "" {
+			t.Errorf("Metadata[evidence] = empty for %q", entity.Name)
+		}
+	}
+	if byName["travelFeeCommissionTargetFlag"].Type != types.APIField {
+		t.Fatalf("api field type = %q, want api_field", byName["travelFeeCommissionTargetFlag"].Type)
+	}
+	if byName["travel_fee_commission_target_flag"].Type != types.DBColumn {
+		t.Fatalf("db column type = %q, want db_column", byName["travel_fee_commission_target_flag"].Type)
 	}
 }
 

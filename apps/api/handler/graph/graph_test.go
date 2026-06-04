@@ -110,6 +110,77 @@ func TestQueryReturnsFrontendGraphShape(t *testing.T) {
 	}
 }
 
+// TestQueryFiltersNoiseByDefaultAndIncludesWithFlag verifies persisted noisy graph rows are hidden unless debugging is requested.
+func TestQueryFiltersNoiseByDefaultAndIncludesWithFlag(t *testing.T) {
+	repo := entityRepo{
+		entities: []entities.CanonicalEntity{{
+			Entity: types.Entity{
+				ID:         "entity-signal",
+				Type:       types.APIField,
+				Name:       "travelFeeCommissionTargetFlag",
+				SourceID:   "jira://BKGDEV-8466",
+				Confidence: 0.82,
+				Metadata:   map[string]string{"extraction_method": "codex_label"},
+			},
+			Confidence: 0.82,
+		}, {
+			Entity: types.Entity{
+				ID:         "entity-noise",
+				Type:       types.Dependency,
+				Name:       "Source",
+				SourceID:   "jira://BKGDEV-8466",
+				Confidence: 0.5,
+				Metadata:   map[string]string{"extraction_method": "regex_token"},
+			},
+			Confidence: 0.5,
+		}},
+		relationships: []types.Relationship{{
+			ID:         "entity-signal->entity-noise:co_occurs_in_document",
+			FromID:     "entity-signal",
+			ToID:       "entity-noise",
+			Kind:       types.CoOccursInDocument,
+			Confidence: 0.5,
+		}},
+	}
+	handler := graphhandler.NewHandler(
+		workspaceRepo{workspace: repository.Workspace{ID: "workspace-1", Path: "/workspace"}},
+		repo,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/graph?workspace_id=/workspace", nil)
+	rec := httptest.NewRecorder()
+	handler.Query(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Query() status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := decodeObject(t, rec.Body.Bytes())
+	if body["entity_count"] != float64(1) {
+		t.Fatalf("entity_count = %v, want 1", body["entity_count"])
+	}
+	if body["filtered_entity_count"] != float64(1) {
+		t.Fatalf("filtered_entity_count = %v, want 1", body["filtered_entity_count"])
+	}
+	if body["relationship_count"] != float64(0) {
+		t.Fatalf("relationship_count = %v, want 0", body["relationship_count"])
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/graph?workspace_id=/workspace&include_noise=true", nil)
+	rec = httptest.NewRecorder()
+	handler.Query(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Query(include_noise) status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body = decodeObject(t, rec.Body.Bytes())
+	if body["entity_count"] != float64(2) {
+		t.Fatalf("include_noise entity_count = %v, want 2", body["entity_count"])
+	}
+	if body["relationship_count"] != float64(1) {
+		t.Fatalf("include_noise relationship_count = %v, want 1", body["relationship_count"])
+	}
+}
+
 type workspaceRepo struct {
 	workspace repository.Workspace
 }

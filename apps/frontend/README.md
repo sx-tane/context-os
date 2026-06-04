@@ -19,6 +19,8 @@ On first visit:
 4. Ask source questions in the command bar, for example `give me today slack messages`, `recent jira tickets`, or `latest drive docs`.
 5. The chat answer labels whether it came from live Codex lookup or local DB evidence. The truth panel shows local artifacts, analysis findings, and graph entities.
 
+The built-in **Demo Workspace** is local-only and does not require API, worker, or Codex availability. Opening it seeds a planning-first agent note when demo chat is empty, then canned prompts for planning mode, agent chat mode, function notes, source cards, findings, graph, Activity cleanup, and stream behavior return structured source-card answers.
+
 ## Project Identity
 
 Projects are keyed by **workspace folder path** (stored in `localStorage` and mirrored to the API workspace table). The home screen can list, add, and switch multiple workspaces. Each workspace gets its own chat history and connector knowledge state.
@@ -28,7 +30,7 @@ Projects are keyed by **workspace folder path** (stored in `localStorage` and mi
 | Command | Behavior |
 |---|---|
 | source question | Calls `/chat/query/stream`; plugin-backed concrete sources use live Codex first, render structured source cards when returned, auto-save one evidence artifact per real source section to Local DB, refresh Activity, then fall back to `/chat/query` if streaming is unavailable |
-| `show findings` | Runs analysis and shows mismatches for the latest ready connector |
+| `show findings` | Runs analysis for ready concrete sources and shows mismatches; broad Codex scopes return source-scope guidance instead of waiting for a timeout |
 | `status` | Routed through local chat status handling |
 | `install knowledge` / `add source` | Opens the inline source setup panel |
 | `clear` | Clear chat history for current project |
@@ -45,7 +47,7 @@ The `KnowledgeInstall` component (`src/lib/components/knowledge/KnowledgeInstall
 - Marks the project as knowledge-ready on completion.
 - Reopenable at any time via the sidebar button.
 
-External source setup does not bulk-ingest or analyze source content. Live chat against a concrete source can save the fetched evidence into the Local DB, but broad connector setup remains read-only until a concrete source is queried or an explicit ingest/analysis path runs. Local DB artifacts, graph output, findings, evidence, and confidence remain the source of truth for double-checking after explicit ingest or Run Analysis.
+External source setup does not bulk-ingest or analyze source content. Live chat against a concrete source can save the fetched evidence into the Local DB, but broad connector setup remains read-only until a concrete source is queried or an explicit ingest/analysis path runs. Run Analysis requires concrete Codex sources such as a repo, issue, project, channel, thread, doc, or folder. Local DB artifacts, the filtered signal graph, findings, evidence, and confidence remain the source of truth for double-checking after explicit ingest or Run Analysis.
 
 ## Design Rules
 

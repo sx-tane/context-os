@@ -10,6 +10,12 @@ Source connector that delegates ingestion to the [Codex CLI](https://github.com/
 4. On context cancellation the **whole process group** is killed (`SIGKILL` to `-pgid`) so child processes spawned by the Codex agent cannot keep the stdout/stderr pipes open and stall the HTTP handler.
 5. The ingested content and log are returned as a single `events.Event`.
 
+Prompts ask Codex to keep the readable source summary and append one auditable
+`CONTEXTOS_LABELS_JSON:` line with entities grouped as `requirement`, `api_field`, `service`,
+`dependency`, `enum`, and `db_column`, plus risks, decisions, and status. Extraction parses that
+line deterministically as assistive metadata with source evidence; generic prose labels are not
+accepted without provenance.
+
 ## Metadata keys
 
 | Key             | Direction | Description                                                          |
