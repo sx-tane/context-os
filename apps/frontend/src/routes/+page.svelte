@@ -10,6 +10,11 @@
         ServiceStatus,
         WorkspaceStatus,
     } from "$lib/types";
+    import type {
+        EvidenceBasketItem,
+        FindingActionItem,
+        FindingActionStatus,
+    } from "$lib/workflow/types";
     import {
         API_URL,
         apiFetch,
@@ -17,9 +22,13 @@
         cleanupLiveEvidence,
         deleteWorkspace,
         getArtifacts,
+        getAnalysisBasket,
+        getFindingActions,
         getGraphData,
         getWorkspaceStatus,
         probeService,
+        putAnalysisBasket,
+        putFindingActions,
     } from "$lib/api";
     import {
         addMessage,
@@ -39,6 +48,7 @@
     } from "$lib/workspace/projectStore";
     import ChatPanel from "$lib/components/chat/ChatPanel.svelte";
     import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
+    import AnalysisPreview from "$lib/components/insights/AnalysisPreview.svelte";
     import ActivityView from "$lib/components/insights/ActivityView.svelte";
     import FindingsView from "$lib/components/insights/FindingsView.svelte";
     import GraphView from "$lib/components/insights/GraphView.svelte";
@@ -53,6 +63,12 @@
     } from "$lib/chat/demoWorkspace";
     import { runAnalysis } from "$lib/findings/analysisRunner";
     import { buildInsightStatus } from "$lib/insights/status";
+    import {
+        buildAnalysisPreview,
+        buildSourceHealth,
+        buildWorkspaceSnapshotMarkdown,
+        mergeBasketItem,
+    } from "$lib/workflow/viewModel";
     import {
         assistantMsg,
         classifyChatCommand,
@@ -79,6 +95,10 @@
     let lastFindings: FindingsResult | null = null;
     let lastAnalysisAt = "";
     let activityArtifacts: Artifact[] = [];
+    let analysisBasket: EvidenceBasketItem[] = [];
+    let findingActions: FindingActionItem[] = [];
+    let analysisPreviewOpen = false;
+    let workflowMessage = "";
     let removeConfirmOpen = false;
     let workspacePendingRemoval = "";
     let removeInProgress = false;
@@ -90,6 +110,8 @@
     let mainGrid: HTMLElement | null = null;
     let resizingPanes = false;
     let workspaceRefreshRunID = 0;
+    let analysisAbortController: AbortController | null = null;
+    let workflowStateRunID = 0;
 
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
@@ -111,15 +133,29 @@
         activityArtifacts.length > 0
             ? activityArtifacts
             : (lastChatResult?.artifacts ?? []);
+    $: analysisPreview = buildAnalysisPreview({
+        readySources,
+        lastChatResult,
+        recentArtifacts,
+        basketItems: analysisBasket,
+    });
+    $: sourceHealth = buildSourceHealth({
+        readySources,
+        recentArtifacts,
+        workspaceStatus,
+        codexLoggedIn,
+        codexPlugins,
+    });
     $: insightStatus = buildInsightStatus({
         readySources,
         lastChatResult,
         recentArtifacts,
+        basketItems: analysisBasket,
         graphData,
         lastFindings,
         lastAnalysisAt,
     });
-    $: hasAnalysisInput = hasSources || insightStatus.concreteSourceCount > 0;
+    $: hasAnalysisInput = analysisPreview.included.length > 0;
     $: protectedWorkspace =
         workspacePath === DEFAULT_WORKSPACE_PATH ||
         workspacePath === DEMO_WORKSPACE_PATH;
@@ -131,6 +167,7 @@
         void refreshSystemStatus();
         void hydrateWorkspaces();
         void refreshWorkspace();
+        void refreshWorkflowState();
     });
 
     async function refreshSystemStatus() {
@@ -223,6 +260,23 @@
         activityArtifacts = artifacts?.artifacts ?? [];
     }
 
+    async function refreshWorkflowState() {
+        const runID = ++workflowStateRunID;
+        workflowMessage = "";
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            analysisBasket = [];
+            findingActions = [];
+            return;
+        }
+        const [basket, actions] = await Promise.all([
+            getAnalysisBasket(workspacePath),
+            getFindingActions(workspacePath),
+        ]);
+        if (runID !== workflowStateRunID) return;
+        analysisBasket = basket?.items ?? [];
+        findingActions = actions?.actions ?? [];
+    }
+
     async function cleanNoisyLiveEvidence() {
         if (workspacePath === DEMO_WORKSPACE_PATH) {
             return "Demo Activity is read-only.";
@@ -283,9 +337,13 @@
         openProject(path);
         lastChatResult = null;
         lastFindings = null;
+        analysisBasket = [];
+        findingActions = [];
+        analysisPreviewOpen = false;
+        workflowMessage = "";
         graphCleanupConfirmOpen = false;
         graphCleanupMessage = "";
-        await refreshWorkspace();
+        await Promise.all([refreshWorkspace(), refreshWorkflowState()]);
     }
 
     async function openDemoWorkspace() {
@@ -314,7 +372,11 @@
         sourcePanelOpen = true;
         lastChatResult = null;
         lastFindings = null;
-        await refreshWorkspace();
+        analysisBasket = [];
+        findingActions = [];
+        analysisPreviewOpen = true;
+        workflowMessage = "";
+        await Promise.all([refreshWorkspace(), refreshWorkflowState()]);
     }
 
     function startPaneResize(event: PointerEvent) {
@@ -381,13 +443,17 @@
             newWorkspacePath = "";
             lastChatResult = null;
             lastFindings = null;
+            analysisBasket = [];
+            findingActions = [];
+            analysisPreviewOpen = false;
+            workflowMessage = "";
             graphData = null;
             selectedEntity = null;
             activityArtifacts = [];
             sourcePanelOpen = false;
             workspacePendingRemoval = "";
             removeConfirmOpen = false;
-            await refreshWorkspace();
+            await Promise.all([refreshWorkspace(), refreshWorkflowState()]);
         } finally {
             removeInProgress = false;
         }
@@ -439,22 +505,142 @@
         });
     }
 
-    async function runFindings() {
-        await runAnalysis({
-            workspacePath,
-            readySources: getProject().connectors.filter(
-                (source) => source.status === "ready",
-            ),
-            lastChatResult,
-            recentArtifacts,
-            addMessage,
-            replaceMessage,
-            setBusy: (value) => (busy = value),
-            setLastFindings: (result) => (lastFindings = result),
-            setLastAnalysisAt: (value) => (lastAnalysisAt = value),
-            openSources: () => (sourcePanelOpen = true),
-            refreshWorkspace,
+    async function saveAnalysisBasket(nextItems: EvidenceBasketItem[]) {
+        analysisBasket = nextItems;
+        workflowMessage = nextItems.length
+            ? `${nextItems.length} evidence source${nextItems.length === 1 ? "" : "s"} pinned for analysis.`
+            : "Evidence basket cleared.";
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            workflowMessage = `${workflowMessage} Demo state is session-only.`;
+            return;
+        }
+        const result = await putAnalysisBasket({
+            workspace_id: workspacePath,
+            items: nextItems,
         });
+        if (!result.ok) {
+            addMessage(
+                assistantMsg(
+                    `Evidence basket did not save: ${result.body.message ?? result.body.error ?? "unknown error"}`,
+                ),
+            );
+        }
+    }
+
+    function pinEvidenceForAnalysis(item: EvidenceBasketItem) {
+        analysisPreviewOpen = true;
+        void saveAnalysisBasket(mergeBasketItem(analysisBasket, item));
+    }
+
+    function removeBasketItem(id: string) {
+        void saveAnalysisBasket(
+            analysisBasket.filter((item) => item.id !== id),
+        );
+    }
+
+    async function setFindingAction(
+        findingID: string,
+        status: FindingActionStatus,
+    ) {
+        const nextAction: FindingActionItem = {
+            findingId: findingID,
+            status,
+            updatedAt: new Date().toISOString(),
+        };
+        const nextActions = [
+            nextAction,
+            ...findingActions.filter((item) => item.findingId !== findingID),
+        ];
+        findingActions = nextActions;
+        workflowMessage = `Finding marked ${status}.`;
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            workflowMessage = `${workflowMessage} Demo state is session-only.`;
+            return;
+        }
+        const result = await putFindingActions({
+            workspace_id: workspacePath,
+            actions: nextActions,
+        });
+        if (!result.ok) {
+            addMessage(
+                assistantMsg(
+                    `Finding action did not save: ${result.body.message ?? result.body.error ?? "unknown error"}`,
+                ),
+            );
+        }
+    }
+
+    function prefillChatWithEvidence(prompt: string) {
+        command = prompt;
+        workflowMessage = "Chat composer prefilled with that evidence source.";
+    }
+
+    async function copyTextToClipboard(text: string, label: string) {
+        try {
+            await navigator.clipboard.writeText(text);
+            workflowMessage = `${label} copied.`;
+        } catch {
+            addMessage(assistantMsg(text));
+            workflowMessage = `${label} added to chat because clipboard was unavailable.`;
+        }
+    }
+
+    async function exportWorkspaceSnapshot() {
+        const markdown = buildWorkspaceSnapshotMarkdown({
+            workspacePath,
+            preview: analysisPreview,
+            sourceHealth,
+            findings: lastFindings,
+            actions: findingActions,
+            graphData,
+            recentArtifacts,
+            basketItems: analysisBasket,
+        });
+        const filename = `contextos-${$project.name
+            .replace(/[^a-z0-9]+/gi, "-")
+            .toLowerCase()}-snapshot.md`;
+        const url = URL.createObjectURL(
+            new Blob([markdown], { type: "text/markdown;charset=utf-8" }),
+        );
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        await copyTextToClipboard(markdown, "Workspace snapshot Markdown");
+    }
+
+    async function runFindings() {
+        if (analysisAbortController) return;
+        const controller = new AbortController();
+        analysisAbortController = controller;
+        try {
+            await runAnalysis({
+                workspacePath,
+                readySources: getProject().connectors.filter(
+                    (source) => source.status === "ready",
+                ),
+                lastChatResult,
+                recentArtifacts,
+                basketItems: analysisBasket,
+                addMessage,
+                replaceMessage,
+                setBusy: (value) => (busy = value),
+                setLastFindings: (result) => (lastFindings = result),
+                setLastAnalysisAt: (value) => (lastAnalysisAt = value),
+                openSources: () => (sourcePanelOpen = true),
+                refreshWorkspace,
+                signal: controller.signal,
+            });
+        } finally {
+            if (analysisAbortController === controller) {
+                analysisAbortController = null;
+            }
+        }
+    }
+
+    function cancelAnalysis() {
+        analysisAbortController?.abort();
     }
 
     async function handleKnowledgeDone() {
@@ -468,6 +654,10 @@
         lastChatResult = null;
         lastFindings = null;
         lastAnalysisAt = "";
+        analysisBasket = [];
+        findingActions = [];
+        analysisPreviewOpen = false;
+        workflowMessage = "";
         graphData = null;
         selectedEntity = null;
         graphCleanupConfirmOpen = false;
@@ -484,6 +674,9 @@
     }
 
     function switchInsightTab(tab: "findings" | "graph" | "activity") {
+        if (activeInsightTab !== tab) {
+            analysisPreviewOpen = false;
+        }
         activeInsightTab = tab;
         sourcePanelOpen = false;
         if (tab === "graph" || tab === "activity") {
@@ -655,8 +848,11 @@
                 {hasSources}
                 {busy}
                 bind:command
+                basketItems={analysisBasket}
                 onClear={clearChat}
                 onSubmit={submitCommand}
+                onAskEvidence={prefillChatWithEvidence}
+                onPinEvidence={pinEvidenceForAnalysis}
             />
         </section>
 
@@ -703,12 +899,27 @@
                             >Activity</button
                         >
                     </nav>
-                    <button
-                        type="button"
-                        on:click={runFindings}
-                        disabled={!hasAnalysisInput || busy}
-                        >{busy ? "Running" : "Run Analysis"}</button
-                    >
+                    <div class="insight-actions">
+                        <button
+                            type="button"
+                            on:click={() => (analysisPreviewOpen = !analysisPreviewOpen)}
+                        >
+                            {analysisPreviewOpen ? "Hide Preview" : "Preview"}
+                        </button>
+                        <button
+                            type="button"
+                            on:click={runFindings}
+                            disabled={!hasAnalysisInput || busy}
+                            >{analysisAbortController
+                                ? "Running"
+                                : "Run Analysis"}</button
+                        >
+                        {#if analysisAbortController}
+                            <button type="button" on:click={cancelAnalysis}
+                                >Cancel Analysis</button
+                            >
+                        {/if}
+                    </div>
                 </div>
 
                 <div
@@ -738,31 +949,56 @@
                     </div>
                 </div>
 
-                {#if activeInsightTab === "findings"}
-                    <FindingsView
-                        {lastFindings}
-                        {lastAnalysisAt}
-                        {recentArtifacts}
-                        readySourceCount={readySources.length}
-                        {workspaceStatus}
-                        hasSources={hasAnalysisInput}
-                        {insightStatus}
-                    />
-                {:else if activeInsightTab === "graph"}
-                    <GraphView
-                        {graphData}
-                        bind:selectedEntity
-                        {hasSources}
-                        cleanupRunning={graphCleanupRunning}
-                        cleanupMessage={graphCleanupMessage}
-                        onRequestCleanupGraph={requestGraphCleanup}
-                    />
-                {:else}
-                    <ActivityView
-                        {recentArtifacts}
-                        onCleanupNoisyLiveEvidence={cleanNoisyLiveEvidence}
-                    />
-                {/if}
+                <div class="insight-body">
+                    {#if workflowMessage}
+                        <p class="workflow-message">{workflowMessage}</p>
+                    {/if}
+
+                    {#if analysisPreviewOpen}
+                        <AnalysisPreview
+                            preview={analysisPreview}
+                            {sourceHealth}
+                            basketItems={analysisBasket}
+                            onRemoveBasketItem={removeBasketItem}
+                            onExportMarkdown={exportWorkspaceSnapshot}
+                        />
+                    {/if}
+
+                    <div class="insight-tab-body">
+                        {#if activeInsightTab === "findings"}
+                            <FindingsView
+                                {lastFindings}
+                                {lastAnalysisAt}
+                                {recentArtifacts}
+                                readySourceCount={readySources.length}
+                                {workspaceStatus}
+                                hasSources={hasAnalysisInput}
+                                {insightStatus}
+                                {findingActions}
+                                onSetFindingAction={setFindingAction}
+                                onCopyFinding={(text) =>
+                                    copyTextToClipboard(text, "Finding share text")}
+                            />
+                        {:else if activeInsightTab === "graph"}
+                            <GraphView
+                                {graphData}
+                                bind:selectedEntity
+                                {hasSources}
+                                cleanupRunning={graphCleanupRunning}
+                                cleanupMessage={graphCleanupMessage}
+                                onRequestCleanupGraph={requestGraphCleanup}
+                            />
+                        {:else}
+                            <ActivityView
+                                {recentArtifacts}
+                                basketItems={analysisBasket}
+                                onCleanupNoisyLiveEvidence={cleanNoisyLiveEvidence}
+                                onAskEvidence={prefillChatWithEvidence}
+                                onPinEvidence={pinEvidenceForAnalysis}
+                            />
+                        {/if}
+                    </div>
+                </div>
             </section>
         </section>
     </section>
@@ -1135,9 +1371,16 @@
         display: none;
     }
 
-    .insight-head > button {
+    .insight-actions button {
         padding: 8px 12px;
         white-space: nowrap;
+    }
+
+    .insight-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
     }
 
     .insight-card {
@@ -1147,6 +1390,38 @@
         grid-template-rows: auto auto minmax(0, 1fr);
         overflow: hidden;
         background: transparent;
+    }
+
+    .insight-body,
+    .insight-tab-body {
+        min-height: 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .insight-body {
+        overflow: hidden;
+    }
+
+    .insight-tab-body {
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+
+    .insight-tab-body :global(.findings-view),
+    .insight-tab-body :global(.activity-view),
+    .insight-tab-body :global(.graph-workspace) {
+        flex: 1 1 auto;
+    }
+
+    .workflow-message {
+        margin: 0;
+        border-bottom: 1px solid #d7d2c8;
+        color: #5f5b50;
+        font-size: 12px;
+        line-height: 1.45;
+        padding: 9px 0;
     }
 
     .insight-head {

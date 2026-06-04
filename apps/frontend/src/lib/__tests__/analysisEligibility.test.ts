@@ -186,6 +186,42 @@ describe("buildAnalysisSources", () => {
       built.eligible.length,
     );
   });
+
+  it("uses basket sources only while preserving other eligible sources as available", () => {
+    const built = buildAnalysisSources({
+      readySources: [
+        makeSource({ connector: "github", uri: "github" }),
+        makeSource({ connector: "github", uri: "owner/repo" }),
+      ],
+      lastChatResult: chatResult({
+        answer_sections: [
+          {
+            source_label: "Jira",
+            connector: "jira",
+            source_uri: "BKGDEV-8551",
+          },
+        ],
+      }),
+      basketItems: [
+        {
+          id: "slack:#release",
+          connector: "slack",
+          uri: "#release",
+          label: "Release",
+          origin: "activity",
+          addedAt: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(built.eligible.map(sourceKey)).toEqual(["slack:#release"]);
+    expect(built.basket.map(sourceKey)).toEqual(["slack:#release"]);
+    expect(built.available.map(sourceKey)).toEqual([
+      "github:owner/repo",
+      "jira:BKGDEV-8551",
+    ]);
+    expect(built.skipped.map(sourceKey)).toEqual(["github:github"]);
+  });
 });
 
 function makeSource(overrides: Partial<ConnectorKnowledge>): ConnectorKnowledge {

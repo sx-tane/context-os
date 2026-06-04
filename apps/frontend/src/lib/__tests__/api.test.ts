@@ -10,15 +10,24 @@ import {
   getArtifacts,
   cleanupGraphNoise,
   cleanupLiveEvidence,
+  getAnalysisBasket,
+  putAnalysisBasket,
+  getFindingActions,
+  putFindingActions,
   postChatQuery,
   getGraphData,
   upsertWorkspace,
   deleteWorkspace,
   getWorkspaceStatus,
   postWorkspaceSource,
+  resetChatSession,
   resetWorkspace,
   streamChatQuery,
 } from "../api";
+import type {
+  AnalysisBasketPayload,
+  FindingActionsPayload,
+} from "$lib/api/types";
 
 // makeResponse builds a minimal fetch Response mock for readJSON (calls res.text()).
 function makeResponse(body: unknown, ok: boolean, status = 200): Response {
@@ -437,6 +446,78 @@ describe("cleanupLiveEvidence", () => {
   });
 });
 
+// ---- workspace UI state ----
+
+describe("workspace UI state", () => {
+  it("gets and puts the analysis basket", async () => {
+    const body: AnalysisBasketPayload = {
+      workspace_id: "/workspace",
+      items: [
+        {
+          id: "github:repo",
+          connector: "github",
+          uri: "repo",
+          label: "Repo",
+          origin: "activity",
+          addedAt: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+    };
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+
+    expect(await getAnalysisBasket("/workspace")).toEqual(body);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/workspace/analysis-basket?workspace_id=%2Fworkspace",
+    );
+
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+    const result = await putAnalysisBasket(body);
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/workspace/analysis-basket");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  it("gets and puts finding actions", async () => {
+    const body: FindingActionsPayload = {
+      workspace_id: "/workspace",
+      actions: [
+        {
+          findingId: "finding-1",
+          status: "checking",
+          updatedAt: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+    };
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+
+    expect(await getFindingActions("/workspace")).toEqual(body);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/workspace/finding-actions?workspace_id=%2Fworkspace",
+    );
+
+    fetchMock.mockResolvedValueOnce(makeResponse(body, true, 200));
+    const result = await putFindingActions(body);
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/workspace/finding-actions");
+  });
+
+  it("returns a structured error when saving workspace UI state fails before a response", async () => {
+    fetchMock.mockRejectedValue(new TypeError("network"));
+    const result = await putAnalysisBasket({ workspace_id: "/workspace", items: [] });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(0);
+      expect(result.body.error).toBe("api_unreachable");
+    }
+  });
+});
+
 // ---- cleanupGraphNoise ----
 
 describe("cleanupGraphNoise", () => {
@@ -696,6 +777,36 @@ describe("streamChatQuery", () => {
     expect(statuses).toEqual([2]);
     expect(answers).toEqual([{ ...result, evidence_save_status: "saving" }]);
     expect(results).toEqual([result]);
+  });
+});
+
+// ---- resetChatSession ----
+
+describe("resetChatSession", () => {
+  it("posts to /api/chat/session/reset with workspace scope", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ reset: true }, true, 200));
+
+    const result = await resetChatSession({ workspace_id: "ws1" });
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat/session/reset",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ workspace_id: "ws1" }),
+      }),
+    );
+  });
+
+  it("returns a soft failure when the reset API is unreachable", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const result = await resetChatSession({ workspace_id: "ws1" });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(0);
+    expect(result.body?.error).toBe("api_unreachable");
   });
 });
 

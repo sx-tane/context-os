@@ -13,10 +13,11 @@ Shared TypeScript modules for the ContextOS frontend. Routes and components impo
 | [`insights/`](insights/) | Shared Graph/Findings/Activity freshness and source-eligibility status helpers for the homepage insight surface. |
 | [`graph/`](graph/) | Display-only graph view model helpers for focused entity maps and relationship details. |
 | [`ingest/`](ingest/) | Connector ingest and Codex plugin re-auth orchestration helpers. |
+| [`workflow/`](workflow/) | Workflow-only analysis basket, finding action, source health, and workspace snapshot helpers. |
 | [`connectors/`](connectors/) | Static source connector configuration consumed by connector routes. |
 | [`components/`](components/) | Svelte UI components grouped by responsibility. |
 | [`generated/`](generated/) | Auto-generated OpenAPI TypeScript declarations. Do not edit by hand. |
-| [`types.ts`](types.ts) | Canonical frontend type definitions and generated API type re-exports. |
+| [`types.ts`](types.ts) | Canonical frontend type definitions, workflow type exports, and generated API type re-exports. |
 
 Keep route and component files thin: put network behavior in `api/`, workspace persistence in `workspace/`, chat flow in `chat/`, analysis/report shaping in `findings/`, insight freshness in `insights/`, graph display shaping in `graph/`, and connector lifecycle orchestration in `ingest/`.
 
@@ -45,11 +46,16 @@ Single source of truth for all communication with the Go API (`/api`).
 | `postWorkspaceSource(body, opts)` | Saves an external connector/source URI as a connected source reference through `POST /workspace/source`; this does not ingest content. |
 | `deleteWorkspace(path)` | Calls `DELETE /workspace?path=...` and returns structured `{ ok, status, message? }` details so the route can remove local state while reporting backend/API failures. |
 | `getWorkspaceStatus(path)` | Fetches workspace event/entity/mismatch counts and connector sync state. |
+| `getAnalysisBasket(workspaceID)` | Reads durable selected-evidence state from `/workspace/analysis-basket`; returns `null` when API state is unavailable. |
+| `putAnalysisBasket(body)` | Replaces durable selected-evidence state for one workspace and returns structured success/error details. |
+| `getFindingActions(workspaceID)` | Reads durable finding checklist state from `/workspace/finding-actions`; returns `null` when API state is unavailable. |
+| `putFindingActions(body)` | Replaces durable finding checklist state for one workspace and returns structured success/error details. |
 | `getArtifacts(params)` | Queries local source artifacts from `GET /artifacts` by workspace, connector, source URI, date range, text, and limit. |
 | `cleanupLiveEvidence(workspaceID)` | Calls `POST /artifacts/live-evidence/cleanup` and returns deleted noisy live-evidence counts for explicit Activity cleanup. |
 | `cleanupGraphNoise(workspaceID)` | Calls `POST /graph/cleanup` and returns matched/deleted counts for explicit permanent graph cleanup; it removes low-signal graph rows only, not artifacts, findings, chat history, or connected sources. |
 | `postChatQuery(body, opts)` | Sends chat questions to `POST /chat/query`; plugin-backed concrete source links use live Codex first, start eligible Local DB live-answer evidence saves asynchronously, then fall back to local artifacts when needed. Network failures return a structured `api_unreachable` error instead of throwing raw `Failed to fetch`. |
 | `streamChatQuery(body, handlers, opts)` | Opens an SSE stream to `POST /chat/query/stream`; dispatches live Codex `onLog`, heartbeat `onStatus`, early `onAnswer`, final `onResult` with evidence-save status, and `onError` events for the pending chat transcript. |
+| `resetChatSession(body, opts)` | Calls `POST /chat/session/reset` for the active workspace. Network failures are soft so clearing browser chat still succeeds. |
 | `streamCodexIngest(connector, body, handlers, opts)` | Opens an SSE stream to `POST /<connector>/ingest` for Codex-backed connectors; dispatches `onLog`, `onStatus`, `onResult`, and `onError` events. |
 | `streamCodexReauth(plugin, onLog, opts)` | Opens an SSE stream to `POST /codex/plugin-reauth?plugin=...`; forwards each log line to `onLog`. |
 | `streamCodexLogin(onLog, opts)` | Opens an SSE stream to `POST /codex/login`; forwards each log line to `onLog`. |
@@ -68,7 +74,9 @@ Maintains local workspace state in browser storage and registers user-created wo
 
 `workspace/statusMapping.ts` owns the pure reconciliation logic so backend sync-state mapping can be tested without importing Svelte stores or Vite runtime globals.
 
-Cached project and chat data is bounded on both load and save: old browser state is trimmed to 200 chat messages, 80 stream lines per message, 20 cached evidence artifacts per chat card, 100 workspaces, and 100 connectors per workspace.
+Cached project and chat data is bounded on both load and save: old browser state is trimmed to 200 chat messages, 80 stream lines per message, 20 cached evidence artifacts per chat card, 100 workspaces, and 100 connectors per workspace. `clearChat()` clears browser chat and best-effort resets the backend Codex chat session for the active workspace, so the next live turn starts fresh even though API failures do not block local clearing.
+
+Analysis basket and finding action checklist state are not stored in `projectStore.ts`; routes use the `$lib/api` workspace UI-state helpers so selected evidence and action statuses are durable per workspace.
 
 ---
 
@@ -92,7 +100,7 @@ Provides the protected `contextos-demo` workspace records used by the homepage w
 
 ### findings/analysisRunner.ts
 
-Owns the homepage analysis execution loop. It runs concrete ready sources one at a time, chooses direct token vs Codex provider, updates progress messages, aggregates successful findings, preserves per-source failures, and reports a clear zero-finding result when analysis completes without mismatch signals. Connector-only live scopes such as `github:github` remain chat-ready but are skipped before findings analysis because the backend requires a concrete repo, project, issue, channel, thread, document, folder, or file.
+Owns the homepage analysis execution loop. It runs concrete ready sources one at a time, chooses direct token vs Codex provider, updates progress messages, aggregates successful findings, preserves per-source failures, supports route-owned cancellation through `AbortSignal`, and reports a clear zero-finding result when analysis completes without mismatch signals. Connector-only live scopes such as `github:github` remain chat-ready but are skipped before findings analysis because the backend requires a concrete repo, project, issue, channel, thread, document, folder, or file. When the route passes analysis basket items, the runner uses those concrete sources only and leaves other available evidence for preview/status display.
 
 ### findings/aggregator.ts
 
@@ -109,6 +117,12 @@ Keeps presentation-only formatting outside the route and insight components: sev
 ### insights/status.ts
 
 Derives one shared freshness/status model for the homepage insight surface. `buildInsightStatus` counts concrete analysis-ready sources separately from chat-only live connector scopes, finds the latest Activity evidence timestamp, summarizes Graph node/link availability, and classifies manual Findings as `not_run`, `current`, `stale`, or `no_concrete_sources`. The route uses the same derived labels for the insight status strip and footer, while `FindingsView` uses the state-specific copy to explain why Findings may differ from fresher Activity or Graph evidence.
+
+---
+
+## workflow/
+
+Pure workflow helpers for source previews, Activity filters, source health, evidence basket shaping, finding action status/copy text, and Markdown snapshot export. Keep these helpers UI-independent so `+page.svelte`, tests, and components share one source of truth for what Run Analysis will use.
 
 ---
 
@@ -217,7 +231,6 @@ Central type registry for the frontend.
 | `WorkspaceList` | API response for registered local workspaces. |
 | `WorkspaceSyncState` | Connector sync or connected-source registry row; `status: "connected"` means setup saved a live external source without ingesting it locally. |
 | `ArtifactList` | API response for local ingested source artifacts. |
-| `ChatQueryRequest` | Request body for source chat queries, including optional `connectors` for multi-source live search. |
 | `ChatQueryResult` | Chat answer with intent, provider, answer text, artifact evidence, range, sync state, live evidence save status, and graph update status; `connector` may be `multiple` when live sections come from several connected sources. |
 | `ChatStreamState` | Frontend-only live query stream transcript with latest line, status, optional summary, and collapsed/expanded preference. |
 | `GraphRelationship` | Persisted graph edge exposed by `/graph`, including source and evidence identifiers. |

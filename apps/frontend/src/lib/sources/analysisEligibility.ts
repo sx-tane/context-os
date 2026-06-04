@@ -5,6 +5,7 @@ import type {
   ConnectorKind,
   ConnectorKnowledge,
 } from "$lib/types";
+import type { EvidenceBasketItem } from "$lib/workflow/types";
 
 const liveConnectors = new Set<ConnectorKind>([
   "github",
@@ -37,6 +38,7 @@ export interface AnalysisSourcesInput {
   readySources?: ConnectorKnowledge[];
   lastChatResult?: ChatQueryResult | null;
   recentArtifacts?: Artifact[];
+  basketItems?: EvidenceBasketItem[];
   derivedLimit?: number;
 }
 
@@ -44,6 +46,8 @@ export interface AnalysisSourcesResult {
   eligible: ConnectorKnowledge[];
   skipped: SkippedAnalysisSource[];
   derived: ConnectorKnowledge[];
+  basket: ConnectorKnowledge[];
+  available: ConnectorKnowledge[];
 }
 
 export function sourceSetupURI(
@@ -96,6 +100,7 @@ export function buildAnalysisSources({
   readySources = [],
   lastChatResult = null,
   recentArtifacts = [],
+  basketItems = [],
   derivedLimit = maxDerivedAnalysisSources,
 }: AnalysisSourcesInput): AnalysisSourcesResult {
   const { eligible, skipped } = splitAnalysisSources(readySources);
@@ -124,10 +129,28 @@ export function buildAnalysisSources({
     addDerived(sourceFromArtifact(artifact));
   }
 
+  const available = builder.sources();
+  const basketBuilder = new AnalysisSourceBuilder();
+  for (const item of basketItems) {
+    basketBuilder.addDerived(sourceFromBasketItem(item));
+  }
+  const basket = basketBuilder.sources();
+  if (basket.length > 0) {
+    return {
+      eligible: basket,
+      skipped,
+      derived: builder.derivedSources(),
+      basket,
+      available,
+    };
+  }
+
   return {
-    eligible: builder.sources(),
+    eligible: available,
     skipped,
     derived: builder.derivedSources(),
+    basket: [],
+    available,
   };
 }
 
@@ -244,6 +267,12 @@ function makeReadySource(
     uri,
     status: "ready",
   };
+}
+
+function sourceFromBasketItem(item: EvidenceBasketItem): ConnectorKnowledge | null {
+  const connector = normalizeConnector(item.connector);
+  const uri = trimSourceURI(item.uri);
+  return makeReadySource(connector, uri);
 }
 
 function normalizeAnalysisSource(

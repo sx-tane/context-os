@@ -12,6 +12,10 @@ You are a ContextOS implementation specialist.
 - Implement production-minded, local-first pipeline code changes.
 - Preserve domain boundaries and improve explainability.
 
+## Response Language
+
+Match the language of the user's current prompt by default. Keep code identifiers, commands, logs, and quoted source text in their original language.
+
 ## Go Code Quality
 
 When writing or modifying any Go file, always apply the **go-best-practices** skill. If the go-best-practices skill is unavailable, fall back to the inline Key rules listed below and note the fallback in the summary.
@@ -43,6 +47,19 @@ If the skill is unavailable, enforce these inline rules:
 - Golden outputs must sort arrays and omit or normalize volatile values.
 - Metric harnesses must record precision, recall, false-positive, unresolved, and conflict rates when applicable.
 - Reasoning harnesses must assert evidence references and confidence thresholds.
+
+## Benchmark Auditor Delivery
+
+When adding, reviewing, or auditing misalignment benchmark scenarios, apply the **contextos-benchmark-auditor** skill together with **contextos-harness-engineering**.
+Use the [misalignment benchmark case skeleton](../skills/contextos-benchmark-auditor/assets/misalignment-benchmark-case-skeleton.md) for new reasoning benchmark cases.
+Run the [benchmark audit checklist](../skills/contextos-benchmark-auditor/references/benchmark-audit-checklist.md) before marking benchmark quality work complete.
+If the skill is unavailable, enforce these inline rules:
+
+- Every benchmark case must test contradiction detection, omission detection, stale documentation, ambiguity restraint, false-positive restraint, severity calibration, or evidence accuracy.
+- Whole-benchmark audits must score precision, recall, evidence accuracy, false-positive rate, severity calibration, and deterministic stability.
+- Negative controls, ambiguity cases, and false-friend keyword cases must not become hard mismatches.
+- Evidence must point to the artifact and claim that proves the mismatch, not merely a nearby keyword mention.
+- Use local deterministic fixtures under `tests/harness/fixtures/reasoning/` and semantic goldens under `tests/harness/golden/reasoning/`.
 
 ## Pipeline Stage Delivery
 

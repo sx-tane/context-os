@@ -354,8 +354,14 @@ export function localDateString(date: Date) {
 export function detectResponseLanguage(text: string) {
   if (/[\uac00-\ud7af]/.test(text)) return "ko";
   if (/[\u3040-\u30ff]/.test(text)) return "ja";
-  if (/[\u4e00-\u9fff]/.test(text)) return "zh";
-  return "en";
+  const cjkCount = (text.match(/[\u4e00-\u9fff]/g) ?? []).length;
+  if (cjkCount === 0) return "en";
+  const englishWordCount = (text.match(/[A-Za-z][A-Za-z0-9_-]*/g) ?? []).length;
+  const chineseCueCount = (
+    text.match(/[吗呢吧啊的了是有和在请问中文回答最近变化什么怎么为什么]/g) ?? []
+  ).length;
+  if (englishWordCount >= 3 && chineseCueCount === 0 && cjkCount <= 6) return "en";
+  return "zh";
 }
 
 function initialStreamState(text: string): ChatStreamState {

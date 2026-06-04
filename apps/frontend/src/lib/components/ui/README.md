@@ -33,7 +33,7 @@ Shared confirmation dialog for destructive or irreversible user actions.
 | `cancelLabel` | `string` | `"Cancel"` | Cancel button text. |
 | `busy` | `boolean` | `false` | Disables both buttons and shows `busyLabel`. |
 
-Emits `cancel` and `confirm` events. Use for workspace removal, source reset, and other confirmation-gated commands.
+Emits `cancel` and `confirm` events. Use for workspace removal, source reset, and other confirmation-gated commands. The dialog and action buttons pin the shared mono font because modal styles are component-scoped and cannot rely on route-level button rules.
 
 ---
 

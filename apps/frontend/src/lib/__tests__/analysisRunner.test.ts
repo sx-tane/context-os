@@ -4,6 +4,7 @@ jest.mock("$lib/workspace/projectStore", () => ({
 }));
 
 import {
+  analysisTimeoutMs,
   analysisProvider,
   buildAnalysisProgress,
   runAnalysis,
@@ -41,6 +42,14 @@ describe("analysisProvider", () => {
     expect(analysisProvider("github")).toBe("codex");
     expect(analysisProvider("slack")).toBe("codex");
     expect(analysisProvider("filesystem")).toBe("token");
+  });
+});
+
+describe("analysisTimeoutMs", () => {
+  it("allows slow Codex-backed sources to run as long as the API findings timeout", () => {
+    expect(analysisTimeoutMs("codex")).toBe(300000);
+    expect(analysisTimeoutMs("token")).toBe(90000);
+    expect(analysisTimeoutMs("codex", 1000)).toBe(1000);
   });
 });
 
@@ -297,6 +306,108 @@ describe("runAnalysis", () => {
       connector: "github",
       uri: "https://github.com/context-os/app/pull/43",
     });
+  });
+
+  it("uses basket sources only when the analysis basket has items", async () => {
+    const originalWindow = (global as unknown as { window?: unknown }).window;
+    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
+      setTimeout,
+      clearTimeout,
+    };
+    mockPostFindings.mockResolvedValueOnce({
+      ok: true,
+      body: {
+        connector: "slack",
+        uri: "#release",
+        mismatch_count: 0,
+        event_count: 1,
+        entity_count: 1,
+        mismatches: [],
+      },
+    });
+    const state = makeState();
+
+    try {
+      await runAnalysis({
+        workspacePath: "workspace",
+        readySources: [
+          { connector: "github", uri: "owner/repo", status: "ready" },
+        ],
+        basketItems: [
+          {
+            id: "slack:#release",
+            connector: "slack",
+            uri: "#release",
+            label: "Release",
+            origin: "activity",
+            addedAt: "2026-06-04T00:00:00.000Z",
+          },
+        ],
+        addMessage: state.addMessage,
+        replaceMessage: state.replaceMessage,
+        setBusy: state.setBusy,
+        setLastFindings: state.setLastFindings,
+        setLastAnalysisAt: state.setLastAnalysisAt,
+        openSources: state.openSources,
+        refreshWorkspace: state.refreshWorkspace,
+        timeoutMs: 1000,
+      });
+    } finally {
+      (global as unknown as { window?: unknown }).window = originalWindow;
+    }
+
+    expect(mockPostFindings).toHaveBeenCalledTimes(1);
+    expect(mockPostFindings.mock.calls[0][0]).toMatchObject({
+      connector: "slack",
+      uri: "#release",
+    });
+  });
+
+  it("cancels the running source and leaves queued sources unrequested", async () => {
+    const originalWindow = (global as unknown as { window?: unknown }).window;
+    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
+      setTimeout,
+      clearTimeout,
+    };
+    const controller = new AbortController();
+    mockPostFindings.mockImplementation((_body, options?: { signal?: AbortSignal }) =>
+      new Promise((_, reject) => {
+        options?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      }),
+    );
+    const state = makeState();
+
+    try {
+      const run = runAnalysis({
+        workspacePath: "workspace",
+        readySources: [
+          { connector: "jira", uri: "BKGDEV-8528", status: "ready" },
+          { connector: "github", uri: "owner/repo", status: "ready" },
+        ],
+        addMessage: state.addMessage,
+        replaceMessage: state.replaceMessage,
+        setBusy: state.setBusy,
+        setLastFindings: state.setLastFindings,
+        setLastAnalysisAt: state.setLastAnalysisAt,
+        openSources: state.openSources,
+        refreshWorkspace: state.refreshWorkspace,
+        signal: controller.signal,
+      });
+      await Promise.resolve();
+      controller.abort();
+      await run;
+    } finally {
+      (global as unknown as { window?: unknown }).window = originalWindow;
+    }
+
+    expect(mockPostFindings).toHaveBeenCalledTimes(1);
+    expect(state.replacements.at(-1)?.text).toContain("Analysis canceled.");
+    expect(state.replacements.at(-1)?.text).toContain("1. jira:BKGDEV-8528 - canceled");
+    expect(state.replacements.at(-1)?.text).toContain("2. github:owner/repo - canceled");
+    expect(state.busyCalls).toEqual([true, false]);
+    expect(state.refreshWorkspace).toHaveBeenCalled();
   });
 });
 

@@ -4,13 +4,12 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-copilot_instructions="$repo_root/.github/copilot-instructions.md"
-github_readme="$repo_root/.github/README.md"
-authoring_skill="$repo_root/.github/skills/contextos-authoring/SKILL.md"
+copilot_instructions="$repo_root/AGENTS.md"
+github_readme="$repo_root/.codex/README.md"
+authoring_skill="$repo_root/.codex/skills/contextos-authoring/SKILL.md"
 
 score=0
 findings=()
-notes=()
 
 add_finding() {
   local file="$1"
@@ -32,15 +31,10 @@ for term in architecture workflows pipeline "skill routing"; do
   fi
 done
 
-if [[ -f "$github_readme" ]]; then
-  if grep -q '^## Mermaid Explanation Policy' "$github_readme"; then
-    score=$((score + 20))
-  else
-    add_finding "$github_readme" "missing ## Mermaid Explanation Policy"
-  fi
-else
+if grep -q '^## Mermaid Explanation Policy' "$github_readme"; then
   score=$((score + 20))
-  notes+=("$github_readme: optional README not present; top-level GitHub README policy check skipped")
+else
+  add_finding "$github_readme" "missing ## Mermaid Explanation Policy"
 fi
 
 if grep -q 'Mermaid' "$authoring_skill"; then
@@ -50,11 +44,6 @@ else
 fi
 
 printf "Mermaid policy score: %s/100\n" "$score"
-
-if [[ ${#notes[@]} -gt 0 ]]; then
-  printf "Notes:\n"
-  printf " - %s\n" "${notes[@]}"
-fi
 
 if [[ ${#findings[@]} -gt 0 ]]; then
   printf "Findings:\n"

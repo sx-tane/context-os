@@ -2,9 +2,7 @@ import type {
   ApiErrorBody,
   ArtifactList,
   ActivityCleanupResult,
-  ChatQueryRequest,
   ChatQueryResult,
-  ChatSessionResetRequest,
   CodexConnectorKind,
   CodexSourceList,
   ConnectorKind,
@@ -20,6 +18,12 @@ import type {
   WorkspaceSyncState,
   WorkspaceStatus,
 } from "$lib/types";
+import type {
+  AnalysisBasketPayload,
+  ChatQueryRequest,
+  ChatSessionResetRequest,
+  FindingActionsPayload,
+} from "$lib/api/types";
 import {
   logAPIRequestDone,
   logAPIRequestError,
@@ -609,6 +613,88 @@ export async function cleanupLiveEvidence(
       body: {
         error: "api_unreachable",
         message: "API is unreachable. Activity cleanup did not run.",
+      },
+    };
+  }
+}
+
+export async function getAnalysisBasket(
+  workspaceID: string,
+): Promise<AnalysisBasketPayload | null> {
+  try {
+    const query = new URLSearchParams({ workspace_id: workspaceID });
+    const res = await apiFetch(`${API_URL}/workspace/analysis-basket?${query.toString()}`);
+    if (!res.ok) return null;
+    return (await readJSON(res)) as unknown as AnalysisBasketPayload;
+  } catch {
+    return null;
+  }
+}
+
+export async function putAnalysisBasket(
+  body: AnalysisBasketPayload,
+): Promise<
+  | { ok: true; status: number; body: AnalysisBasketPayload }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  return putWorkspaceUIState("/workspace/analysis-basket", body);
+}
+
+export async function getFindingActions(
+  workspaceID: string,
+): Promise<FindingActionsPayload | null> {
+  try {
+    const query = new URLSearchParams({ workspace_id: workspaceID });
+    const res = await apiFetch(`${API_URL}/workspace/finding-actions?${query.toString()}`);
+    if (!res.ok) return null;
+    return (await readJSON(res)) as unknown as FindingActionsPayload;
+  } catch {
+    return null;
+  }
+}
+
+export async function putFindingActions(
+  body: FindingActionsPayload,
+): Promise<
+  | { ok: true; status: number; body: FindingActionsPayload }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  return putWorkspaceUIState("/workspace/finding-actions", body);
+}
+
+async function putWorkspaceUIState<T>(
+  path: string,
+  body: T,
+): Promise<
+  | { ok: true; status: number; body: T }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  try {
+    const res = await apiFetch(`${API_URL}${path}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const responseBody = await readJSON(res);
+    if (res.ok) {
+      return {
+        ok: true,
+        status: res.status,
+        body: responseBody as unknown as T,
+      };
+    }
+    return {
+      ok: false,
+      status: res.status,
+      body: responseBody,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message: "API is unreachable. Workspace UI state did not save.",
       },
     };
   }

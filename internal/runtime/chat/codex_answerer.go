@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"sync"
+	"syscall"
 	"time"
 )
 

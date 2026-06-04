@@ -86,6 +86,18 @@ type ConnectorSync struct {
 	LastError string
 }
 
+// WorkspaceUIState stores durable frontend workflow state for a workspace.
+type WorkspaceUIState struct {
+	// WorkspaceID links the state to its workspace.
+	WorkspaceID string
+	// StateKey identifies the UI state document, e.g. "analysis_basket".
+	StateKey string
+	// PayloadJSON is the raw JSON payload owned by the typed API handler.
+	PayloadJSON []byte
+	// UpdatedAt is the UTC timestamp of the last write.
+	UpdatedAt time.Time
+}
+
 // WorkspaceRepository manages workspace records.
 type WorkspaceRepository interface {
 	// Upsert creates or updates a workspace by its path. Returns the stored workspace.
@@ -101,6 +113,14 @@ type WorkspaceResetter interface {
 	// DeleteByPath deletes a workspace by path and removes linked memory rows.
 	// It is a no-op when the workspace does not exist.
 	DeleteByPath(ctx context.Context, path string) error
+}
+
+// WorkspaceUIStateRepository manages durable workspace-scoped UI state.
+type WorkspaceUIStateRepository interface {
+	// Get returns the stored state for a workspace/key pair, or nil when absent.
+	Get(ctx context.Context, workspaceID, stateKey string) (*WorkspaceUIState, error)
+	// Put creates or replaces the stored state for a workspace/key pair.
+	Put(ctx context.Context, state WorkspaceUIState) error
 }
 
 // EventRepository manages ingested source events.

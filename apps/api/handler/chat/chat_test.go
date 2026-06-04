@@ -366,6 +366,46 @@ func TestStreamQueryDoesNotRunLiveLookupAfterEvidenceSave(t *testing.T) {
 	}
 }
 
+// TestResetSessionRequiresWorkspaceScope verifies chat session reset rejects requests without workspace scope.
+func TestResetSessionRequiresWorkspaceScope(t *testing.T) {
+	handler := NewHandler(internalchat.NewServiceWithLiveAnswerer(
+		fakeWorkspaces(),
+		&fakeEventRepository{},
+		&fakeSyncRepository{},
+		&fakeResettableLiveAnswerer{},
+	))
+
+	req := httptest.NewRequest(http.MethodPost, "/chat/session/reset", strings.NewReader(`{}`))
+	res := httptest.NewRecorder()
+	handler.ResetSession(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+}
+
+// TestResetSessionDeletesWorkspaceSessionMetadata verifies chat session reset resolves workspace scope before clearing live session metadata.
+func TestResetSessionDeletesWorkspaceSessionMetadata(t *testing.T) {
+	live := &fakeResettableLiveAnswerer{}
+	handler := NewHandler(internalchat.NewServiceWithLiveAnswerer(
+		fakeWorkspaces(),
+		&fakeEventRepository{},
+		&fakeSyncRepository{},
+		live,
+	))
+
+	req := httptest.NewRequest(http.MethodPost, "/chat/session/reset", strings.NewReader(`{"workspace_id":"/workspace"}`))
+	res := httptest.NewRecorder()
+	handler.ResetSession(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if live.resetWorkspaceID != "ws1" {
+		t.Fatalf("resetWorkspaceID = %q, want ws1", live.resetWorkspaceID)
+	}
+}
+
 type fakeEvidenceSaver struct {
 	eventCount   int
 	graphUpdated bool
@@ -396,6 +436,16 @@ func (f *fakeLiveAnswerer) Answer(ctx context.Context, query internalchat.LiveQu
 	f.calls++
 	f.lastQuery = query
 	return f.answer, nil
+}
+
+type fakeResettableLiveAnswerer struct {
+	fakeLiveAnswerer
+	resetWorkspaceID string
+}
+
+func (f *fakeResettableLiveAnswerer) ResetSession(ctx context.Context, workspaceID string) error {
+	f.resetWorkspaceID = workspaceID
+	return nil
 }
 
 type fakeWorkspaceRepository struct{}

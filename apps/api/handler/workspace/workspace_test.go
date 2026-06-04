@@ -13,6 +13,7 @@ import (
 
 	workspacehandler "context-os/apps/api/handler/workspace"
 	"context-os/domain/repository"
+	internalchat "context-os/internal/runtime/chat"
 )
 
 // TestListReturnsSnakeCaseWorkspaceFields verifies workspace lists use stable JSON response field names.
@@ -152,6 +153,38 @@ func TestDeleteRemovesLocalWorkspaceArtifacts(t *testing.T) {
 	assertPathMissing(t, filepath.Join(snapshotDir, "workspace_trace-1.json"))
 }
 
+// TestDeleteRemovesCodexChatSessionMetadata verifies workspace delete clears stored Codex chat session metadata.
+func TestDeleteRemovesCodexChatSessionMetadata(t *testing.T) {
+	sessionDir := t.TempDir()
+	if err := internalchat.NewCodexSessionStore(sessionDir).Save("workspace", "session-1"); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	repo := &resettableWorkspaceRepo{
+		workspaceRepo: workspaceRepo{
+			workspaces: []repository.Workspace{
+				{ID: "workspace", Name: "workspace", Path: "/workspace"},
+			},
+		},
+	}
+	handler := workspacehandler.NewHandler(repo, nil, nil, nil, nil).
+		WithCodexChatSessionDir(sessionDir)
+
+	req := httptest.NewRequest(http.MethodDelete, "/workspace?path=/workspace", nil)
+	rec := httptest.NewRecorder()
+	handler.Delete(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	sessionID, err := internalchat.NewCodexSessionStore(sessionDir).Load("workspace")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if sessionID != "" {
+		t.Fatalf("sessionID = %q, want empty after delete", sessionID)
+	}
+}
+
 // TestDeleteMissingWorkspaceSucceeds verifies deleting an unknown workspace path is a successful no-op.
 func TestDeleteMissingWorkspaceSucceeds(t *testing.T) {
 	repo := &resettableWorkspaceRepo{}
@@ -199,6 +232,42 @@ func TestResetRemovesLocalWorkspaceArtifacts(t *testing.T) {
 	assertPathMissing(t, filepath.Join(parsedDir, "workspace"))
 	assertPathMissing(t, filepath.Join(snapshotDir, "workspace.json"))
 	assertPathMissing(t, filepath.Join(snapshotDir, "workspace_trace-1.json"))
+}
+
+// TestResetRemovesCodexChatSessionMetadata verifies workspace reset clears stored Codex chat session metadata.
+func TestResetRemovesCodexChatSessionMetadata(t *testing.T) {
+	sessionDir := t.TempDir()
+	if err := internalchat.NewCodexSessionStore(sessionDir).Save("workspace", "session-1"); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	repo := &resettableWorkspaceRepo{
+		workspaceRepo: workspaceRepo{
+			workspaces: []repository.Workspace{
+				{ID: "workspace", Name: "workspace", Path: "/workspace"},
+			},
+		},
+	}
+	handler := workspacehandler.NewHandler(repo, nil, nil, nil, nil).
+		WithCodexChatSessionDir(sessionDir)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/workspace/reset",
+		bytes.NewReader([]byte(`{"path":"/workspace","name":"workspace"}`)),
+	)
+	rec := httptest.NewRecorder()
+	handler.Reset(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	sessionID, err := internalchat.NewCodexSessionStore(sessionDir).Load("workspace")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if sessionID != "" {
+		t.Fatalf("sessionID = %q, want empty after reset", sessionID)
+	}
 }
 
 // TestSourceRegistersConnectedSource verifies workspace source registration saves a connected sync row without ingest state.
@@ -313,6 +382,169 @@ func TestSourceRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
+// TestAnalysisBasketRoundTrip verifies basket PUT stores workspace-scoped state and GET returns it.
+func TestAnalysisBasketRoundTrip(t *testing.T) {
+	workspace := repository.Workspace{ID: "workspace", Name: "workspace", Path: "/workspace"}
+	uiState := newRecordingUIStateRepo()
+	handler := workspacehandler.NewHandler(
+		workspaceRepo{workspaces: []repository.Workspace{workspace}},
+		nil,
+		nil,
+		nil,
+		nil,
+	).WithUIStateRepository(uiState)
+	body := []byte(`{"workspace_id":"/workspace","items":[{"id":"github:repo","connector":"github","uri":"repo","label":"Repo","origin":"activity","addedAt":"2026-06-04T00:00:00Z"}]}`)
+
+	putReq := httptest.NewRequest(http.MethodPut, "/workspace/analysis-basket", bytes.NewReader(body))
+	putRec := httptest.NewRecorder()
+	handler.AnalysisBasket(putRec, putReq)
+
+	if putRec.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, want %d", putRec.Code, http.StatusOK)
+	}
+	if len(uiState.puts) != 1 {
+		t.Fatalf("puts = %d, want 1", len(uiState.puts))
+	}
+	if uiState.puts[0].WorkspaceID != "workspace" || uiState.puts[0].StateKey != "analysis_basket" {
+		t.Fatalf("put = %#v, want workspace analysis_basket", uiState.puts[0])
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/workspace/analysis-basket?workspace_id=/workspace", nil)
+	getRec := httptest.NewRecorder()
+	handler.AnalysisBasket(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d, want %d", getRec.Code, http.StatusOK)
+	}
+	responseBody := decodeObject(t, getRec.Body.Bytes())
+	items := objectSlice(t, responseBody, "items")
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1", len(items))
+	}
+	if items[0]["uri"] != "repo" {
+		t.Fatalf("items[0][uri] = %v, want repo", items[0]["uri"])
+	}
+}
+
+// TestAnalysisBasketUsesWorkspaceScope verifies the same state key is isolated by workspace.
+func TestAnalysisBasketUsesWorkspaceScope(t *testing.T) {
+	workspaces := []repository.Workspace{
+		{ID: "workspace-a", Name: "A", Path: "/a"},
+		{ID: "workspace-b", Name: "B", Path: "/b"},
+	}
+	uiState := newRecordingUIStateRepo()
+	handler := workspacehandler.NewHandler(workspaceRepo{workspaces: workspaces}, nil, nil, nil, nil).
+		WithUIStateRepository(uiState)
+	first := []byte(`{"workspace_id":"/a","items":[{"id":"a","connector":"jira","uri":"A-1","label":"A","origin":"chat","addedAt":"2026-06-04T00:00:00Z"}]}`)
+	second := []byte(`{"workspace_id":"/b","items":[{"id":"b","connector":"jira","uri":"B-1","label":"B","origin":"chat","addedAt":"2026-06-04T00:00:00Z"}]}`)
+
+	for _, body := range [][]byte{first, second} {
+		req := httptest.NewRequest(http.MethodPut, "/workspace/analysis-basket", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		handler.AnalysisBasket(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PUT status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/workspace/analysis-basket?workspace_id=/a", nil)
+	rec := httptest.NewRecorder()
+	handler.AnalysisBasket(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	items := objectSlice(t, decodeObject(t, rec.Body.Bytes()), "items")
+	if items[0]["uri"] != "A-1" {
+		t.Fatalf("workspace A item uri = %v, want A-1", items[0]["uri"])
+	}
+}
+
+// TestAnalysisBasketRejectsMalformedPayload verifies invalid basket JSON and missing fields return 400.
+func TestAnalysisBasketRejectsMalformedPayload(t *testing.T) {
+	workspace := repository.Workspace{ID: "workspace", Name: "workspace", Path: "/workspace"}
+	handler := workspacehandler.NewHandler(workspaceRepo{workspaces: []repository.Workspace{workspace}}, nil, nil, nil, nil).
+		WithUIStateRepository(newRecordingUIStateRepo())
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "malformed", body: `{bad json}`, want: "invalid JSON"},
+		{name: "missing workspace", body: `{"items":[]}`, want: "workspace_id is required"},
+		{name: "missing uri", body: `{"workspace_id":"/workspace","items":[{"id":"x","connector":"github","label":"Repo","origin":"chat"}]}`, want: "items[0].uri is required"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPut, "/workspace/analysis-basket", bytes.NewReader([]byte(tc.body)))
+			rec := httptest.NewRecorder()
+			handler.AnalysisBasket(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+			}
+			body := decodeObject(t, rec.Body.Bytes())
+			if body["message"] != tc.want {
+				t.Errorf("message = %v, want %q", body["message"], tc.want)
+			}
+		})
+	}
+}
+
+// TestFindingActionsRoundTrip verifies checklist actions persist and are returned for one workspace.
+func TestFindingActionsRoundTrip(t *testing.T) {
+	workspace := repository.Workspace{ID: "workspace", Name: "workspace", Path: "/workspace"}
+	uiState := newRecordingUIStateRepo()
+	handler := workspacehandler.NewHandler(workspaceRepo{workspaces: []repository.Workspace{workspace}}, nil, nil, nil, nil).
+		WithUIStateRepository(uiState)
+	body := []byte(`{"workspace_id":"/workspace","actions":[{"findingId":"finding-1","status":"checking","note":"follow up","updatedAt":"2026-06-04T00:00:00Z"}]}`)
+
+	putReq := httptest.NewRequest(http.MethodPut, "/workspace/finding-actions", bytes.NewReader(body))
+	putRec := httptest.NewRecorder()
+	handler.FindingActions(putRec, putReq)
+
+	if putRec.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, want %d", putRec.Code, http.StatusOK)
+	}
+	if uiState.puts[0].StateKey != "finding_actions" {
+		t.Fatalf("StateKey = %q, want finding_actions", uiState.puts[0].StateKey)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/workspace/finding-actions?workspace_id=/workspace", nil)
+	getRec := httptest.NewRecorder()
+	handler.FindingActions(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d, want %d", getRec.Code, http.StatusOK)
+	}
+	actions := objectSlice(t, decodeObject(t, getRec.Body.Bytes()), "actions")
+	if actions[0]["status"] != "checking" {
+		t.Fatalf("action status = %v, want checking", actions[0]["status"])
+	}
+}
+
+// TestFindingActionsRejectsInvalidStatus verifies checklist statuses are constrained to supported values.
+func TestFindingActionsRejectsInvalidStatus(t *testing.T) {
+	workspace := repository.Workspace{ID: "workspace", Name: "workspace", Path: "/workspace"}
+	handler := workspacehandler.NewHandler(workspaceRepo{workspaces: []repository.Workspace{workspace}}, nil, nil, nil, nil).
+		WithUIStateRepository(newRecordingUIStateRepo())
+	body := []byte(`{"workspace_id":"/workspace","actions":[{"findingId":"finding-1","status":"blocked","updatedAt":"2026-06-04T00:00:00Z"}]}`)
+
+	req := httptest.NewRequest(http.MethodPut, "/workspace/finding-actions", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.FindingActions(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	responseBody := decodeObject(t, rec.Body.Bytes())
+	if responseBody["message"] != "actions[0].status must be open, checking, or done" {
+		t.Fatalf("message = %v, want invalid status message", responseBody["message"])
+	}
+}
+
 type workspaceRepo struct {
 	workspaces []repository.Workspace
 }
@@ -416,6 +648,29 @@ func (r *recordingWorkspaceRepo) Upsert(_ context.Context, workspace repository.
 	r.upserts = append(r.upserts, workspace)
 	r.workspaces = append(r.workspaces, workspace)
 	return workspace, nil
+}
+
+type recordingUIStateRepo struct {
+	states map[string]repository.WorkspaceUIState
+	puts   []repository.WorkspaceUIState
+}
+
+func newRecordingUIStateRepo() *recordingUIStateRepo {
+	return &recordingUIStateRepo{states: map[string]repository.WorkspaceUIState{}}
+}
+
+func (r *recordingUIStateRepo) Get(_ context.Context, workspaceID, stateKey string) (*repository.WorkspaceUIState, error) {
+	state, ok := r.states[workspaceID+"\x00"+stateKey]
+	if !ok {
+		return nil, nil
+	}
+	return &state, nil
+}
+
+func (r *recordingUIStateRepo) Put(_ context.Context, state repository.WorkspaceUIState) error {
+	r.puts = append(r.puts, state)
+	r.states[state.WorkspaceID+"\x00"+state.StateKey] = state
+	return nil
 }
 
 // decodeObject decodes a JSON object from body.

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { isNearBottom, localDBStatusLine } from "$lib/chat/controller";
-    import type { ChatMessage, ChatQueryResult } from "$lib/types";
+    import type { AnswerSection, ChatMessage, ChatQueryResult } from "$lib/types";
+    import type { EvidenceBasketItem } from "$lib/workflow/types";
     import SafeMarkdownBlock from "$lib/components/ui/SafeMarkdownBlock.svelte";
     import {
         artifactLink,
@@ -13,13 +14,20 @@
         markdownBulletList,
         severityLabel,
     } from "$lib/findings/viewModel";
+    import {
+        askChatPromptForEvidence,
+        basketItemFromAnswerSection,
+    } from "$lib/workflow/viewModel";
 
     export let messages: ChatMessage[] = [];
     export let hasSources = false;
     export let busy = false;
     export let command = "";
-    export let onClear: () => void = () => {};
+    export let basketItems: EvidenceBasketItem[] = [];
+    export let onClear: () => void | Promise<void> = () => {};
     export let onSubmit: () => void | Promise<void> = () => {};
+    export let onAskEvidence: (prompt: string) => void | Promise<void> = () => {};
+    export let onPinEvidence: (item: EvidenceBasketItem) => void | Promise<void> = () => {};
 
     let messagesEl: HTMLDivElement | null = null;
     let composerForm: HTMLFormElement | null = null;
@@ -125,28 +133,36 @@
         ) ?? [];
     }
 
-    function sectionLabel(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+    function sectionLabel(section: AnswerSection) {
         return section.source_label || section.source_uri || section.connector || "Source";
     }
 
-    function sectionMeta(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+    function sectionMeta(section: AnswerSection) {
         return [section.connector, section.status, section.confidence ? `${Math.round(section.confidence * 100)}%` : ""]
             .filter(Boolean)
             .join(" · ");
     }
 
-    function sectionLink(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+    function sectionLink(section: AnswerSection) {
         const link = section.links?.find((item) => /^https?:\/\//i.test(item));
         if (link) return link;
         return /^https?:\/\//i.test(section.source_uri ?? "") ? section.source_uri ?? "" : "";
     }
 
-    function sectionURLLinks(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+    function sectionURLLinks(section: AnswerSection) {
         return section.links?.filter((item) => /^https?:\/\//i.test(item)) ?? [];
     }
 
-    function sectionTextLinks(section: NonNullable<ChatQueryResult["answer_sections"]>[number]) {
+    function sectionTextLinks(section: AnswerSection) {
         return section.links?.filter((item) => !/^https?:\/\//i.test(item)) ?? [];
+    }
+
+    function sectionBasketItem(section: AnswerSection, messageID: string) {
+        return basketItemFromAnswerSection(section, messageID);
+    }
+
+    function basketHas(item: EvidenceBasketItem | null) {
+        return Boolean(item && basketItems.some((existing) => existing.id === item.id));
     }
 
     function connectorClass(connector?: string) {
@@ -260,6 +276,7 @@
                             <div class="answer-sections" aria-label="Structured source answer">
                                 {#each answerSections(message.card.chatResult) as section, index (`${message.id}-section-${index}`)}
                                     {@const link = sectionLink(section)}
+                                    {@const basketItem = sectionBasketItem(section, message.id)}
                                     <section class={`answer-section ${connectorClass(section.connector)}`}>
                                         <div class="answer-section-head">
                                             <div>
@@ -268,9 +285,33 @@
                                                     <span>{sectionMeta(section)}</span>
                                                 {/if}
                                             </div>
-                                            {#if link}
-                                                <a href={link} target="_blank" rel="noreferrer">Open</a>
-                                            {/if}
+                                            <div class="answer-section-actions">
+                                                {#if basketItem}
+                                                    <button
+                                                        type="button"
+                                                        on:click={() =>
+                                                            onAskEvidence(
+                                                                askChatPromptForEvidence(
+                                                                    basketItem.connector,
+                                                                    basketItem.uri,
+                                                                    basketItem.label,
+                                                                ),
+                                                            )}
+                                                    >
+                                                        Ask
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={basketHas(basketItem)}
+                                                        on:click={() => onPinEvidence(basketItem)}
+                                                    >
+                                                        {basketHas(basketItem) ? "Pinned" : "Pin"}
+                                                    </button>
+                                                {/if}
+                                                {#if link}
+                                                    <a href={link} target="_blank" rel="noreferrer">Open</a>
+                                                {/if}
+                                            </div>
                                         </div>
                                         {#if section.summary}
                                             <div class="answer-section-copy">
@@ -643,6 +684,16 @@
         padding-bottom: 10px;
     }
 
+    .answer-section-actions {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+        max-width: 45%;
+    }
+
     .answer-section-list strong {
         display: block;
         color: #1c1b18;
@@ -692,15 +743,31 @@
     }
 
     .answer-section a,
-    .answer-section-head a {
+    .answer-section-head a,
+    .answer-section-actions button {
         width: max-content;
         max-width: 100%;
         border-bottom: 1px solid #bdb7a8;
+        border-top: 0;
+        border-right: 0;
+        border-left: 0;
+        border-radius: 0;
+        background: transparent;
         color: #1f5f8b;
         font-size: 12px;
         font-weight: 700;
         overflow-wrap: anywhere;
         text-decoration: none;
+        padding: 0 0 2px;
+    }
+
+    .answer-section-actions button {
+        color: #1c1b18;
+    }
+
+    .answer-section-actions button:disabled {
+        cursor: default;
+        opacity: 0.45;
     }
 
     .answer-section-copy {

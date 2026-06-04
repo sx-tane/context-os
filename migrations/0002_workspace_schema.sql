@@ -125,6 +125,21 @@ CREATE INDEX IF NOT EXISTS idx_mismatches_severity
     ON mismatches (workspace_id, severity);
 
 -- ────────────────────────────────────────────────────────────────────────────
+-- Workspace UI state (durable local workflow state)
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS workspace_ui_state (
+    workspace_id    TEXT        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    state_key       TEXT        NOT NULL,
+    payload_json    JSONB       NOT NULL DEFAULT '{}',
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    PRIMARY KEY (workspace_id, state_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_ui_state_workspace
+    ON workspace_ui_state (workspace_id, updated_at DESC);
+
+-- ────────────────────────────────────────────────────────────────────────────
 -- Connector sync state (cursor + last sync per workspace per connector)
 -- ────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS connector_syncs (

@@ -1,11 +1,14 @@
 package bootstrap
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"context-os/internal/stages/graphverify"
+
+	_ "github.com/lib/pq"
 )
 
 // TestRegisterRoutesAppliesCORS verifies routes with CORS enabled receive CORS headers and routes without CORS do not.
@@ -74,6 +77,26 @@ func TestRoutesWithoutDBKeepsPublicFallbackRoutes(t *testing.T) {
 	if patterns["/workspace"] {
 		t.Fatal("routes should not include DB-backed /workspace without a DB")
 	}
+	if patterns["/workspace/analysis-basket"] {
+		t.Fatal("routes should not include DB-backed /workspace/analysis-basket without a DB")
+	}
+}
+
+// TestRoutesWithDBIncludesChatSessionReset verifies DB-backed chat routes include workspace session reset.
+func TestRoutesWithDBIncludesChatSessionReset(t *testing.T) {
+	db, err := sql.Open("postgres", "")
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	routes := Routes(db)
+	for _, route := range routes {
+		if route.Pattern == "/chat/session/reset" {
+			return
+		}
+	}
+	t.Fatal("routes missing /chat/session/reset")
 }
 
 // TestRelationshipAssistantFromEnvRequiresExplicitCodexFlag verifies AI relationship assistance is opt-in.

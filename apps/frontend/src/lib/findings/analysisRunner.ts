@@ -13,6 +13,7 @@ import type {
   ConnectorKnowledge,
   FindingsResult,
 } from "$lib/types";
+import type { EvidenceBasketItem } from "$lib/workflow/types";
 import { demoFindings } from "$lib/chat/demoWorkspace";
 import { assistantMsg, loadingMsg, progressMsg } from "$lib/chat/controller";
 import {
@@ -23,7 +24,7 @@ import {
 export type AnalysisSourceStatus = {
   connector: ConnectorKind;
   uri: string;
-  status: "queued" | "running" | "done" | "failed";
+  status: "queued" | "running" | "done" | "failed" | "canceled";
   detail?: string;
 };
 
@@ -32,6 +33,7 @@ export type AnalysisRunnerOptions = {
   readySources: ConnectorKnowledge[];
   lastChatResult?: ChatQueryResult | null;
   recentArtifacts?: Artifact[];
+  basketItems?: EvidenceBasketItem[];
   addMessage: (message: ChatMessage) => void;
   replaceMessage: (id: string, message: ChatMessage) => void;
   setBusy: (busy: boolean) => void;
@@ -40,9 +42,11 @@ export type AnalysisRunnerOptions = {
   openSources: () => void;
   refreshWorkspace: () => Promise<void>;
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 const defaultAnalysisSourceTimeoutMs = 90_000;
+const codexAnalysisSourceTimeoutMs = 5 * 60_000;
 
 export async function runAnalysis(options: AnalysisRunnerOptions) {
   if (options.workspacePath === DEMO_WORKSPACE_PATH) {
@@ -65,6 +69,7 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     readySources: options.readySources,
     lastChatResult: options.lastChatResult,
     recentArtifacts: options.recentArtifacts,
+    basketItems: options.basketItems,
   });
 
   if (options.readySources.length === 0 && eligible.length === 0) {
@@ -117,7 +122,14 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     };
     updateProgress();
 
+    let canceled = false;
     for (const [index, source] of eligible.entries()) {
+      if (options.signal?.aborted) {
+        markCanceled(sourceStatuses, index);
+        canceled = true;
+        updateProgress();
+        break;
+      }
       sourceStatuses[index] = {
         ...sourceStatuses[index],
         status: "running",
@@ -125,18 +137,19 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
       };
       updateProgress();
 
+      const provider = analysisProvider(source.connector);
+      const timeoutMs = analysisTimeoutMs(provider, options.timeoutMs);
       const controller = new AbortController();
-      const timeout = window.setTimeout(
-        () => controller.abort(),
-        options.timeoutMs ?? defaultAnalysisSourceTimeoutMs,
-      );
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      const cancelCurrent = () => controller.abort();
+      options.signal?.addEventListener("abort", cancelCurrent, { once: true });
       try {
         const res = await postFindings(
           {
             workspace_id: options.workspacePath,
             connector: source.connector,
             uri: source.uri,
-            provider: analysisProvider(source.connector),
+            provider,
             role: "pmo",
             include_execution: false,
           },
@@ -163,7 +176,16 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
           };
         }
       } catch (error) {
-        const timeoutMs = options.timeoutMs ?? defaultAnalysisSourceTimeoutMs;
+        if (options.signal?.aborted && isAbortError(error)) {
+          sourceStatuses[index] = {
+            ...sourceStatuses[index],
+            status: "canceled",
+            detail: "canceled by user",
+          };
+          markCanceled(sourceStatuses, index + 1);
+          canceled = true;
+          break;
+        }
         const message = isAbortError(error)
           ? `timed out after ${Math.round(timeoutMs / 1000)}s`
           : String(error);
@@ -179,8 +201,19 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
         };
       } finally {
         window.clearTimeout(timeout);
+        options.signal?.removeEventListener("abort", cancelCurrent);
         updateProgress();
       }
+    }
+
+    if (canceled) {
+      options.replaceMessage(
+        load.id,
+        assistantMsg(
+          `Analysis canceled. ${completed.length}/${eligible.length} source${eligible.length === 1 ? "" : "s"} completed before cancel.\n${buildAnalysisProgress(sourceStatuses, skipped.length)}`,
+        ),
+      );
+      return;
     }
 
     const aggregated = aggregateFindings(completed);
@@ -219,6 +252,7 @@ export function buildAnalysisProgress(
 ) {
   const done = statuses.filter((source) => source.status === "done").length;
   const failed = statuses.filter((source) => source.status === "failed").length;
+  const canceled = statuses.filter((source) => source.status === "canceled").length;
   const lines = statuses.map((source, index) => {
     const label = `${index + 1}. ${source.connector}:${source.uri}`;
     if (source.status === "queued") return `${label} - queued`;
@@ -226,12 +260,18 @@ export function buildAnalysisProgress(
     if (source.status === "done") {
       return `${label} - done${source.detail ? ` (${source.detail})` : ""}`;
     }
+    if (source.status === "canceled") {
+      return `${label} - canceled${source.detail ? `: ${source.detail}` : ""}`;
+    }
     return `${label} - failed${source.detail ? `: ${source.detail}` : ""}`;
   });
   const skipText = skippedCount
     ? `, ${skippedCount} chat-only scope${skippedCount === 1 ? "" : "s"} skipped`
     : "";
-  return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed${skipText}.\n${lines.join("\n")}`;
+  const cancelText = canceled
+    ? `, ${canceled} canceled`
+    : "";
+  return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed${cancelText}${skipText}.\n${lines.join("\n")}`;
 }
 
 export function analysisProvider(connector: ConnectorKind) {
@@ -244,6 +284,25 @@ export function analysisProvider(connector: ConnectorKind) {
     "googledrive",
   ]);
   return codexConnectors.has(connector) ? "codex" : "token";
+}
+
+export function analysisTimeoutMs(provider: ReturnType<typeof analysisProvider>, overrideMs?: number) {
+  if (overrideMs !== undefined) return overrideMs;
+  return provider === "codex"
+    ? codexAnalysisSourceTimeoutMs
+    : defaultAnalysisSourceTimeoutMs;
+}
+
+function markCanceled(statuses: AnalysisSourceStatus[], startIndex: number) {
+  for (let index = startIndex; index < statuses.length; index += 1) {
+    if (statuses[index].status === "queued" || statuses[index].status === "running") {
+      statuses[index] = {
+        ...statuses[index],
+        status: "canceled",
+        detail: "canceled by user",
+      };
+    }
+  }
 }
 
 function findingsErrorMessage(body: { error?: string; message?: string; examples?: string[] }) {

@@ -5,6 +5,7 @@ import type {
   FindingsResult,
   GraphData,
 } from "$lib/types";
+import type { EvidenceBasketItem } from "$lib/workflow/types";
 import {
   buildAnalysisSources,
   type SkippedAnalysisSource,
@@ -20,6 +21,7 @@ export interface InsightStatusInput {
   readySources?: ConnectorKnowledge[];
   lastChatResult?: ChatQueryResult | null;
   recentArtifacts?: Artifact[];
+  basketItems?: EvidenceBasketItem[];
   graphData?: GraphData | null;
   lastFindings?: FindingsResult | null;
   lastAnalysisAt?: string;
@@ -55,6 +57,7 @@ export function buildInsightStatus({
   readySources = [],
   lastChatResult = null,
   recentArtifacts = [],
+  basketItems = [],
   graphData = null,
   lastFindings = null,
   lastAnalysisAt = "",
@@ -63,6 +66,7 @@ export function buildInsightStatus({
     readySources,
     lastChatResult,
     recentArtifacts,
+    basketItems,
   });
   const latestActivityAt = latestArtifactTimestamp(recentArtifacts);
   const graphNodeCount = graphData?.entity_count ?? graphData?.count ?? graphData?.entities?.length ?? 0;

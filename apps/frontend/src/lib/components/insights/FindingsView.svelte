@@ -1,5 +1,14 @@
 <script lang="ts">
-    import type { Artifact, FindingsResult, WorkspaceStatus } from "$lib/types";
+    import type {
+        Artifact,
+        FindingsMismatch,
+        FindingsResult,
+        WorkspaceStatus,
+    } from "$lib/types";
+    import type {
+        FindingActionItem,
+        FindingActionStatus,
+    } from "$lib/workflow/types";
     import type {
         FindingsInsightState,
         InsightStatus,
@@ -13,6 +22,11 @@
         findingSummary,
         severityLabel,
     } from "$lib/findings/viewModel";
+    import {
+        findingActionFor,
+        findingShareText,
+        nextFindingActionStatus,
+    } from "$lib/workflow/viewModel";
 
     export let lastFindings: FindingsResult | null = null;
     export let lastAnalysisAt = "";
@@ -21,6 +35,12 @@
     export let workspaceStatus: WorkspaceStatus | null = null;
     export let hasSources = false;
     export let insightStatus: InsightStatus | null = null;
+    export let findingActions: FindingActionItem[] = [];
+    export let onSetFindingAction: (
+        findingID: string,
+        status: FindingActionStatus,
+    ) => void | Promise<void> = () => {};
+    export let onCopyFinding: (text: string) => void | Promise<void> = () => {};
 
     function shouldShowStatusNote(status: InsightStatus | null) {
         return status !== null && status.findingsState !== "current";
@@ -60,6 +80,14 @@
                 ? "Run analysis across selected sources to surface mismatches and delivery risks."
                 : "Select GitHub repos, Slack channels, or docs first.");
     }
+
+    function findingID(mismatch: FindingsMismatch) {
+        return String(mismatch.id ?? findingSummary(mismatch));
+    }
+
+    function evidenceIsURL(value: string) {
+        return /^https?:\/\//i.test(value);
+    }
 </script>
 
 <div class="findings-view">
@@ -82,6 +110,8 @@
             </div>
         {/if}
         {#each lastFindings.mismatches.slice(0, 6) as mismatch}
+            {@const id = findingID(mismatch)}
+            {@const action = findingActionFor(findingActions, id)}
             <article>
                 <div class="finding-title-row">
                     <span>{severityLabel(mismatch.severity)}</span>
@@ -101,6 +131,42 @@
                     <div class="finding-action">
                         <small>Recommended action</small>
                         <p>{findingRecommendedAction(mismatch)}</p>
+                    </div>
+                {/if}
+                <div class="finding-checklist">
+                    <div>
+                        <small>Action status</small>
+                        <strong>{action.status}</strong>
+                    </div>
+                    <div class="finding-checklist-actions">
+                        <button
+                            type="button"
+                            on:click={() =>
+                                onSetFindingAction(
+                                    id,
+                                    nextFindingActionStatus(action.status),
+                                )}
+                        >
+                            Mark {nextFindingActionStatus(action.status)}
+                        </button>
+                        <button
+                            type="button"
+                            on:click={() => onCopyFinding(findingShareText(mismatch, action))}
+                        >
+                            Copy
+                        </button>
+                    </div>
+                </div>
+                {#if mismatch.evidence?.length}
+                    <div class="finding-evidence">
+                        <small>Evidence links</small>
+                        {#each mismatch.evidence as evidence}
+                            {#if evidenceIsURL(evidence)}
+                                <a href={evidence} target="_blank" rel="noreferrer">{evidence}</a>
+                            {:else}
+                                <code>{evidence}</code>
+                            {/if}
+                        {/each}
                     </div>
                 {/if}
             </article>
@@ -190,7 +256,9 @@
     }
 
     .finding-copy,
-    .finding-action {
+    .finding-action,
+    .finding-checklist,
+    .finding-evidence {
         margin-top: 10px;
     }
 
@@ -208,12 +276,70 @@
         border-left: 2px solid #d7d2c8;
     }
 
-    .finding-action small {
+    .finding-action small,
+    .finding-checklist small,
+    .finding-evidence small {
         display: block;
         margin-bottom: 2px;
         font-weight: 700;
         letter-spacing: 0.03em;
         text-transform: uppercase;
+    }
+
+    .finding-checklist {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid rgba(215, 210, 200, 0.72);
+        padding-top: 10px;
+    }
+
+    .finding-checklist strong {
+        color: #2d6a4f;
+        text-transform: uppercase;
+    }
+
+    .finding-checklist-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px 12px;
+    }
+
+    .finding-checklist button {
+        border: 0;
+        border-bottom: 1px solid #bdb7a8;
+        border-radius: 0;
+        background: transparent;
+        color: #1c1b18;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 0;
+    }
+
+    .finding-checklist button:hover {
+        border-bottom-color: #1c1b18;
+    }
+
+    .finding-evidence {
+        display: grid;
+        gap: 6px;
+        border-top: 1px solid rgba(215, 210, 200, 0.72);
+        padding-top: 10px;
+    }
+
+    .finding-evidence a,
+    .finding-evidence code {
+        max-width: 100%;
+        border-bottom: 1px solid #d7d2c8;
+        color: #28261f;
+        overflow-wrap: anywhere;
+        text-decoration: none;
+        font: inherit;
+        font-size: 12px;
     }
 
     .findings-view strong,

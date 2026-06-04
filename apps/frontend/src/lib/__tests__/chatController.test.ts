@@ -91,6 +91,11 @@ describe("detectResponseLanguage", () => {
     expect(detectResponseLanguage("BKGDEV-8096 帳票項目のマッピング確認.xlsx Jira Slack")).toBe("ja");
     expect(detectResponseLanguage("GitHub 最近有什么变化")).toBe("zh");
   });
+
+  it("keeps English for English questions that include short CJK source terms", () => {
+    expect(detectResponseLanguage("what about kkg payment 決済GW linkedFlag")).toBe("en");
+    expect(detectResponseLanguage("why does BKGDEV-8236 mention 決済GW")).toBe("en");
+  });
 });
 
 describe("buildChatLoadingText", () => {

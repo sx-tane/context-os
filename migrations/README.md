@@ -11,7 +11,7 @@ and applied automatically on startup by `storage/db.Open()`.
 | File | Purpose |
 |------|---------|
 | `0001_enable_pgvector.sql` | Enables the `vector` extension for local Postgres instances. |
-| `0002_workspace_schema.sql` | Core persistence layer: workspaces, ingest_events, entities, relationships, mismatches, connector_syncs, audit_log. |
+| `0002_workspace_schema.sql` | Core persistence layer: workspaces, ingest_events, entities, relationships, mismatches, workspace_ui_state, connector_syncs, audit_log. |
 
 ## Schema overview (0002)
 
@@ -20,6 +20,7 @@ and applied automatically on startup by `storage/db.Open()`.
 - **entities** — identity-resolved entities per workspace; confidence is updated on re-ingestion.
 - **relationships** — typed edges between entities; confidence is merged upward on re-ingestion.
 - **mismatches** — reasoning findings per workspace with evidence and trace_id.
+- **workspace_ui_state** — durable JSON state per `(workspace_id, state_key)` for local frontend workflows such as analysis baskets and finding action checklists.
 - **connector_syncs** — replay cursor and last-sync timestamp per `(workspace_id, connector, source_uri)`.
 - **audit_log** — immutable append-only event log per workspace.
 

@@ -95,6 +95,8 @@ func Routes(sqlDB *sql.DB) []Route {
 			Route{Pattern: "/workspace/source", Handler: http.HandlerFunc(handlers.workspace.Source), CORS: true},
 			Route{Pattern: "/workspace/reset", Handler: http.HandlerFunc(handlers.workspace.Reset), CORS: true},
 			Route{Pattern: "/workspace/status", Handler: http.HandlerFunc(handlers.workspace.Status), CORS: true},
+			Route{Pattern: "/workspace/analysis-basket", Handler: http.HandlerFunc(handlers.workspace.AnalysisBasket), CORS: true},
+			Route{Pattern: "/workspace/finding-actions", Handler: http.HandlerFunc(handlers.workspace.FindingActions), CORS: true},
 		)
 	}
 	if handlers.presentation != nil {
@@ -159,6 +161,7 @@ func newHandlers(sqlDB *sql.DB) handlers {
 	mismatchStore := store.NewMismatchStore(sqlDB)
 	entityStore := store.NewEntityStore(sqlDB)
 	auditStore := store.NewAuditStore(sqlDB)
+	uiStateStore := store.NewWorkspaceUIStateStore(sqlDB)
 
 	embCache := aiworker.NewEmbeddingCache("storage/embeddings")
 	aiClient := aiworker.New(aiworker.WithEmbeddingCache(embCache))
@@ -178,6 +181,7 @@ func newHandlers(sqlDB *sql.DB) handlers {
 
 	return handlers{
 		workspace: handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore).
+			WithUIStateRepository(uiStateStore).
 			WithAuditRepository(auditStore).
 			WithLocalArtifactDirs("storage/parsed", "storage/snapshots").
 			WithCodexChatSessionDir("storage/codex-chat-sessions"),

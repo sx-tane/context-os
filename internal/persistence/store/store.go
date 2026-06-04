@@ -16,6 +16,16 @@ import (
 	"github.com/lib/pq"
 )
 
+var workspaceScopedMemoryTables = []string{
+	"audit_log",
+	"workspace_ui_state",
+	"connector_syncs",
+	"mismatches",
+	"relationships",
+	"entities",
+	"ingest_events",
+}
+
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
 // WorkspaceStore is the PostgreSQL-backed WorkspaceRepository.
@@ -108,14 +118,7 @@ func (s *WorkspaceStore) DeleteByPath(ctx context.Context, path string) error {
 		return fmt.Errorf("store: find workspace by path for delete: %w", err)
 	}
 
-	for _, table := range []string{
-		"audit_log",
-		"connector_syncs",
-		"mismatches",
-		"relationships",
-		"entities",
-		"ingest_events",
-	} {
+	for _, table := range workspaceScopedMemoryTables {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE workspace_id = $1", table), workspaceID); err != nil {
 			return fmt.Errorf("store: delete %s for workspace: %w", table, err)
 		}
@@ -128,6 +131,53 @@ func (s *WorkspaceStore) DeleteByPath(ctx context.Context, path string) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("store: commit delete workspace by path: %w", err)
+	}
+	return nil
+}
+
+// ─── Workspace UI State ─────────────────────────────────────────────────────
+
+// WorkspaceUIStateStore is the PostgreSQL-backed WorkspaceUIStateRepository.
+type WorkspaceUIStateStore struct {
+	db *sql.DB
+}
+
+// NewWorkspaceUIStateStore returns a WorkspaceUIStateStore backed by the provided connection pool.
+func NewWorkspaceUIStateStore(db *sql.DB) *WorkspaceUIStateStore {
+	return &WorkspaceUIStateStore{db: db}
+}
+
+// Get returns a workspace UI state document by key.
+func (s *WorkspaceUIStateStore) Get(ctx context.Context, workspaceID, stateKey string) (*repository.WorkspaceUIState, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT workspace_id, state_key, payload_json, updated_at
+		FROM workspace_ui_state
+		WHERE workspace_id = $1 AND state_key = $2
+	`, workspaceID, stateKey)
+	var state repository.WorkspaceUIState
+	if err := row.Scan(&state.WorkspaceID, &state.StateKey, &state.PayloadJSON, &state.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("store: get workspace UI state: %w", err)
+	}
+	return &state, nil
+}
+
+// Put creates or replaces a workspace UI state document by key.
+func (s *WorkspaceUIStateStore) Put(ctx context.Context, state repository.WorkspaceUIState) error {
+	if len(state.PayloadJSON) == 0 {
+		state.PayloadJSON = []byte("{}")
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO workspace_ui_state (workspace_id, state_key, payload_json, updated_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (workspace_id, state_key) DO UPDATE SET
+			payload_json = EXCLUDED.payload_json,
+			updated_at   = EXCLUDED.updated_at
+	`, state.WorkspaceID, state.StateKey, state.PayloadJSON)
+	if err != nil {
+		return fmt.Errorf("store: put workspace UI state: %w", err)
 	}
 	return nil
 }

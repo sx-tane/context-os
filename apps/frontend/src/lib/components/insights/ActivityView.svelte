@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Artifact } from "$lib/types";
+  import type { EvidenceBasketItem } from "$lib/workflow/types";
   import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
   import SafeMarkdownBlock from "$lib/components/ui/SafeMarkdownBlock.svelte";
   import {
@@ -18,9 +19,19 @@
     previewText,
     type ActivityTimeFilter,
   } from "$lib/findings/viewModel";
+  import {
+    activityEvidenceType,
+    askChatPromptForEvidence,
+    basketItemFromArtifact,
+    filterActivityArtifacts,
+    type ActivityFilterState,
+  } from "$lib/workflow/viewModel";
 
   export let recentArtifacts: Artifact[] = [];
+  export let basketItems: EvidenceBasketItem[] = [];
   export let onCleanupNoisyLiveEvidence: () => Promise<string> = async () => "";
+  export let onAskEvidence: (prompt: string) => void | Promise<void> = () => {};
+  export let onPinEvidence: (item: EvidenceBasketItem) => void | Promise<void> = () => {};
 
   const filterStorageKey = "contextos_activity_time_filter";
   const filters: ActivityTimeFilter[] = ["24h", "7d", "30d", "all"];
@@ -30,9 +41,17 @@
   let cleanupConfirmOpen = false;
   let cleanupRunning = false;
   let cleanupMessage = "";
+  let activityFilters: ActivityFilterState = {};
 
-  $: visibleArtifacts = filterArtifactsByTime(recentArtifacts, timeFilter);
+  $: timeFilteredArtifacts = filterArtifactsByTime(recentArtifacts, timeFilter);
+  $: visibleArtifacts = filterActivityArtifacts(timeFilteredArtifacts, activityFilters);
   $: sourceGroups = groupArtifactsBySource(visibleArtifacts);
+  $: connectorOptions = uniqueValues(
+    recentArtifacts.map((artifact) => artifact.connector).filter(Boolean),
+  );
+  $: evidenceTypeOptions = uniqueValues(
+    recentArtifacts.map((artifact) => activityEvidenceType(artifact)).filter(Boolean),
+  );
 
   function loadSavedFilter() {
     if (typeof localStorage === "undefined") return;
@@ -46,6 +65,19 @@
     selectedArtifactID = "";
     if (typeof localStorage === "undefined") return;
     localStorage.setItem(filterStorageKey, timeFilter);
+  }
+
+  function updateActivityFilter(key: keyof ActivityFilterState, value: string) {
+    activityFilters = {
+      ...activityFilters,
+      [key]: value,
+    };
+    selectedArtifactID = "";
+  }
+
+  function clearActivityFilters() {
+    activityFilters = {};
+    selectedArtifactID = "";
   }
 
   function toggleArtifact(artifact: Artifact) {
@@ -62,6 +94,19 @@
     if (normalized === "sharepoint" || normalized === "onedrive") return "source-sharepoint";
     if (normalized === "filesystem") return "source-filesystem";
     return "source-default";
+  }
+
+  function artifactBasketItem(artifact: Artifact) {
+    return basketItemFromArtifact(artifact);
+  }
+
+  function basketHas(item: EvidenceBasketItem | null) {
+    return Boolean(item && basketItems.some((existing) => existing.id === item.id));
+  }
+
+  function uniqueValues(values: string[]) {
+    return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
   }
 
   async function confirmCleanup() {
@@ -112,6 +157,56 @@
     </button>
   </div>
 
+  <div class="activity-filters" aria-label="Activity filters">
+    <label>
+      <span>Connector</span>
+      <select
+        aria-label="Filter activity by connector"
+        value={activityFilters.connector ?? ""}
+        on:change={(event) =>
+          updateActivityFilter("connector", (event.currentTarget as HTMLSelectElement).value)}
+      >
+        <option value="">All connectors</option>
+        {#each connectorOptions as connector}
+          <option value={connector}>{connector}</option>
+        {/each}
+      </select>
+    </label>
+    <label>
+      <span>Evidence Type</span>
+      <select
+        aria-label="Filter activity by evidence type"
+        value={activityFilters.evidenceType ?? ""}
+        on:change={(event) =>
+          updateActivityFilter("evidenceType", (event.currentTarget as HTMLSelectElement).value)}
+      >
+        <option value="">All types</option>
+        {#each evidenceTypeOptions as evidenceType}
+          <option value={evidenceType}>{evidenceType}</option>
+        {/each}
+      </select>
+    </label>
+    <label>
+      <span>Source URI</span>
+      <input
+        value={activityFilters.sourceURI ?? ""}
+        placeholder="Filter source URI"
+        on:input={(event) =>
+          updateActivityFilter("sourceURI", (event.currentTarget as HTMLInputElement).value)}
+      />
+    </label>
+    <label>
+      <span>Keyword</span>
+      <input
+        value={activityFilters.keyword ?? ""}
+        placeholder="Search activity"
+        on:input={(event) =>
+          updateActivityFilter("keyword", (event.currentTarget as HTMLInputElement).value)}
+      />
+    </label>
+    <button type="button" on:click={clearActivityFilters}>Clear Filters</button>
+  </div>
+
   {#if cleanupConfirmOpen}
     <ConfirmModal
       eyebrow="CLEAN ACTIVITY"
@@ -150,6 +245,7 @@
           {@const selected = selectedArtifactID === artifact.id}
           {@const link = artifactLink(artifact)}
           {@const summary = activityEventSummary(artifact)}
+          {@const basketItem = artifactBasketItem(artifact)}
           <article
             class:selected
             class={connectorClass(artifact.connector)}
@@ -176,6 +272,30 @@
 
             {#if selected}
               <div class="activity-detail">
+                {#if basketItem}
+                  <div class="detail-actions">
+                    <button
+                      type="button"
+                      on:click={() =>
+                        onAskEvidence(
+                          askChatPromptForEvidence(
+                            basketItem.connector,
+                            basketItem.uri,
+                            basketItem.label,
+                          ),
+                        )}
+                    >
+                      Ask about this
+                    </button>
+                    <button
+                      type="button"
+                      disabled={basketHas(basketItem)}
+                      on:click={() => onPinEvidence(basketItem)}
+                    >
+                      {basketHas(basketItem) ? "Pinned for analysis" : "Pin for analysis"}
+                    </button>
+                  </div>
+                {/if}
                 <div class="detail-copy">
                   <strong>Event summary</strong>
                   <SafeMarkdownBlock
@@ -243,7 +363,8 @@
 
 <style>
   button,
-  select {
+  select,
+  input {
     font: inherit;
   }
 
@@ -297,6 +418,66 @@
     color: #1c1b18;
     padding: 5px 0;
     font-weight: 700;
+  }
+
+  .activity-filters {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(160px, 1fr) minmax(160px, 1fr) auto;
+    gap: 10px;
+    border-bottom: 1px solid #d7d2c8;
+    padding: 10px 16px;
+  }
+
+  .activity-filters label,
+  .activity-filters span {
+    display: block;
+    min-width: 0;
+  }
+
+  .activity-filters span {
+    color: #8a8678;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+
+  .activity-filters select,
+  .activity-filters input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    border-bottom: 1px solid #bdb7a8;
+    border-radius: 0;
+    background: transparent;
+    color: #1c1b18;
+    padding: 5px 0;
+    outline: none;
+  }
+
+  .activity-filters select:focus,
+  .activity-filters input:focus {
+    border-bottom-color: #1c1b18;
+  }
+
+  .activity-filters button,
+  .detail-actions button {
+    border: 0;
+    border-bottom: 1px solid #bdb7a8;
+    border-radius: 0;
+    background: transparent;
+    color: #1c1b18;
+    cursor: pointer;
+    font-weight: 700;
+    padding: 6px 0;
+  }
+
+  .activity-filters button:hover,
+  .detail-actions button:hover:not(:disabled) {
+    border-bottom-color: #1c1b18;
+  }
+
+  .detail-actions button:disabled {
+    cursor: default;
+    opacity: 0.45;
   }
 
   .cleanup-action {
@@ -454,6 +635,14 @@
     padding: 16px;
   }
 
+  .detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    border-bottom: 1px solid #e4ded2;
+    padding-bottom: 10px;
+  }
+
   .detail-copy {
     display: grid;
     gap: 7px;
@@ -525,6 +714,10 @@
     .activity-toolbar {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .activity-filters {
+      grid-template-columns: 1fr;
     }
 
     .activity-detail dl > div {

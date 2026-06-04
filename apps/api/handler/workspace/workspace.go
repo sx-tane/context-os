@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"context-os/apps/api/request"
 	"context-os/apps/api/response"
 	"context-os/domain/repository"
 	internalchat "context-os/internal/runtime/chat"
@@ -25,6 +27,7 @@ type Handler struct {
 	entities    repository.EntityRepository
 	mismatches  repository.MismatchRepository
 	connSync    repository.SyncRepository
+	uiState     repository.WorkspaceUIStateRepository
 	audit       repository.AuditRepository
 	parsedDir   string
 	snapshotDir string
@@ -51,6 +54,12 @@ func NewHandler(
 // WithAuditRepository attaches audit row counts to workspace status.
 func (h *Handler) WithAuditRepository(audit repository.AuditRepository) *Handler {
 	h.audit = audit
+	return h
+}
+
+// WithUIStateRepository attaches durable frontend workflow state handlers.
+func (h *Handler) WithUIStateRepository(uiState repository.WorkspaceUIStateRepository) *Handler {
+	h.uiState = uiState
 	return h
 }
 
@@ -113,7 +122,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Tags         workspace
 // @Accept       json
 // @Produce      json
-// @Param        body  body      upsertRequest  true  "Workspace upsert request"
+// @Param        body  body      request.WorkspaceUpsert  true  "Workspace upsert request"
 // @Success      200   {object}  repository.Workspace
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
@@ -125,7 +134,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req upsertRequest
+	var req request.WorkspaceUpsert
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
@@ -164,7 +173,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 // @Tags         workspace
 // @Accept       json
 // @Produce      json
-// @Param        body  body      upsertRequest  true  "Workspace reset request"
+// @Param        body  body      request.WorkspaceUpsert  true  "Workspace reset request"
 // @Success      200   {object}  response.WorkspaceStatus
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
@@ -176,7 +185,7 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req upsertRequest
+	var req request.WorkspaceUpsert
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
@@ -337,6 +346,241 @@ func workspaceIDForCleanup(path string, workspace *repository.Workspace) string 
 	return id
 }
 
+func readBoundedBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, error) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(body) {
+		return nil, fmt.Errorf("invalid JSON")
+	}
+	return body, nil
+}
+
+func workspaceRefFromQuery(r *http.Request) string {
+	if value := strings.TrimSpace(r.URL.Query().Get("workspace_id")); value != "" {
+		return value
+	}
+	return strings.TrimSpace(r.URL.Query().Get("workspace_path"))
+}
+
+func (h *Handler) resolveWorkspace(ctx context.Context, ref string) (*repository.Workspace, error) {
+	workspace, err := h.workspaces.GetByPath(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	if workspace != nil {
+		return workspace, nil
+	}
+	workspaces, err := h.workspaces.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, workspace := range workspaces {
+		if workspace.ID == ref || workspace.Path == ref {
+			found := workspace
+			return &found, nil
+		}
+	}
+	return nil, os.ErrNotExist
+}
+
+func writeResolveWorkspaceError(w http.ResponseWriter, err error) {
+	if os.IsNotExist(err) {
+		response.WriteError(w, http.StatusNotFound, "not_found", "workspace not found")
+		return
+	}
+	response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+}
+
+func validateAnalysisBasketPayload(body []byte) (string, []byte, error) {
+	var payload request.AnalysisBasket
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", nil, err
+	}
+	workspaceID := strings.TrimSpace(payload.WorkspaceID)
+	if workspaceID == "" {
+		return "", nil, fmt.Errorf("workspace_id is required")
+	}
+	if payload.Items == nil {
+		payload.Items = []request.AnalysisBasketItem{}
+	}
+	for index, item := range payload.Items {
+		if strings.TrimSpace(item.ID) == "" {
+			return "", nil, fmt.Errorf("items[%d].id is required", index)
+		}
+		if strings.TrimSpace(item.Connector) == "" {
+			return "", nil, fmt.Errorf("items[%d].connector is required", index)
+		}
+		if strings.TrimSpace(item.URI) == "" {
+			return "", nil, fmt.Errorf("items[%d].uri is required", index)
+		}
+		if strings.TrimSpace(item.Label) == "" {
+			return "", nil, fmt.Errorf("items[%d].label is required", index)
+		}
+		if strings.TrimSpace(item.Origin) == "" {
+			return "", nil, fmt.Errorf("items[%d].origin is required", index)
+		}
+	}
+	normalized, err := json.Marshal(payload)
+	if err != nil {
+		return "", nil, err
+	}
+	return workspaceID, normalized, nil
+}
+
+func validateFindingActionsPayload(body []byte) (string, []byte, error) {
+	var payload request.FindingActions
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", nil, err
+	}
+	workspaceID := strings.TrimSpace(payload.WorkspaceID)
+	if workspaceID == "" {
+		return "", nil, fmt.Errorf("workspace_id is required")
+	}
+	if payload.Actions == nil {
+		payload.Actions = []request.FindingActionItem{}
+	}
+	for index, item := range payload.Actions {
+		if strings.TrimSpace(item.FindingID) == "" {
+			return "", nil, fmt.Errorf("actions[%d].findingId is required", index)
+		}
+		switch strings.TrimSpace(item.Status) {
+		case "open", "checking", "done":
+		default:
+			return "", nil, fmt.Errorf("actions[%d].status must be open, checking, or done", index)
+		}
+	}
+	normalized, err := json.Marshal(payload)
+	if err != nil {
+		return "", nil, err
+	}
+	return workspaceID, normalized, nil
+}
+
+func emptyAnalysisBasket(workspaceID string) any {
+	return request.AnalysisBasket{WorkspaceID: workspaceID, Items: []request.AnalysisBasketItem{}}
+}
+
+func emptyFindingActions(workspaceID string) any {
+	return request.FindingActions{WorkspaceID: workspaceID, Actions: []request.FindingActionItem{}}
+}
+
+// AnalysisBasket handles GET/PUT /workspace/analysis-basket.
+//
+// @Summary      Read or save the workspace analysis basket
+// @Description  Persists selected analysis evidence for one workspace.
+// @Tags         workspace
+// @Accept       json
+// @Produce      json
+// @Param        workspace_id  query     string  false  "Workspace path or ID"
+// @Param        body          body      request.AnalysisBasket  false  "Analysis basket payload"
+// @Success      200           {object}  request.AnalysisBasket
+// @Failure      400           {object}  map[string]string
+// @Failure      404           {object}  map[string]string
+// @Failure      405           {object}  map[string]string
+// @Failure      503           {object}  map[string]string
+// @Failure      500           {object}  map[string]string
+// @Router       /workspace/analysis-basket [get]
+// @Router       /workspace/analysis-basket [put]
+func (h *Handler) AnalysisBasket(w http.ResponseWriter, r *http.Request) {
+	h.workspaceUIState(w, r, "analysis_basket", emptyAnalysisBasket, validateAnalysisBasketPayload)
+}
+
+// FindingActions handles GET/PUT /workspace/finding-actions.
+//
+// @Summary      Read or save the workspace finding action checklist
+// @Description  Persists finding action statuses for one workspace.
+// @Tags         workspace
+// @Accept       json
+// @Produce      json
+// @Param        workspace_id  query     string  false  "Workspace path or ID"
+// @Param        body          body      request.FindingActions  false  "Finding actions payload"
+// @Success      200           {object}  request.FindingActions
+// @Failure      400           {object}  map[string]string
+// @Failure      404           {object}  map[string]string
+// @Failure      405           {object}  map[string]string
+// @Failure      503           {object}  map[string]string
+// @Failure      500           {object}  map[string]string
+// @Router       /workspace/finding-actions [get]
+// @Router       /workspace/finding-actions [put]
+func (h *Handler) FindingActions(w http.ResponseWriter, r *http.Request) {
+	h.workspaceUIState(w, r, "finding_actions", emptyFindingActions, validateFindingActionsPayload)
+}
+
+func (h *Handler) workspaceUIState(
+	w http.ResponseWriter,
+	r *http.Request,
+	stateKey string,
+	empty func(string) any,
+	validate func([]byte) (string, []byte, error),
+) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPut {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET or PUT required")
+		return
+	}
+	if h.uiState == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "state_unavailable", "workspace UI state is unavailable for this store")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), workspaceRequestTimeout)
+	defer cancel()
+
+	if r.Method == http.MethodGet {
+		workspaceRef := workspaceRefFromQuery(r)
+		if workspaceRef == "" {
+			response.WriteError(w, http.StatusBadRequest, "invalid_request", "workspace_id query parameter is required")
+			return
+		}
+		workspace, err := h.resolveWorkspace(ctx, workspaceRef)
+		if err != nil {
+			writeResolveWorkspaceError(w, err)
+			return
+		}
+		state, err := h.uiState.Get(ctx, workspace.ID, stateKey)
+		if err != nil {
+			response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+			return
+		}
+		if state == nil {
+			response.WriteJSON(w, http.StatusOK, empty(workspace.Path))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(state.PayloadJSON)
+		return
+	}
+
+	body, err := readBoundedBody(w, r, 1<<20)
+	if err != nil {
+		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	workspaceRef, payloadJSON, err := validate(body)
+	if err != nil {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	workspace, err := h.resolveWorkspace(ctx, workspaceRef)
+	if err != nil {
+		writeResolveWorkspaceError(w, err)
+		return
+	}
+	if err := h.uiState.Put(ctx, repository.WorkspaceUIState{
+		WorkspaceID: workspace.ID,
+		StateKey:    stateKey,
+		PayloadJSON: payloadJSON,
+	}); err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(payloadJSON)
+}
+
 // Status handles GET /workspace/status?path=<path>.
 //
 // @Summary      Workspace status
@@ -434,7 +678,7 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 // @Tags         workspace
 // @Accept       json
 // @Produce      json
-// @Param        body  body      sourceRequest  true  "Connected source registration request"
+// @Param        body  body      request.WorkspaceSource  true  "Connected source registration request"
 // @Success      200   {object}  response.WorkspaceSync
 // @Failure      400   {object}  map[string]string
 // @Failure      405   {object}  map[string]string
@@ -451,7 +695,7 @@ func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req sourceRequest
+	var req request.WorkspaceSource
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		response.WriteError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
@@ -494,26 +738,6 @@ func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.WriteJSON(w, http.StatusOK, response.NewWorkspaceSync(sync))
-}
-
-// upsertRequest is the decoded body for POST /workspace.
-type upsertRequest struct {
-	// Path is the absolute local folder path for the workspace.
-	Path string `json:"path"`
-	// Name is the optional human-readable workspace name.
-	Name string `json:"name"`
-}
-
-// sourceRequest is the decoded body for POST /workspace/source.
-type sourceRequest struct {
-	// WorkspaceID is a workspace path or ID.
-	WorkspaceID string `json:"workspace_id"`
-	// Connector is the connector name, e.g. github or jira.
-	Connector string `json:"connector"`
-	// SourceURI is the external source URI to save.
-	SourceURI string `json:"source_uri"`
-	// URI is accepted for frontend compatibility with existing source forms.
-	URI string `json:"uri,omitempty"`
 }
 
 func (h *Handler) resolveOrCreateWorkspace(ctx context.Context, ref string) (repository.Workspace, error) {

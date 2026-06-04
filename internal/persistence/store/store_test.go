@@ -95,3 +95,15 @@ func TestCompactStrings(t *testing.T) {
 		t.Errorf("compactStrings(%v) = %#v, want %#v", in, got, want)
 	}
 }
+
+// TestWorkspaceScopedMemoryTablesIncludesUIState verifies workspace reset/delete clears durable UI state rows.
+func TestWorkspaceScopedMemoryTablesIncludesUIState(t *testing.T) {
+	t.Parallel()
+
+	for _, table := range workspaceScopedMemoryTables {
+		if table == "workspace_ui_state" {
+			return
+		}
+	}
+	t.Fatal("workspaceScopedMemoryTables missing workspace_ui_state")
+}

@@ -60,6 +60,7 @@
         background: #ebe8e0;
         box-shadow: 0 18px 48px rgba(28, 27, 24, 0.22);
         padding: 20px;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
     }
 
     .confirm-modal > span {
@@ -110,6 +111,7 @@
         background-position: 100% 0;
         background-size: 200% 100%;
         color: #1c1b18;
+        font-family: inherit;
         font-weight: 700;
         transition:
             background-position 0.18s ease,

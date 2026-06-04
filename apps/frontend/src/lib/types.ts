@@ -251,6 +251,38 @@ export interface WorkspaceList {
   count: number;
 }
 
+export type EvidenceOrigin = "chat" | "activity" | "source" | "manual";
+
+export interface EvidenceBasketItem {
+  id: string;
+  connector: ConnectorKind;
+  uri: string;
+  label: string;
+  origin: EvidenceOrigin | string;
+  artifactId?: string;
+  messageId?: string;
+  addedAt: string;
+}
+
+export interface AnalysisBasketPayload {
+  workspace_id: string;
+  items: EvidenceBasketItem[];
+}
+
+export type FindingActionStatus = "open" | "checking" | "done";
+
+export interface FindingActionItem {
+  findingId: string;
+  status: FindingActionStatus;
+  note?: string;
+  updatedAt: string;
+}
+
+export interface FindingActionsPayload {
+  workspace_id: string;
+  actions: FindingActionItem[];
+}
+
 // ---- Local artifact / chat query types ----
 
 export interface Artifact {
@@ -307,24 +339,6 @@ export interface AnswerSection {
   timestamps?: string[];
   confidence?: number;
   status?: string;
-}
-
-export interface ChatQueryRequest {
-  workspace_id: string;
-  workspace_path?: string;
-  message: string;
-  connector?: string;
-  connectors?: string[];
-  source_uri?: string;
-  timezone?: string;
-  local_date?: string;
-  response_language?: string;
-  limit?: number;
-}
-
-export interface ChatSessionResetRequest {
-  workspace_id: string;
-  workspace_path?: string;
 }
 
 export interface ChatQueryResult {
