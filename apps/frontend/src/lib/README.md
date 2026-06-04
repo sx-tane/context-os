@@ -10,6 +10,7 @@ Shared TypeScript modules for the ContextOS frontend. Routes and components impo
 | [`workspace/`](workspace/) | Svelte stores for workspace project state, local chat history, selected connectors, protected demo/default workspaces, and backend workspace registration. |
 | [`chat/`](chat/) | Chat command orchestration plus protected demo workspace seed data. |
 | [`findings/`](findings/) | Findings analysis runner, per-source result aggregation, and display-only findings/chat formatting helpers. |
+| [`insights/`](insights/) | Shared Graph/Findings/Activity freshness and source-eligibility status helpers for the homepage insight surface. |
 | [`graph/`](graph/) | Display-only graph view model helpers for focused entity maps and relationship details. |
 | [`ingest/`](ingest/) | Connector ingest and Codex plugin re-auth orchestration helpers. |
 | [`connectors/`](connectors/) | Static source connector configuration consumed by connector routes. |
@@ -17,7 +18,7 @@ Shared TypeScript modules for the ContextOS frontend. Routes and components impo
 | [`generated/`](generated/) | Auto-generated OpenAPI TypeScript declarations. Do not edit by hand. |
 | [`types.ts`](types.ts) | Canonical frontend type definitions and generated API type re-exports. |
 
-Keep route and component files thin: put network behavior in `api/`, workspace persistence in `workspace/`, chat flow in `chat/`, analysis/report shaping in `findings/`, graph display shaping in `graph/`, and connector lifecycle orchestration in `ingest/`.
+Keep route and component files thin: put network behavior in `api/`, workspace persistence in `workspace/`, chat flow in `chat/`, analysis/report shaping in `findings/`, insight freshness in `insights/`, graph display shaping in `graph/`, and connector lifecycle orchestration in `ingest/`.
 
 ---
 
@@ -100,6 +101,14 @@ Merges per-source `postFindings` responses into one `FindingsResult` for the hom
 ### findings/viewModel.ts
 
 Keeps presentation-only formatting outside the route and insight components: severity labels, finding text fallbacks, message line parsing, artifact origin/provider labels, artifact source link extraction, Activity event summaries, preview truncation, and timestamp formatting. Chat line parsing preserves Japanese and other non-English content; inline Markdown rendering is handled by the chat components without raw HTML injection. Connector labels such as Jira, Slack, GitHub, Google Drive, Notion, SharePoint, and Filesystem are promoted into subtle section rows so long answers read as grouped report sections without changing the chat layout.
+
+---
+
+## insights/
+
+### insights/status.ts
+
+Derives one shared freshness/status model for the homepage insight surface. `buildInsightStatus` counts concrete analysis-ready sources separately from chat-only live connector scopes, finds the latest Activity evidence timestamp, summarizes Graph node/link availability, and classifies manual Findings as `not_run`, `current`, `stale`, or `no_concrete_sources`. The route uses the same derived labels for the insight status strip and footer, while `FindingsView` uses the state-specific copy to explain why Findings may differ from fresher Activity or Graph evidence.
 
 ---
 

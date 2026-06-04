@@ -51,8 +51,8 @@
         demoPlanningTourResult,
         demoWorkspaceStatus,
     } from "$lib/chat/demoWorkspace";
-    import { buildGraphLinks } from "$lib/graph/viewModel";
     import { runAnalysis } from "$lib/findings/analysisRunner";
+    import { buildInsightStatus } from "$lib/insights/status";
     import {
         assistantMsg,
         classifyChatCommand,
@@ -94,11 +94,6 @@
     $: readySources = $project.connectors.filter(
         (source) => source.status === "ready",
     );
-    $: graphEntities = graphData?.entities ?? [];
-    $: graphRelationships = graphData?.relationships ?? [];
-    $: graphLinks = buildGraphLinks(graphEntities, graphRelationships);
-    $: mismatchCount =
-        workspaceStatus?.mismatch_count ?? lastFindings?.mismatch_count ?? 0;
     $: statusLine = buildStatusLine(
         apiStatus,
         workerStatus,
@@ -116,6 +111,13 @@
         activityArtifacts.length > 0
             ? activityArtifacts
             : (lastChatResult?.artifacts ?? []);
+    $: insightStatus = buildInsightStatus({
+        readySources,
+        recentArtifacts,
+        graphData,
+        lastFindings,
+        lastAnalysisAt,
+    });
     $: protectedWorkspace =
         workspacePath === DEFAULT_WORKSPACE_PATH ||
         workspacePath === DEMO_WORKSPACE_PATH;
@@ -702,6 +704,33 @@
                     >
                 </div>
 
+                <div
+                    class="insight-status-strip"
+                    aria-label="Insight freshness status"
+                >
+                    <div class="insight-status-item">
+                        <span>Activity</span>
+                        <strong>{insightStatus.activityLabel}</strong>
+                        <small>{insightStatus.activityFreshnessLabel}</small>
+                    </div>
+                    <div class="insight-status-item">
+                        <span>Graph</span>
+                        <strong>{insightStatus.graphLabel}</strong>
+                        <small>{insightStatus.graphRefreshLabel}</small>
+                    </div>
+                    <div
+                        class="insight-status-item"
+                        class:attention={insightStatus.findingsState ===
+                            "stale" ||
+                            insightStatus.findingsState ===
+                                "no_concrete_sources"}
+                    >
+                        <span>Findings</span>
+                        <strong>{insightStatus.findingsLabel}</strong>
+                        <small>{insightStatus.findingsDetailLabel}</small>
+                    </div>
+                </div>
+
                 {#if activeInsightTab === "findings"}
                     <FindingsView
                         {lastFindings}
@@ -710,6 +739,7 @@
                         readySourceCount={readySources.length}
                         {workspaceStatus}
                         {hasSources}
+                        {insightStatus}
                     />
                 {:else if activeInsightTab === "graph"}
                     <GraphView
@@ -733,10 +763,7 @@
     <footer class="console-strip">
         <strong>{topContext}</strong>
         <span>{statusLine}</span>
-        <span
-            >{graphData?.entity_count ?? graphData?.count ?? 0} graph nodes | {graphData?.relationship_count ??
-                graphLinks.length} links | {mismatchCount} findings</span
-        >
+        <span>{insightStatus.footerLabel}</span>
     </footer>
 
     <button
@@ -1110,7 +1137,7 @@
         min-height: 420px;
         flex: 1 0 420px;
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
         overflow: hidden;
         background: transparent;
     }
@@ -1144,6 +1171,58 @@
     .insight-head nav button.active {
         background-position: 0 0;
         color: #f8f6ef;
+    }
+
+    .insight-status-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        border-bottom: 1px solid #d7d2c8;
+        padding: 9px 0 10px;
+    }
+
+    .insight-status-item {
+        min-width: 0;
+        border-left: 1px solid rgba(215, 210, 200, 0.85);
+        padding-left: 10px;
+    }
+
+    .insight-status-item:first-child {
+        border-left: 0;
+        padding-left: 0;
+    }
+
+    .insight-status-item span,
+    .insight-status-item strong,
+    .insight-status-item small {
+        display: block;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .insight-status-item span {
+        color: #8a8678;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .insight-status-item strong {
+        margin-top: 3px;
+        color: #1c1b18;
+        font-size: 12px;
+        line-height: 1.25;
+    }
+
+    .insight-status-item small {
+        margin-top: 3px;
+        color: #5f5b50;
+        font-size: 11px;
+        line-height: 1.35;
+    }
+
+    .insight-status-item.attention strong {
+        color: #b5523a;
     }
 
     .console-strip {
