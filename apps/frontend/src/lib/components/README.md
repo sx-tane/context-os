@@ -8,7 +8,7 @@ components/
 ├── connectors/   Connector-specific forms and cards (GitHub, Jira, Slack, generic SourceConnector)
 ├── feedback/     Status display, log streams, error messages, and ingest results
 ├── insights/     Homepage insight tab views and source/workspace summary
-└── ui/           Primitive building blocks (Button, ConfirmModal, FormField, ModeToggle)
+└── ui/           Primitive building blocks (Button, ConfirmModal, FormField, InlineText, ModeToggle, SafeMarkdownBlock)
 ```
 
 ## Sub-directory overview
@@ -19,7 +19,7 @@ components/
 | [`connectors/`](connectors/README.md) | `ConnectorCard`, `SourceConnector`, `GitHubConnector`, `JiraConnector`, `SlackConnector`, `CodexBadge` |
 | [`feedback/`](feedback/README.md)     | `StatusSection`, `LogPanel`, `IngestResult`, `ErrorPanel`                                              |
 | [`insights/`](insights/README.md)     | `FindingsView`, `GraphView`, `ActivityView`, `WorkspaceSummary`                                        |
-| [`ui/`](ui/README.md)                 | `Button`, `ConfirmModal`, `FormField`, `ModeToggle`                                                    |
+| [`ui/`](ui/README.md)                 | `Button`, `ConfirmModal`, `FormField`, `InlineText`, `ModeToggle`, `SafeMarkdownBlock`                 |
 
 ## Data flow
 
