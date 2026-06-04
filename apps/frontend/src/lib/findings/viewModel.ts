@@ -8,6 +8,13 @@ export type ActivitySourceGroup = {
   artifacts: Artifact[];
 };
 
+export type ActivityEventSummary = {
+  preview: string;
+  facts: string[];
+  links: string[];
+  rawText: string;
+};
+
 export type MessageLine = {
   kind: "heading" | "section" | "number" | "bullet" | "body" | "blank";
   text: string;
@@ -165,6 +172,16 @@ export function artifactLink(artifact: Artifact) {
   return "";
 }
 
+export function activityEventSummary(artifact: Artifact): ActivityEventSummary {
+  const rawText = artifact.body || artifact.preview || "";
+  const preview = previewText(artifact.preview || artifact.title || rawText, 280);
+  const links = uniqueValues(extractLinks(rawText || artifact.preview || artifact.source_uri));
+  const facts = extractFactLines(rawText)
+    .filter((line) => !links.some((link) => line.includes(link)))
+    .slice(0, 6);
+  return { preview, facts, links, rawText };
+}
+
 export function activityFilterLabel(filter: ActivityTimeFilter) {
   switch (filter) {
     case "24h":
@@ -255,4 +272,25 @@ function latestArtifactTime(artifacts: Artifact[]) {
     const time = Date.parse(artifact.ingested_at);
     return Number.isFinite(time) && time > latest ? time : latest;
   }, 0);
+}
+
+function extractLinks(value: string) {
+  return [...value.matchAll(/https?:\/\/[^\s)]+/g)].map((match) =>
+    match[0].replace(/[.,;]+$/, ""),
+  );
+}
+
+function extractFactLines(value: string) {
+  return value
+    .split("\n")
+    .map((line) => cleanMarkdown(line).trim())
+    .map((line) => line.replace(/^[-*]\s+/, "").trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !/^source:|^message link:|^channel link:/i.test(line))
+    .filter((line) => line.length <= 220)
+    .slice(0, 12);
+}
+
+function uniqueValues(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
 }

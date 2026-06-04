@@ -45,6 +45,7 @@ type Query struct {
 	SourceURI     string
 	Timezone      string
 	LocalDate     string
+	ResponseLanguage string
 	Limit         int
 	Progress      func(string)
 }
@@ -86,6 +87,7 @@ type LiveQuery struct {
 	Connector string
 	SourceURI string
 	Message   string
+	ResponseLanguage string
 	Progress  func(string)
 }
 
@@ -180,6 +182,7 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 			Connector: result.Connector,
 			SourceURI: result.SourceURI,
 			Message:   message,
+			ResponseLanguage: query.ResponseLanguage,
 			Progress:  query.Progress,
 		})
 		if err == nil && strings.TrimSpace(answer) != "" {

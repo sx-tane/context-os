@@ -142,6 +142,80 @@ describe("runAnalysis", () => {
     expect(state.replacements.at(-1)?.text).toContain("Choose a specific repo");
     expect(state.replacements.at(-1)?.text).toContain("https://github.com/owner/repo");
   });
+
+  it("skips broad connector scopes before calling findings analysis", async () => {
+    const state = makeState();
+
+    await runAnalysis({
+      workspacePath: "workspace",
+      readySources: [
+        { connector: "github", uri: "github", status: "ready" },
+        { connector: "slack", uri: "slack", status: "ready" },
+      ],
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastFindings: state.setLastFindings,
+      setLastAnalysisAt: state.setLastAnalysisAt,
+      openSources: state.openSources,
+      refreshWorkspace: state.refreshWorkspace,
+      timeoutMs: 1000,
+    });
+
+    expect(mockPostFindings).not.toHaveBeenCalled();
+    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("Analysis skipped");
+    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("Skipped chat-only scopes");
+    expect(state.refreshWorkspace).toHaveBeenCalled();
+  });
+
+  it("runs concrete sources and reports skipped broad connector scopes separately", async () => {
+    const originalWindow = (global as unknown as { window?: unknown }).window;
+    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
+      setTimeout,
+      clearTimeout,
+    };
+    mockPostFindings.mockResolvedValueOnce({
+      ok: true,
+      body: {
+        connector: "github",
+        uri: "owner/repo",
+        mismatch_count: 0,
+        event_count: 2,
+        entity_count: 3,
+        mismatches: [],
+      },
+    });
+    const state = makeState();
+
+    try {
+      await runAnalysis({
+        workspacePath: "workspace",
+        readySources: [
+          { connector: "github", uri: "github", status: "ready" },
+          { connector: "github", uri: "owner/repo", status: "ready" },
+        ],
+        addMessage: state.addMessage,
+        replaceMessage: state.replaceMessage,
+        setBusy: state.setBusy,
+        setLastFindings: state.setLastFindings,
+        setLastAnalysisAt: state.setLastAnalysisAt,
+        openSources: state.openSources,
+        refreshWorkspace: state.refreshWorkspace,
+        timeoutMs: 1000,
+      });
+    } finally {
+      (global as unknown as { window?: unknown }).window = originalWindow;
+    }
+
+    expect(mockPostFindings).toHaveBeenCalledTimes(1);
+    expect(mockPostFindings.mock.calls[0][0]).toMatchObject({
+      connector: "github",
+      uri: "owner/repo",
+    });
+    expect(state.replacements.at(-1)?.text).toContain("1/1 concrete source");
+    expect(state.replacements.at(-1)?.text).toContain("Skipped chat-only scopes");
+    expect(state.replacements.at(-1)?.text).not.toContain("Failed:");
+  });
 });
 
 function makeState(): AnalysisRunnerTestState {

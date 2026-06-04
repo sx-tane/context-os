@@ -13,6 +13,10 @@ import type {
 } from "$lib/types";
 import { demoFindings } from "$lib/chat/demoWorkspace";
 import { assistantMsg, loadingMsg, progressMsg } from "$lib/chat/controller";
+import {
+  analysisSourceCountLabel,
+  splitAnalysisSources,
+} from "$lib/sources/analysisEligibility";
 
 export type AnalysisSourceStatus = {
   connector: ConnectorKind;
@@ -63,15 +67,32 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     return;
   }
 
+  const { eligible, skipped } = splitAnalysisSources(options.readySources);
+  if (eligible.length === 0) {
+    const summary = buildFindingsRunSummary({
+      sourceCount: options.readySources.length,
+      analysisSourceCount: 0,
+      completedCount: 0,
+      result: null,
+      failures: [],
+      skipped,
+    });
+    options.setLastFindings(null);
+    options.setLastAnalysisAt(new Date().toISOString());
+    options.addMessage(assistantMsg(summary));
+    await options.refreshWorkspace();
+    return;
+  }
+
   const load = loadingMsg(
-    `Running local analysis for ${options.readySources.length} selected source${options.readySources.length === 1 ? "" : "s"}...`,
+    `Running local analysis for ${analysisSourceCountLabel(eligible.length)}...`,
   );
   options.addMessage(load);
   options.setBusy(true);
   try {
     const completed: FindingsResult[] = [];
     const failures: FindingsFailure[] = [];
-    const sourceStatuses: AnalysisSourceStatus[] = options.readySources.map(
+    const sourceStatuses: AnalysisSourceStatus[] = eligible.map(
       (source) => ({
         connector: source.connector,
         uri: source.uri,
@@ -82,12 +103,12 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     const updateProgress = () => {
       options.replaceMessage(
         load.id,
-        progressMsg(load.id, buildAnalysisProgress(sourceStatuses)),
+        progressMsg(load.id, buildAnalysisProgress(sourceStatuses, skipped.length)),
       );
     };
     updateProgress();
 
-    for (const [index, source] of options.readySources.entries()) {
+    for (const [index, source] of eligible.entries()) {
       sourceStatuses[index] = {
         ...sourceStatuses[index],
         status: "running",
@@ -158,9 +179,11 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     options.setLastAnalysisAt(new Date().toISOString());
     const summary = buildFindingsRunSummary({
       sourceCount: options.readySources.length,
+      analysisSourceCount: eligible.length,
       completedCount: completed.length,
       result: aggregated,
       failures,
+      skipped,
     });
 
     options.replaceMessage(
@@ -181,7 +204,10 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
   }
 }
 
-export function buildAnalysisProgress(statuses: AnalysisSourceStatus[]) {
+export function buildAnalysisProgress(
+  statuses: AnalysisSourceStatus[],
+  skippedCount = 0,
+) {
   const done = statuses.filter((source) => source.status === "done").length;
   const failed = statuses.filter((source) => source.status === "failed").length;
   const lines = statuses.map((source, index) => {
@@ -193,7 +219,10 @@ export function buildAnalysisProgress(statuses: AnalysisSourceStatus[]) {
     }
     return `${label} - failed${source.detail ? `: ${source.detail}` : ""}`;
   });
-  return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed.\n${lines.join("\n")}`;
+  const skipText = skippedCount
+    ? `, ${skippedCount} chat-only scope${skippedCount === 1 ? "" : "s"} skipped`
+    : "";
+  return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed${skipText}.\n${lines.join("\n")}`;
 }
 
 export function analysisProvider(connector: ConnectorKind) {

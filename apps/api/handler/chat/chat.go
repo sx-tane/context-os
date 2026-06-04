@@ -71,6 +71,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		SourceURI:     req.SourceURI,
 		Timezone:      req.Timezone,
 		LocalDate:     req.LocalDate,
+		ResponseLanguage: req.ResponseLanguage,
 		Limit:         req.Limit,
 	})
 	if err != nil {
@@ -135,6 +136,7 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 			SourceURI:     req.SourceURI,
 			Timezone:      req.Timezone,
 			LocalDate:     req.LocalDate,
+			ResponseLanguage: req.ResponseLanguage,
 			Limit:         req.Limit,
 			Progress:      sw.Log,
 		})

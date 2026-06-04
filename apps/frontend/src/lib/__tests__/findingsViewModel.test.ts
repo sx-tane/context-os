@@ -1,5 +1,6 @@
 import {
   activityFilterLabel,
+  activityEventSummary,
   artifactLink,
   artifactDetailRows,
   artifactOrigin,
@@ -150,6 +151,28 @@ describe("activity display helpers", () => {
     expect(groups[0].label).toBe("context-os/app");
     expect(groups[0].artifacts).toHaveLength(2);
     expect(artifactDetailRows(artifacts[0])).toContainEqual(["metadata.object_id", "1"]);
+  });
+
+  it("extracts readable event summaries, facts, and links", () => {
+    const artifact = makeArtifact({
+      title: "Slack decision",
+      body: [
+        "- Alice confirmed the API field mapping",
+        "- Bob asked QA to wait for the backend deploy",
+        "Message link: https://slack.example.test/archives/C1/p1",
+      ].join("\n"),
+      preview: "",
+    });
+
+    const summary = activityEventSummary(artifact);
+
+    expect(summary.preview).toBe("Slack decision");
+    expect(summary.facts).toEqual([
+      "Alice confirmed the API field mapping",
+      "Bob asked QA to wait for the backend deploy",
+    ]);
+    expect(summary.links).toEqual(["https://slack.example.test/archives/C1/p1"]);
+    expect(summary.rawText).toContain("Alice confirmed");
   });
 });
 

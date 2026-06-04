@@ -24,6 +24,10 @@
         markKnowledgeInstalled,
         project,
     } from "$lib/workspace/projectStore";
+    import {
+        isBroadConnectorScope,
+        sourceSetupURI,
+    } from "$lib/sources/analysisEligibility";
 
     export let codexLoggedIn: boolean;
     export let codexPlugins: CodexPlugin[];
@@ -141,10 +145,6 @@
         logs[r.connector] = "";
         statuses[r.connector] = "idle";
         enabled[r.connector] = false;
-    }
-
-    function defaultLiveSourceURI(connector: ConnectorKind) {
-        return connector;
     }
 
     function isInteractiveTarget(target: EventTarget | null) {
@@ -267,15 +267,13 @@
         const targets: { connector: ConnectorKind; uri: string }[] = [];
         for (const r of REQUIRED) {
             const manualURI = uriState[r.connector].trim();
-            if (!enabledState[r.connector] && !manualURI) continue;
-            if (r.connector === "filesystem" && manualURI) {
-                targets.push({ connector: r.connector, uri: manualURI });
-            } else if (enabledState[r.connector] && r.connector !== "filesystem") {
-                targets.push({
-                    connector: r.connector,
-                    uri: defaultLiveSourceURI(r.connector),
-                });
-            }
+            const uri = sourceSetupURI(
+                r.connector,
+                manualURI,
+                enabledState[r.connector],
+            );
+            if (!uri) continue;
+            targets.push({ connector: r.connector, uri });
         }
         const seen = new Set<string>();
         return targets.filter((target) => {
@@ -467,6 +465,7 @@
 
     function sourceStatusLabel(source: ConnectorKnowledge) {
         if (source.status === "ready") {
+            if (isBroadConnectorScope(source)) return "chat only";
             if (source.eventCount === undefined) return "connected";
             return `${source.eventCount ?? 0} event${source.eventCount === 1 ? "" : "s"}`;
         }
@@ -477,7 +476,8 @@
 
     function sourceDisplayLabel(source: ConnectorKnowledge) {
         if (source.connector === "filesystem") return source.uri;
-        return "Live connector";
+        if (isBroadConnectorScope(source)) return "Live connector";
+        return source.uri;
     }
 
     function saveButtonLabel(count: number) {

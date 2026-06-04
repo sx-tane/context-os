@@ -9,6 +9,7 @@ import {
   buildChatLoadingText,
   buildStreamSummary,
   classifyChatCommand,
+  detectResponseLanguage,
   isNearBottom,
   localDateString,
   localDBStatusLine,
@@ -74,6 +75,15 @@ describe("chat message factories", () => {
 describe("localDateString", () => {
   it("formats dates as local yyyy-mm-dd", () => {
     expect(localDateString(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+});
+
+describe("detectResponseLanguage", () => {
+  it("detects Chinese, Japanese, Korean, and English prompts", () => {
+    expect(detectResponseLanguage("请用中文回答")).toBe("zh");
+    expect(detectResponseLanguage("帳票項目のマッピング確認")).toBe("ja");
+    expect(detectResponseLanguage("최근 메시지 확인")).toBe("ko");
+    expect(detectResponseLanguage("check recent activity")).toBe("en");
   });
 });
 
@@ -163,7 +173,11 @@ describe("runChatQuery", () => {
     });
 
     expect(mockStreamChatQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ workspace_id: "workspace", message: "status" }),
+      expect.objectContaining({
+        workspace_id: "workspace",
+        message: "status",
+        response_language: "en",
+      }),
       expect.objectContaining({
         onAnswer: expect.any(Function),
         onLog: expect.any(Function),
@@ -186,6 +200,33 @@ describe("runChatQuery", () => {
     expect(state.replacements.at(-1)?.stream?.summary).toBe("Summary");
     expect(state.replacements.at(-1)?.card).toBeDefined();
     expect(state.refreshWorkspace).toHaveBeenCalled();
+  });
+
+  it("sends the detected response language with streamed and fallback queries", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({ answer: "中文回答", summary: "中文回答" }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "请用中文回答 GitHub 最近有什么变化",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      response_language: "zh",
+    });
+    expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({
+      response_language: "zh",
+    });
   });
 
   it("streams Codex progress and uses the streamed result", async () => {

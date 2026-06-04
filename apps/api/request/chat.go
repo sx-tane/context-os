@@ -16,6 +16,8 @@ type ChatQuery struct {
 	Timezone string `json:"timezone" example:"Asia/Kuala_Lumpur"`
 	// LocalDate is the user's current local date in YYYY-MM-DD form.
 	LocalDate string `json:"local_date" example:"2026-06-01"`
+	// ResponseLanguage is a short language hint used to match the user's input language.
+	ResponseLanguage string `json:"response_language" example:"zh"`
 	// Limit caps returned artifacts.
 	Limit int `json:"limit" example:"20"`
 }

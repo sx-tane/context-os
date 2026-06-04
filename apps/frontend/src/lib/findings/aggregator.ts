@@ -6,6 +6,12 @@ export interface FindingsFailure {
   message: string;
 }
 
+export interface FindingsSkipped {
+  connector: ConnectorKind;
+  uri: string;
+  reason: string;
+}
+
 export interface FindingsRunSummary {
   result: FindingsResult | null;
   message: string;
@@ -50,22 +56,41 @@ export function aggregateFindings(results: FindingsResult[]): FindingsResult | n
 
 export function buildFindingsRunSummary(params: {
   sourceCount: number;
+  analysisSourceCount?: number;
   completedCount: number;
   result: FindingsResult | null;
   failures: FindingsFailure[];
+  skipped?: FindingsSkipped[];
 }): string {
   const mismatchCount = params.result?.mismatch_count ?? 0;
   const eventCount = params.result?.event_count ?? 0;
   const entityCount = params.result?.entity_count ?? 0;
-  const sourceWord = params.sourceCount === 1 ? "source" : "sources";
+  const analysisSourceCount = params.analysisSourceCount ?? params.sourceCount;
+  const sourceWord = analysisSourceCount === 1 ? "source" : "sources";
   const findingWord = mismatchCount === 1 ? "finding" : "findings";
-  const base =
-    mismatchCount > 0
-      ? `Analysis complete for ${params.completedCount}/${params.sourceCount} selected ${sourceWord}. Found ${mismatchCount} ${findingWord}.`
-      : `Analysis ran, no mismatch signals detected across ${params.completedCount}/${params.sourceCount} selected ${sourceWord}. Sources: ${params.completedCount}. Events: ${eventCount}. Entities: ${entityCount}.`;
+  let base = "";
+  if (analysisSourceCount === 0) {
+    base = `Analysis skipped: 0 concrete sources were ready. Findings need a repo, project, issue, channel, thread, document, folder, or file.`;
+  } else if (mismatchCount > 0) {
+    base = `Analysis complete for ${params.completedCount}/${analysisSourceCount} concrete ${sourceWord}. Found ${mismatchCount} ${findingWord}.`;
+  } else {
+    base = `Analysis ran, no mismatch signals detected across ${params.completedCount}/${analysisSourceCount} concrete ${sourceWord}. Sources: ${params.completedCount}. Events: ${eventCount}. Entities: ${entityCount}.`;
+  }
 
-  if (params.failures.length === 0) return base;
-  return `${base}\n\nFailed:\n- ${params.failures
-    .map((failure) => `${failure.connector}:${failure.uri} - ${failure.message}`)
-    .join("\n- ")}`;
+  const sections = [base];
+  if (params.skipped?.length) {
+    sections.push(
+      `Skipped chat-only scopes:\n- ${params.skipped
+        .map((source) => `${source.connector}:${source.uri} - ${source.reason}`)
+        .join("\n- ")}`,
+    );
+  }
+  if (params.failures.length) {
+    sections.push(
+      `Failed:\n- ${params.failures
+        .map((failure) => `${failure.connector}:${failure.uri} - ${failure.message}`)
+        .join("\n- ")}`,
+    );
+  }
+  return sections.join("\n\n");
 }

@@ -3,6 +3,7 @@
   import ConfirmModal from "$lib/components/ui/ConfirmModal.svelte";
   import {
     activityFilterLabel,
+    activityEventSummary,
     artifactDetailRows,
     artifactLink,
     artifactOrigin,
@@ -130,6 +131,7 @@
         {#each group.artifacts as artifact (artifact.id)}
           {@const selected = selectedArtifactID === artifact.id}
           {@const link = artifactLink(artifact)}
+          {@const summary = activityEventSummary(artifact)}
           <article class:selected>
             <button
               type="button"
@@ -144,12 +146,7 @@
                 >
               </div>
               <strong>{artifact.title || artifact.source_uri}</strong>
-              <p>
-                {previewText(
-                  artifact.preview || artifact.body,
-                  selected ? 720 : 220,
-                )}
-              </p>
+              <p>{selected ? previewText(summary.preview, 720) : previewText(summary.preview, 220)}</p>
               <div class="activity-foot">
                 <small>{artifact.event_type}</small>
                 <small>{formatTime(artifact.ingested_at)}</small>
@@ -159,12 +156,25 @@
             {#if selected}
               <div class="activity-detail">
                 <div class="detail-copy">
-                  <strong>What this event is related to</strong>
-                  <p>
-                    {previewText(artifact.body || artifact.preview, 1200) ||
-                      "No body text was saved for this event."}
-                  </p>
+                  <strong>Event summary</strong>
+                  <p>{summary.preview || "No summary text was saved for this event."}</p>
                 </div>
+                {#if summary.facts.length}
+                  <div class="detail-list">
+                    <strong>Key lines</strong>
+                    {#each summary.facts as fact}
+                      <p>{fact}</p>
+                    {/each}
+                  </div>
+                {/if}
+                {#if summary.links.length}
+                  <div class="detail-list">
+                    <strong>Links</strong>
+                    {#each summary.links as item}
+                      <a href={item} target="_blank" rel="noreferrer">{item}</a>
+                    {/each}
+                  </div>
+                {/if}
                 <dl>
                   {#each artifactDetailRows(artifact) as [label, value]}
                     <div>
@@ -176,6 +186,12 @@
                 {#if link}
                   <a href={link} target="_blank" rel="noreferrer">Open source</a
                   >
+                {/if}
+                {#if summary.rawText}
+                  <details class="raw-event">
+                    <summary>Raw event text</summary>
+                    <p>{previewText(summary.rawText, 1800)}</p>
+                  </details>
                 {/if}
               </div>
             {/if}
@@ -319,7 +335,7 @@
     border: 0;
     background: transparent;
     color: inherit;
-    padding: 12px 0;
+    padding: 12px 16px;
     text-align: left;
     cursor: pointer;
   }
@@ -373,7 +389,19 @@
     display: grid;
     gap: 12px;
     border-top: 1px solid #d7d2c8;
-    padding: 12px 0 14px;
+    padding: 14px 16px 16px;
+  }
+
+  .detail-list {
+    display: grid;
+    gap: 6px;
+    border-top: 1px solid #e4ded2;
+    padding-top: 10px;
+  }
+
+  .detail-list p {
+    margin: 0;
+    overflow-wrap: anywhere;
   }
 
   .activity-detail dl {
@@ -405,15 +433,26 @@
 
   .activity-detail a {
     width: max-content;
+    max-width: 100%;
     border-bottom: 1px solid #bdb7a8;
     color: #1c1b18;
     font-size: 12px;
     font-weight: 700;
     text-decoration: none;
+    overflow-wrap: anywhere;
   }
 
   .activity-detail a:hover {
     border-bottom-color: #1c1b18;
+  }
+
+  .raw-event {
+    border-top: 1px solid #e4ded2;
+    padding-top: 10px;
+  }
+
+  .raw-event p {
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 640px) {

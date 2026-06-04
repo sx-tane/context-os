@@ -51,7 +51,7 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	}
 	defer func() { _ = os.Remove(outPath) }()
 
-	prompt := livePrompt(plugin, sourceURI, query.Message)
+	prompt := livePrompt(plugin, sourceURI, query.Message, query.ResponseLanguage)
 	cmd := exec.Command(a.command, "exec", "--sandbox", "read-only", "--ephemeral", "--color", "never", "-o", outPath, prompt) //nolint:gosec
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -184,14 +184,17 @@ func livePlugin(connector string) string {
 	}
 }
 
-func livePrompt(plugin, sourceURI, message string) string {
+func livePrompt(plugin, sourceURI, message, responseLanguage string) string {
+	language := normalizeResponseLanguage(responseLanguage)
 	return fmt.Sprintf(`Use the %s Codex plugin to answer this user question from the live connected account.
 
 Source: %s
 Question: %s
+Response language: %s
 
 Rules:
 - Do not modify any external data.
+- Answer in the response language above. If the user mixed languages, prefer the language used for the actual question.
 - Prefer exact source facts over general repository or workspace summaries.
 - For GitHub only, if the plugin cannot answer and gh CLI is already authenticated, read-only gh commands are acceptable fallback context.
 - Include source names, timestamps, authors, commit hashes, issue or PR numbers, and links when available.
@@ -201,5 +204,20 @@ Rules:
 - In each section, include factual summary, exact provenance fields available, and why that source is relevant to the question.
 - If multiple activities or thread messages are relevant, keep them as separate items instead of merging them into one vague event.
 - If the plugin cannot access the source or the requested fact is unavailable, say that clearly.
-- Keep answer concise and readable for chat.`, plugin, sourceURI, strings.TrimSpace(message))
+- Keep answer concise and readable for chat.`, plugin, sourceURI, strings.TrimSpace(message), language)
+}
+
+func normalizeResponseLanguage(language string) string {
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "zh", "zh-cn", "cn":
+		return "Simplified Chinese"
+	case "zh-tw", "zh-hant":
+		return "Traditional Chinese"
+	case "ja", "jp":
+		return "Japanese"
+	case "ko", "kr":
+		return "Korean"
+	default:
+		return "English"
+	}
 }

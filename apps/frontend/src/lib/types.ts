@@ -316,6 +316,7 @@ export interface ChatQueryRequest {
   source_uri?: string;
   timezone?: string;
   local_date?: string;
+  response_language?: string;
   limit?: number;
 }
 

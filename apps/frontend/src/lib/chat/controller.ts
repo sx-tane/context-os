@@ -179,6 +179,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
       ...(route.sourceURI ? { source_uri: route.sourceURI } : {}),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       local_date: localDateString(new Date()),
+      response_language: detectResponseLanguage(options.text),
       limit: 20,
     };
     let streamedResult: ChatQueryResult | null = null;
@@ -338,6 +339,13 @@ export function localDateString(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+export function detectResponseLanguage(text: string) {
+  if (/[\uac00-\ud7af]/.test(text)) return "ko";
+  if (/[\u3040-\u30ff]/.test(text)) return "ja";
+  if (/[\u4e00-\u9fff]/.test(text)) return "zh";
+  return "en";
 }
 
 function initialStreamState(text: string): ChatStreamState {
