@@ -25,6 +25,8 @@ flowchart LR
 
 ```go
 func Normalize(event events.Event) types.NormalizedDocument
+func NewDocumentWriter(dir string) *DocumentWriter
+func (w *DocumentWriter) Write(workspaceID string, doc types.NormalizedDocument) error
 ```
 
 ## Behavior
@@ -64,6 +66,8 @@ doc := normalization.Normalize(event)
 
 - Metadata is copied so later stages cannot mutate the original event map by accident.
 - Keep normalization deterministic except for the processing timestamp.
+- `writer.go` owns `DocumentWriter`, which persists normalized documents as JSON under `<dir>/<workspaceID>/<docID>.json` for parsed side-output inspection and replay/debug workflows.
+- An empty writer directory or empty document ID is a no-op, so callers can make parsed output optional without branching.
 - Future normalizers should keep raw source provenance rather than replacing it with derived labels.
 
 ## Production Requirements

@@ -137,6 +137,11 @@ does not re-run while files are edited. Refresh the page manually after frontend
 changes. The watcher also ignores generated API types, SvelteKit cache files,
 coverage output, and API docs to keep idle CPU lower in WSL.
 
+`viteLogger.ts` centralizes optional Vite proxy logging. Set
+`CONTEXTOS_PROXY_LOGS=1` to print API/worker proxy request, response, completion,
+and error lines with `X-ContextOS-Request-ID` correlation in the frontend dev
+server terminal.
+
 Frontend-specific types that have no swagger equivalent (`IngestRequest`, `SourceConnectorConfig`, `ConnectorKind`, etc.) remain in `src/lib/types.ts` and are maintained manually.
 
 ## Testing

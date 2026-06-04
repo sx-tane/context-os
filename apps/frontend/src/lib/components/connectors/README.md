@@ -76,6 +76,18 @@ Connector form for Slack channel/message ingestion via the Codex Slack plugin or
 
 ---
 
+### GoogleDriveConnector
+
+Connector form for Google Drive folder ingestion via the Google Drive Codex plugin or local OAuth/service-account/access-token configuration.
+
+- **Codex mode**: streams SSE through `runConnectorIngest`; plugin must be installed and enabled.
+- **Token / env mode**: calls `/googledrive/status` to show OAuth, service-account, access-token, and default-folder readiness before direct ingest.
+- Both modes include the active workspace path in the ingest request.
+- URI formats: `https://drive.google.com/drive/folders/<id>` or `googledrive://folder/<id>`.
+- Renders `IngestResult` with the selected provider so Codex logs and multi-file Drive folder events display correctly.
+
+---
+
 ### NotionConnector
 
 Connector form for Notion page/database ingestion via the Notion Codex plugin or a direct integration token.
