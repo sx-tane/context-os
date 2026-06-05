@@ -353,6 +353,70 @@ describe("runChatQuery", () => {
     expect(mockPostChatQuery.mock.calls[0][0].source_uri).toBeUndefined();
   });
 
+  it("uses connector fanout for allowed source connector wording even when GitHub is mentioned", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({ connector: "multiple", provider: "codex" }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "scan receipt from my allowed source connector and I think GitHub has the API",
+      workspacePath: "workspace",
+      readySources: [
+        { connector: "jira", uri: "jira", status: "ready" },
+        { connector: "github", uri: "github", status: "ready" },
+        { connector: "slack", uri: "slack", status: "ready" },
+        { connector: "googledrive", uri: "googledrive", status: "ready" },
+      ],
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["jira", "github", "slack", "googledrive"],
+    });
+    expect(mockStreamChatQuery.mock.calls[0][0].connector).toBeUndefined();
+    expect(mockStreamChatQuery.mock.calls[0][0].source_uri).toBeUndefined();
+    expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["jira", "github", "slack", "googledrive"],
+    });
+  });
+
+  it("uses connector fanout for common source connector typo wording", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({ connector: "multiple", provider: "codex" }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "scan receipt from my source conenctor",
+      workspacePath: "workspace",
+      readySources: [
+        { connector: "jira", uri: "jira", status: "ready" },
+        { connector: "github", uri: "github", status: "ready" },
+      ],
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["jira", "github"],
+    });
+    expect(mockStreamChatQuery.mock.calls[0][0].connector).toBeUndefined();
+  });
+
   it("streams Codex progress and uses the streamed result", async () => {
     mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
       handlers.onLog("› Live Codex: GitHub plugin lookup");

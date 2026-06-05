@@ -10,7 +10,7 @@ This package is an **internal implementation detail** of `apps/api`. It must not
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `ingest.go`      | Synchronous ingest pipeline: `RunSourceIngest`, `WriteSourceIngest`, `SourceIngestInput`, `NewIngestResponse`, metadata helpers |
 | `persistent_ingest.go` | Persistent ingest service: workspace preparation, pipeline store wiring, sync status updates, audit logging, and persisted ingest responses |
-| `sse.go`         | SSE infrastructure: `SSEWriter` (with `Write`/`Log`/`Event`/`Error`/`Result`), `SSEHeaders`, `StreamWithHeartbeat`, `StreamCodexIngest[T]` |
+| `sse.go`         | SSE infrastructure: `SSEWriter` (with `Write`/`Log`/`Event`/`Error`/`Result`/`Close`), `SSEHeaders`, `StreamWithHeartbeat`, `StreamCodexIngest[T]` |
 | `ingest_test.go` | Unit tests for preview truncation, metadata helpers, capability conversion                                                      |
 | `sse_test.go`    | Unit tests for SSE writer concurrency safety and error/result framing                                                           |
 
@@ -23,7 +23,7 @@ This package is an **internal implementation detail** of `apps/api`. It must not
 - **`WithPersistentRelationshipAssistant`** — optional persistent-ingest wiring for validated relationship assistance; nil keeps deterministic relationships.
 - **`WithPersistentGraphVerifier`** — optional live-evidence follow-up that verifies cross-source graph relationships from Local DB snapshots.
 - **`NewIngestResponse`** — builds a `response.Ingest` from connector name, capabilities, and ingested events.
-- **`SSEWriter`** — concurrency-safe SSE event writer; `Write` emits `event: log` per line while `Event`/`Error`/`Result` serialise status and terminal events through the same mutex so heartbeat and log writes never interleave.
+- **`SSEWriter`** — concurrency-safe SSE event writer; `Write` emits `event: log` per line while `Event`/`Error`/`Result` serialise status and terminal events through the same mutex so heartbeat and log writes never interleave. `Close` marks a stream terminal so late progress from worker goroutines after client disconnect is ignored instead of writing to a dead response.
 - **`StreamCodexIngest[T]`** — generic SSE handler for any Codex-backed domain request type.
 
 ## Persistence Notes

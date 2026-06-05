@@ -6,7 +6,7 @@ describe("composerHeight", () => {
   });
 
   it("clamps short content to the minimum composer height", () => {
-    expect(composerHeight(10, 400, 42)).toBe(42);
+    expect(composerHeight(10, 400, 34)).toBe(34);
   });
 
   it("clamps long content to the available composer height", () => {
@@ -14,6 +14,6 @@ describe("composerHeight", () => {
   });
 
   it("does not return less than the minimum when max is smaller than min", () => {
-    expect(composerHeight(900, 20, 42)).toBe(42);
+    expect(composerHeight(900, 20, 34)).toBe(34);
   });
 });

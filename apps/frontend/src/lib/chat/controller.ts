@@ -525,10 +525,12 @@ export function liveConnectorHint(
 
 function requestsAllSourceConnectors(text: string) {
   const lower = text.toLowerCase();
-  return /all\s+(source\s+)?connectors?/.test(lower) ||
+  return /all\s+(source\s+)?con(?:nec|en)c?tors?/.test(lower) ||
     /all\s+source/.test(lower) ||
     /check\s+all\s+source/.test(lower) ||
-    /every\s+(source\s+)?connectors?/.test(lower);
+    /every\s+(source\s+)?con(?:nec|en)c?tors?/.test(lower) ||
+    /\b(?:allow|allowed|connected|selected|enabled|available)\s+(?:source\s+)?con(?:nec|en)c?tors?\b/.test(lower) ||
+    /\b(?:my|workspace)\s+(?:source\s+)?con(?:nec|en)c?tors?\b/.test(lower);
 }
 
 function readyLiveConnectors(

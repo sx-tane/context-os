@@ -14,9 +14,12 @@ func TestLivePromptRequestsSourceSeparatedProvenance(t *testing.T) {
 	prompt := livePrompt("GitHub", "context-os/app#1", "what changed?", "zh")
 
 	for _, want := range []string{
-		"Structure the final answer by source",
-		"exact provenance fields",
-		"separate items",
+		"Start with the direct answer",
+		"Structure evidence by source",
+		"strongest provenance",
+		"Use only the GitHub Codex plugin",
+		"Return at most 5 answer_sections",
+		"include at most 3 facts",
 		"Response language: Simplified Chinese",
 		"Answer in the response language above",
 		"context-os/app#1",
@@ -25,6 +28,9 @@ func TestLivePromptRequestsSourceSeparatedProvenance(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("livePrompt() missing %q in %q", want, prompt)
 		}
+	}
+	if strings.Contains(prompt, "gh CLI") || strings.Contains(prompt, "read-only gh") {
+		t.Fatalf("livePrompt() = %q, want no gh fallback", prompt)
 	}
 }
 

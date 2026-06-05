@@ -245,7 +245,24 @@ func codexEventDetail(event map[string]any) string {
 		}
 	}
 	if item, _ := payload["item"].(map[string]any); item != nil {
-		if value := cleanProgressText(firstNonEmpty(stringField(item, "type"), stringField(item, "name"), stringField(item, "tool_name"))); value != "" {
+		if value := cleanProgressText(firstNonEmpty(
+			stringField(item, "tool_name"),
+			stringField(item, "name"),
+			stringField(item, "title"),
+			stringField(item, "command"),
+			stringField(item, "status"),
+			stringField(item, "type"),
+		)); value != "" {
+			return truncateProgressText(value)
+		}
+		if args, ok := item["arguments"].(map[string]any); ok {
+			if value := cleanProgressText(firstNonEmpty(stringField(args, "query"), stringField(args, "q"), stringField(args, "url"))); value != "" {
+				return truncateProgressText(value)
+			}
+		}
+	}
+	if delta, _ := payload["delta"].(map[string]any); delta != nil {
+		if value := cleanProgressText(firstNonEmpty(stringField(delta, "message"), stringField(delta, "text"), stringField(delta, "summary"))); value != "" {
 			return truncateProgressText(value)
 		}
 	}
@@ -536,16 +553,18 @@ Response language: %s
 Rules:
 - Do not modify any external data.
 - Answer in the response language above. If the user mixed languages, prefer the language used for the actual question.
+- Start with the direct answer to the user's question and the decision or next action when the evidence supports one.
 - Prefer exact source facts over general repository or workspace summaries.
-- For GitHub only, if the plugin cannot answer and gh CLI is already authenticated, read-only gh commands are acceptable fallback context.
-- Include source names, timestamps, authors, commit hashes, issue or PR numbers, and links when available.
-- Structure the final answer by source so each artifact, thread, issue, PR, or document stays separately traceable.
+- Use only the %s Codex plugin or context it returns. Do not use gh, git remotes, public web search, or other local/public fallbacks.
+- Include only the strongest provenance needed to support the answer: source names, links, issue or PR numbers, timestamps, authors, or commit hashes when they materially matter.
+- Structure evidence by source so each artifact, thread, issue, PR, or document stays traceable without creating a long inventory.
 - Return only JSON with this shape: {"answer":"short plain-text summary","answer_sections":[{"source_label":"human source name","connector":"github|jira|slack|googledrive|notion|sharepoint","source_uri":"exact source URI or key","summary":"short summary","facts":["fact"],"open_items":["open item"],"coding_notes":["coding note"],"links":["https://..."],"timestamps":["timestamp"],"confidence":0.0,"status":"optional status"}]}.
 - Use one answer_sections item per real source or artifact. Do not create sections from URL path fragments, enum values, generic terms, or prose tokens.
-- In each section, include factual summary, exact provenance fields available, and why that source is relevant to the question.
-- If multiple activities or thread messages are relevant, keep them as separate items instead of merging them into one vague event.
+- Return at most 5 answer_sections unless more are required to avoid a misleading answer.
+- In each section, include at most 3 facts and explain why that source changes or supports the answer.
+- If multiple activities or thread messages say the same thing, merge them into one concise section and keep the best links.
 - If the plugin cannot access the source or the requested fact is unavailable, say that clearly.
-- Keep answer concise and readable for chat.`, plugin, sourceURI, strings.TrimSpace(message), language)
+- Keep answer concise and readable for chat.`, plugin, sourceURI, strings.TrimSpace(message), language, plugin)
 }
 
 func normalizeResponseLanguage(language string) string {

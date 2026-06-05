@@ -2,8 +2,10 @@
     import { tick } from "svelte";
     import { composerHeight } from "$lib/chat/composer";
     import { isNearBottom, localDBStatusLine } from "$lib/chat/controller";
-    import type { AnswerSection, ChatMessage, ChatQueryResult } from "$lib/types";
+    import type { ChatMessage, ChatQueryResult } from "$lib/types";
     import type { EvidenceBasketItem } from "$lib/workflow/types";
+    import AnswerSections from "$lib/components/chat/AnswerSections.svelte";
+    import ChatStreamPanel from "$lib/components/chat/ChatStreamPanel.svelte";
     import SafeMarkdownBlock from "$lib/components/ui/SafeMarkdownBlock.svelte";
     import {
         artifactLink,
@@ -13,15 +15,10 @@
         findingRecommendedAction,
         findingSummary,
         formatTime,
-        markdownBulletList,
         reviewCandidateCount,
         severityLabel,
         topActionableFindings,
     } from "$lib/findings/viewModel";
-    import {
-        askChatPromptForEvidence,
-        basketItemFromAnswerSection,
-    } from "$lib/workflow/viewModel";
 
     export let messages: ChatMessage[] = [];
     export let hasSources = false;
@@ -41,7 +38,6 @@
     let stickToBottom = true;
     let expandedStreams: Record<string, boolean> = {};
     let lastMessageSignature = "";
-    const expandedStreamLineLimit = 80;
 
     $: messageSignature = messages
         .map((message) => [
@@ -76,12 +72,6 @@
         return parts.join(" · ");
     }
 
-    function streamStatusLabel(message: ChatMessage) {
-        if (message.stream?.status === "complete") return "Complete";
-        if (message.stream?.status === "error") return "Error";
-        return "Running";
-    }
-
     function streamExpanded(message: ChatMessage) {
         return expandedStreams[message.id] ?? message.stream?.expanded ?? false;
     }
@@ -91,16 +81,6 @@
             ...expandedStreams,
             [message.id]: !streamExpanded(message),
         };
-    }
-
-    function visibleStreamLines(message: ChatMessage) {
-        const lines = message.stream?.lines ?? [];
-        return lines.slice(-expandedStreamLineLimit);
-    }
-
-    function hiddenStreamLineCount(message: ChatMessage) {
-        const lines = message.stream?.lines ?? [];
-        return Math.max(0, lines.length - expandedStreamLineLimit);
     }
 
     function traceSummary(result: ChatQueryResult, message: ChatMessage) {
@@ -139,50 +119,6 @@
                     section.links?.length,
             ),
         ) ?? [];
-    }
-
-    function sectionLabel(section: AnswerSection) {
-        return section.source_label || section.source_uri || section.connector || "Source";
-    }
-
-    function sectionMeta(section: AnswerSection) {
-        return [section.connector, section.status, section.confidence ? `${Math.round(section.confidence * 100)}%` : ""]
-            .filter(Boolean)
-            .join(" · ");
-    }
-
-    function sectionLink(section: AnswerSection) {
-        const link = section.links?.find((item) => /^https?:\/\//i.test(item));
-        if (link) return link;
-        return /^https?:\/\//i.test(section.source_uri ?? "") ? section.source_uri ?? "" : "";
-    }
-
-    function sectionURLLinks(section: AnswerSection) {
-        return section.links?.filter((item) => /^https?:\/\//i.test(item)) ?? [];
-    }
-
-    function sectionTextLinks(section: AnswerSection) {
-        return section.links?.filter((item) => !/^https?:\/\//i.test(item)) ?? [];
-    }
-
-    function sectionBasketItem(section: AnswerSection, messageID: string) {
-        return basketItemFromAnswerSection(section, messageID);
-    }
-
-    function basketHas(item: EvidenceBasketItem | null) {
-        return Boolean(item && basketItems.some((existing) => existing.id === item.id));
-    }
-
-    function connectorClass(connector?: string) {
-        const normalized = (connector ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (normalized === "jira") return "source-jira";
-        if (normalized === "github") return "source-github";
-        if (normalized === "slack") return "source-slack";
-        if (normalized === "googledrive" || normalized === "google") return "source-googledrive";
-        if (normalized === "notion") return "source-notion";
-        if (normalized === "sharepoint" || normalized === "onedrive") return "source-sharepoint";
-        if (normalized === "filesystem") return "source-filesystem";
-        return "source-default";
     }
 
     function handleMessagesScroll() {
@@ -263,136 +199,21 @@
                         />
                     </div>
                     {#if message.stream}
-                        <section
-                            class="stream-panel"
-                            class:running={message.stream.status === "running"}
-                            class:error={message.stream.status === "error"}
-                            aria-label="Live stream progress"
-                        >
-                            <button
-                                type="button"
-                                class="stream-toggle"
-                                aria-expanded={streamExpanded(message)}
-                                on:click={() => toggleStream(message)}
-                            >
-                                <span>{streamStatusLabel(message)}</span>
-                                <strong>{streamExpanded(message) ? "Hide stream" : "Show stream"}</strong>
-                            </button>
-                            {#if !streamExpanded(message)}
-                                <p class="stream-latest">{message.stream.latestLine}</p>
-                                {#if message.stream.summary}
-                                    <p class="stream-summary">{message.stream.summary}</p>
-                                {/if}
-                            {:else}
-                                <div class="stream-lines">
-                                    {#if hiddenStreamLineCount(message) > 0}
-                                        <small>{hiddenStreamLineCount(message)} earlier stream lines hidden</small>
-                                    {/if}
-                                    {#each visibleStreamLines(message) as line, index (`${message.id}-${index}`)}
-                                        <p>{line}</p>
-                                    {/each}
-                                </div>
-                            {/if}
-                        </section>
+                        <ChatStreamPanel
+                            stream={message.stream}
+                            expanded={streamExpanded(message)}
+                            onToggle={() => toggleStream(message)}
+                        />
                     {/if}
                     {#if message.card?.kind === "query" && message.card.chatResult}
                         {#if answerSections(message.card.chatResult).length}
-                            <div class="answer-sections" aria-label="Structured source answer">
-                                {#each answerSections(message.card.chatResult) as section, index (`${message.id}-section-${index}`)}
-                                    {@const link = sectionLink(section)}
-                                    {@const basketItem = sectionBasketItem(section, message.id)}
-                                    <section class={`answer-section ${connectorClass(section.connector)}`}>
-                                        <div class="answer-section-head">
-                                            <div>
-                                                <strong class="source-title">{sectionLabel(section)}</strong>
-                                                {#if sectionMeta(section)}
-                                                    <span>{sectionMeta(section)}</span>
-                                                {/if}
-                                            </div>
-                                            <div class="answer-section-actions">
-                                                {#if basketItem}
-                                                    <button
-                                                        type="button"
-                                                        on:click={() =>
-                                                            onAskEvidence(
-                                                                askChatPromptForEvidence(
-                                                                    basketItem.connector,
-                                                                    basketItem.uri,
-                                                                    basketItem.label,
-                                                                ),
-                                                            )}
-                                                    >
-                                                        Ask
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={basketHas(basketItem)}
-                                                        on:click={() => onPinEvidence(basketItem)}
-                                                    >
-                                                        {basketHas(basketItem) ? "Pinned" : "Pin"}
-                                                    </button>
-                                                {/if}
-                                                {#if link}
-                                                    <a href={link} target="_blank" rel="noreferrer">Open</a>
-                                                {/if}
-                                            </div>
-                                        </div>
-                                        {#if section.summary}
-                                            <div class="answer-section-copy">
-                                                <SafeMarkdownBlock
-                                                    text={section.summary}
-                                                    variant="source"
-                                                />
-                                            </div>
-                                        {/if}
-                                        {#if section.facts?.length}
-                                            <div class="answer-section-list">
-                                                <strong>Facts</strong>
-                                                <SafeMarkdownBlock
-                                                    text={markdownBulletList(section.facts)}
-                                                    variant="source"
-                                                />
-                                            </div>
-                                        {/if}
-                                        {#if section.open_items?.length}
-                                            <div class="answer-section-list">
-                                                <strong>Open items</strong>
-                                                <SafeMarkdownBlock
-                                                    text={markdownBulletList(section.open_items)}
-                                                    variant="source"
-                                                />
-                                            </div>
-                                        {/if}
-                                        {#if section.coding_notes?.length}
-                                            <div class="answer-section-list">
-                                                <strong>Coding notes</strong>
-                                                <SafeMarkdownBlock
-                                                    text={markdownBulletList(section.coding_notes)}
-                                                    variant="source"
-                                                />
-                                            </div>
-                                        {/if}
-                                        {#if section.links?.length}
-                                            <div class="answer-section-list">
-                                                <strong>Links</strong>
-                                                {#if sectionURLLinks(section).length}
-                                                    <div class="answer-link-list">
-                                                        {#each sectionURLLinks(section) as item}
-                                                            <a href={item} target="_blank" rel="noreferrer">{item}</a>
-                                                        {/each}
-                                                    </div>
-                                                {/if}
-                                                {#if sectionTextLinks(section).length}
-                                                    <SafeMarkdownBlock
-                                                        text={markdownBulletList(sectionTextLinks(section))}
-                                                        variant="source"
-                                                    />
-                                                {/if}
-                                            </div>
-                                        {/if}
-                                    </section>
-                                {/each}
-                            </div>
+                            <AnswerSections
+                                sections={answerSections(message.card.chatResult)}
+                                messageID={message.id}
+                                {basketItems}
+                                {onAskEvidence}
+                                {onPinEvidence}
+                            />
                         {/if}
                         <div
                             class="query-meta"
@@ -486,7 +307,7 @@
             bind:value={command}
             disabled={busy || !hasSources}
             placeholder={hasSources ? "Ask about PRs, Slack threads, findings, or recent activity..." : "Connect sources first..."}
-            rows="2"
+            rows="1"
             on:input={resizeComposer}
             on:keydown={handleComposerKeydown}
         ></textarea>
@@ -645,203 +466,6 @@
         padding-top: 10px;
     }
 
-    .stream-panel {
-        margin-top: 12px;
-        border-top: 1px solid #d7d2c8;
-        border-bottom: 1px solid #e4ded2;
-        padding: 8px 0 10px;
-        color: #625f55;
-        font-size: 12px;
-    }
-
-    .stream-panel.running .stream-toggle span {
-        color: #1f5f8b;
-    }
-
-    .stream-panel.error .stream-toggle span {
-        color: #b4422a;
-    }
-
-    .stream-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        width: 100%;
-        border: 0;
-        border-radius: 0;
-        background: transparent;
-        padding: 0;
-        color: inherit;
-        text-align: left;
-    }
-
-    .stream-toggle span {
-        color: #8a6a20;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-    }
-
-    .stream-toggle strong {
-        flex: 0 0 auto;
-        border-bottom: 1px solid #bdb7a8;
-        color: #1c1b18;
-        font-size: 11px;
-    }
-
-    .stream-toggle:hover strong {
-        border-bottom-color: #1c1b18;
-    }
-
-    .stream-latest,
-    .stream-summary {
-        margin-top: 7px;
-        overflow-wrap: anywhere;
-    }
-
-    .stream-summary {
-        color: #1c1b18;
-        font-weight: 700;
-    }
-
-    .stream-lines {
-        display: grid;
-        gap: 5px;
-        margin-top: 8px;
-    }
-
-    .stream-lines p {
-        color: #625f55;
-        overflow-wrap: anywhere;
-    }
-
-    .answer-sections {
-        display: grid;
-        gap: 12px;
-        margin-top: 14px;
-    }
-
-    .answer-section {
-        border-top: 1px solid #d7d2c8;
-        border-bottom: 1px solid rgba(228, 222, 210, 0.9);
-        background: transparent;
-        padding: 14px 12px 12px;
-    }
-
-    .answer-section-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        border-bottom: 1px solid #e4ded2;
-        padding-bottom: 10px;
-    }
-
-    .answer-section-actions {
-        flex: 0 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        flex-wrap: wrap;
-        gap: 8px;
-        max-width: 45%;
-    }
-
-    .answer-section-list strong {
-        display: block;
-        color: #1c1b18;
-        overflow-wrap: anywhere;
-    }
-
-    .source-title {
-        display: block;
-        color: #1c1b18;
-        overflow-wrap: anywhere;
-    }
-
-    .source-jira .source-title {
-        color: #0c66e4;
-    }
-
-    .source-github .source-title {
-        color: #24292f;
-    }
-
-    .source-slack .source-title {
-        color: #4a154b;
-    }
-
-    .source-googledrive .source-title {
-        color: #1a73e8;
-    }
-
-    .source-notion .source-title {
-        color: #1c1b18;
-    }
-
-    .source-sharepoint .source-title {
-        color: #036c70;
-    }
-
-    .source-filesystem .source-title {
-        color: #8a6a20;
-    }
-
-    .answer-section-head span {
-        display: block;
-        margin-top: 3px;
-        color: #8a8678;
-        font-size: 11px;
-        text-transform: uppercase;
-    }
-
-    .answer-section a,
-    .answer-section-head a,
-    .answer-section-actions button {
-        width: max-content;
-        max-width: 100%;
-        border-bottom: 1px solid #bdb7a8;
-        border-top: 0;
-        border-right: 0;
-        border-left: 0;
-        border-radius: 0;
-        background: transparent;
-        color: #1f5f8b;
-        font-size: 12px;
-        font-weight: 700;
-        overflow-wrap: anywhere;
-        text-decoration: none;
-        padding: 0 0 2px;
-    }
-
-    .answer-section-actions button {
-        color: #1c1b18;
-    }
-
-    .answer-section-actions button:disabled {
-        cursor: default;
-        opacity: 0.45;
-    }
-
-    .answer-section-copy {
-        margin-top: 10px;
-    }
-
-    .answer-section-list {
-        display: grid;
-        gap: 7px;
-        margin-top: 12px;
-        border-top: 1px solid #e4ded2;
-        padding-top: 10px;
-    }
-
-    .answer-link-list {
-        display: grid;
-        gap: 5px;
-        min-width: 0;
-    }
-
     .query-meta {
         display: flex;
         align-items: center;
@@ -994,15 +618,16 @@
     }
 
     .composer textarea {
+        box-sizing: border-box;
         resize: none;
         min-width: 0;
-        min-height: 42px;
+        min-height: 34px;
         max-height: max(120px, min(50vh, calc(100dvh - 260px)));
         border: 0;
         border-bottom: 1px solid #bdb7a8;
         border-radius: 0;
         background: transparent;
-        padding: 8px 0 6px;
+        padding: 7px 0 6px;
         outline: none;
         line-height: 18px;
         overflow-y: hidden;
@@ -1022,7 +647,9 @@
     .composer button {
         width: 34px;
         min-width: 34px;
+        flex: 0 0 34px;
         height: 34px;
+        align-self: end;
         border: 0;
         border-bottom: 1px solid #1c1b18;
         border-radius: 0;
