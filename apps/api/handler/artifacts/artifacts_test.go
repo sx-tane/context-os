@@ -3,10 +3,12 @@ package artifacts
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -338,5 +340,34 @@ func TestCleanupLiveEvidenceDeletesSelectedRows(t *testing.T) {
 	}
 	if !reflect.DeepEqual(events.deleted, []string{"enum"}) {
 		t.Fatalf("deleted = %#v, want enum row", events.deleted)
+	}
+}
+
+// TestDeleteDeletesExplicitArtifactIDs verifies the delete endpoint removes user-selected workspace artifacts by ID.
+func TestDeleteDeletesExplicitArtifactIDs(t *testing.T) {
+	t.Parallel()
+
+	ws := repository.Workspace{ID: "ws-1", Path: "/workspace"}
+	events := &cleanupEventRepo{}
+	handler := NewHandler(fakeWorkspaceRepo{
+		getByPath: map[string]*repository.Workspace{"/workspace": &ws},
+	}, events)
+	req := httptest.NewRequest("POST", "/artifacts/delete", strings.NewReader(`{"workspace_id":"/workspace","ids":[" evt-a ","evt-b","evt-a",""]}`))
+	res := httptest.NewRecorder()
+
+	handler.Delete(res, req)
+
+	if res.Code != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.Code, res.Body.String())
+	}
+	if !reflect.DeepEqual(events.deleted, []string{"evt-a", "evt-b"}) {
+		t.Fatalf("deleted = %#v, want cleaned selected IDs", events.deleted)
+	}
+	var body CleanupResult
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.DeletedCount != 2 || body.MatchedCount != 2 {
+		t.Fatalf("body = %#v, want two matched and deleted IDs", body)
 	}
 }

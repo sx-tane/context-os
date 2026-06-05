@@ -21,6 +21,7 @@
         apiFetch,
         cleanupGraphNoise,
         cleanupLiveEvidence,
+        deleteArtifacts,
         deleteWorkspace,
         getArtifacts,
         getAnalysisBasket,
@@ -311,6 +312,25 @@
         }
         await refreshWorkspace();
         return `Removed ${result.body.deleted_count} noisy live evidence event${result.body.deleted_count === 1 ? "" : "s"}.`;
+    }
+
+    async function deleteActivityArtifacts(ids: string[]) {
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            return "Demo Activity is read-only.";
+        }
+        const result = await deleteArtifacts({
+            workspace_id: workspacePath,
+            ids,
+        });
+        if (!result.ok) {
+            throw new Error(
+                result.body.message ??
+                    result.body.error ??
+                    "Activity delete failed.",
+            );
+        }
+        await refreshWorkspace();
+        return `Deleted ${result.body.deleted_count} Activity event${result.body.deleted_count === 1 ? "" : "s"}.`;
     }
 
     function requestGraphCleanup() {
@@ -1033,6 +1053,7 @@
                                 {recentArtifacts}
                                 basketItems={analysisBasket}
                                 onCleanupNoisyLiveEvidence={cleanNoisyLiveEvidence}
+                                onDeleteArtifacts={deleteActivityArtifacts}
                                 onAskEvidence={prefillChatWithEvidence}
                                 onPinEvidence={pinEvidenceForAnalysis}
                             />

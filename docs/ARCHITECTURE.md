@@ -190,11 +190,11 @@ flowchart LR
   extraction[Extraction]
   identity[Identity Resolution]
   relationship[Relationship]
-  graph[Context Graph]
+  ctxgraph[Context Graph]
   reasoning[Reasoning]
   presentation[Presentation]
 
-  source --> ingestion --> normalization --> classification --> extraction --> identity --> relationship --> graph --> reasoning --> presentation
+  source --> ingestion --> normalization --> classification --> extraction --> identity --> relationship --> ctxgraph --> reasoning --> presentation
   reasoning -. assistive prompts .-> execution[Execution]
   execution -. auditable output .-> reasoning
 ```

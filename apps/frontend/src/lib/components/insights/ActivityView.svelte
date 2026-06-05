@@ -30,6 +30,7 @@
   export let recentArtifacts: Artifact[] = [];
   export let basketItems: EvidenceBasketItem[] = [];
   export let onCleanupNoisyLiveEvidence: () => Promise<string> = async () => "";
+  export let onDeleteArtifacts: (ids: string[]) => Promise<string> = async () => "";
   export let onAskEvidence: (prompt: string) => void | Promise<void> = () => {};
   export let onPinEvidence: (item: EvidenceBasketItem) => void | Promise<void> = () => {};
 
@@ -41,6 +42,11 @@
   let cleanupConfirmOpen = false;
   let cleanupRunning = false;
   let cleanupMessage = "";
+  let deleteConfirmOpen = false;
+  let deleteRunning = false;
+  let deleteIDs: string[] = [];
+  let deleteTitle = "";
+  let deleteDescription = "";
   let activityFilters: ActivityFilterState = {};
 
   $: timeFilteredArtifacts = filterArtifactsByTime(recentArtifacts, timeFilter);
@@ -123,6 +129,37 @@
     }
   }
 
+  function requestDeleteSelected(artifact: Artifact) {
+    deleteIDs = [artifact.id];
+    deleteTitle = "Delete this Activity event?";
+    deleteDescription = "This permanently removes the selected local Activity artifact. It does not delete the upstream source.";
+    deleteConfirmOpen = true;
+    cleanupMessage = "";
+  }
+
+  function requestDeleteVisible() {
+    deleteIDs = visibleArtifacts.map((artifact) => artifact.id);
+    deleteTitle = `Delete ${deleteIDs.length} visible Activity event${deleteIDs.length === 1 ? "" : "s"}?`;
+    deleteDescription = "This permanently removes the currently visible local Activity artifacts after your filters. It does not delete upstream sources.";
+    deleteConfirmOpen = true;
+    cleanupMessage = "";
+  }
+
+  async function confirmDelete() {
+    deleteRunning = true;
+    cleanupMessage = "";
+    try {
+      cleanupMessage = await onDeleteArtifacts(deleteIDs);
+      deleteConfirmOpen = false;
+      selectedArtifactID = "";
+      deleteIDs = [];
+    } catch (error) {
+      cleanupMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      deleteRunning = false;
+    }
+  }
+
   loadSavedFilter();
 </script>
 
@@ -202,6 +239,14 @@
       >
         Clean Noise
       </button>
+      <button
+        type="button"
+        class="danger-action"
+        disabled={visibleArtifacts.length === 0}
+        on:click={requestDeleteVisible}
+      >
+        Delete Visible
+      </button>
       <button type="button" on:click={clearActivityFilters}>Clear</button>
     </div>
   </div>
@@ -218,6 +263,21 @@
         if (!cleanupRunning) cleanupConfirmOpen = false;
       }}
       on:confirm={confirmCleanup}
+    />
+  {/if}
+
+  {#if deleteConfirmOpen}
+    <ConfirmModal
+      eyebrow="DELETE ACTIVITY"
+      title={deleteTitle}
+      description={deleteDescription}
+      confirmLabel="Delete"
+      busyLabel="Deleting"
+      busy={deleteRunning}
+      on:cancel={() => {
+        if (!deleteRunning) deleteConfirmOpen = false;
+      }}
+      on:confirm={confirmDelete}
     />
   {/if}
 
@@ -271,8 +331,8 @@
 
             {#if selected}
               <div class="activity-detail">
-                {#if basketItem}
-                  <div class="detail-actions">
+                <div class="detail-actions">
+                  {#if basketItem}
                     <button
                       type="button"
                       on:click={() =>
@@ -293,8 +353,15 @@
                     >
                       {basketHas(basketItem) ? "Pinned for analysis" : "Pin for analysis"}
                     </button>
-                  </div>
-                {/if}
+                  {/if}
+                  <button
+                    type="button"
+                    class="danger-action"
+                    on:click={() => requestDeleteSelected(artifact)}
+                  >
+                    Delete event
+                  </button>
+                </div>
                 <div class="detail-copy">
                   <strong>Event summary</strong>
                   <SafeMarkdownBlock
@@ -465,6 +532,7 @@
     border-bottom-color: #1c1b18;
   }
 
+  .activity-filters button:disabled,
   .detail-actions button:disabled {
     cursor: default;
     opacity: 0.45;
@@ -483,6 +551,10 @@
 
   .cleanup-action {
     color: #8a3b27;
+  }
+
+  .danger-action {
+    color: #b4422a;
   }
 
   .cleanup-message {

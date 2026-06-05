@@ -10,6 +10,7 @@ import {
   getArtifacts,
   cleanupGraphNoise,
   cleanupLiveEvidence,
+  deleteArtifacts,
   getAnalysisBasket,
   putAnalysisBasket,
   getFindingActions,
@@ -455,6 +456,39 @@ describe("cleanupLiveEvidence", () => {
       status: 500,
       body: { error: "store_error" },
     });
+  });
+});
+
+// ---- deleteArtifacts ----
+
+describe("deleteArtifacts", () => {
+  it("posts selected artifact IDs to the delete endpoint", async () => {
+    const body = {
+      workspace_id: "ws1",
+      workspace_path: "/workspace",
+      matched_count: 2,
+      deleted_count: 2,
+      deleted_ids: ["evt-a", "evt-b"],
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+
+    const result = await deleteArtifacts({
+      workspace_id: "/workspace",
+      ids: ["evt-a", "evt-b"],
+    });
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/artifacts/delete",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          workspace_id: "/workspace",
+          ids: ["evt-a", "evt-b"],
+        }),
+      }),
+    );
   });
 });
 

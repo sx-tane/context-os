@@ -384,8 +384,8 @@ func TestQueryUsesLiveAnswererForSavedSourceName(t *testing.T) {
 	}
 }
 
-// TestQueryUsesConnectorLevelLiveAnswerer verifies an enabled plugin row can answer without a selected source URI.
-func TestQueryUsesConnectorLevelLiveAnswerer(t *testing.T) {
+// TestQuerySkipsConnectorLevelLiveAnswerer verifies broad connector rows do not trigger open-ended live lookup.
+func TestQuerySkipsConnectorLevelLiveAnswerer(t *testing.T) {
 	events := &fakeEventRepository{}
 	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
 		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
@@ -400,14 +400,11 @@ func TestQueryUsesConnectorLevelLiveAnswerer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
-	if result.Provider != "codex" {
-		t.Fatalf("Provider = %q, want codex", result.Provider)
+	if result.Provider != "local" {
+		t.Fatalf("Provider = %q, want local", result.Provider)
 	}
-	if result.Connector != "github" {
-		t.Fatalf("Connector = %q, want github", result.Connector)
-	}
-	if live.query.SourceURI != "github" {
-		t.Fatalf("live SourceURI = %q, want github", live.query.SourceURI)
+	if live.calls != 0 {
+		t.Fatalf("live calls = %d, want no connector-level lookup", live.calls)
 	}
 }
 
@@ -415,9 +412,9 @@ func TestQueryUsesConnectorLevelLiveAnswerer(t *testing.T) {
 func TestQueryFansOutConnectedSourcesForGenericPrompt(t *testing.T) {
 	events := &fakeEventRepository{}
 	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
-		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "BKGDEV-8457", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/context-os", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "#payments", Status: "connected"},
 	}}
 	live := &fakeLiveAnswerer{answer: "Related implementation context was found."}
 	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
@@ -447,9 +444,9 @@ func TestQueryFansOutConnectedSourcesForGenericPrompt(t *testing.T) {
 func TestQueryRequestedConnectorsFanOutOnlyThoseLiveScopes(t *testing.T) {
 	events := &fakeEventRepository{}
 	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
-		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "BKGDEV-8457", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/context-os", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "#payments", Status: "connected"},
 	}}
 	live := &fakeLiveAnswerer{answer: "Related implementation context was found."}
 	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
@@ -495,13 +492,13 @@ func TestQueryFanoutUsesEveryConcreteConnectedSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
-	if live.calls != 3 {
-		t.Fatalf("live calls = %d, want 3", live.calls)
+	if live.calls != 2 {
+		t.Fatalf("live calls = %d, want 2 concrete calls", live.calls)
 	}
-	if len(result.AnswerSections) != 3 {
-		t.Fatalf("answer sections = %d, want 3", len(result.AnswerSections))
+	if len(result.AnswerSections) != 2 {
+		t.Fatalf("answer sections = %d, want 2", len(result.AnswerSections))
 	}
-	for index, want := range []string{"BKGDEV-8457", "BKGDEV-8466", "github"} {
+	for index, want := range []string{"BKGDEV-8457", "BKGDEV-8466"} {
 		if result.AnswerSections[index].SourceURI != want {
 			t.Fatalf("answer section %d source URI = %q, want %q", index, result.AnswerSections[index].SourceURI, want)
 		}
@@ -512,9 +509,9 @@ func TestQueryFanoutUsesEveryConcreteConnectedSource(t *testing.T) {
 func TestQueryLiveFanoutRunsConnectedScopesConcurrently(t *testing.T) {
 	events := &fakeEventRepository{}
 	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
-		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "BKGDEV-8457", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/context-os", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "#payments", Status: "connected"},
 	}}
 	live := &fakeLiveAnswerer{
 		answer: "Related implementation context was found.",
@@ -550,9 +547,9 @@ func TestQueryLiveFanoutRunsConnectedScopesConcurrently(t *testing.T) {
 func TestQueryLiveFanoutRetriesParallelStartupFailures(t *testing.T) {
 	events := &fakeEventRepository{}
 	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
-		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
-		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "BKGDEV-8457", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "sx-tane/context-os", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "#payments", Status: "connected"},
 	}}
 	live := &fakeLiveAnswerer{
 		answer:             "Related implementation context was found.",
@@ -736,7 +733,7 @@ func TestQueryFallsBackToLocalArtifactsWhenLiveFails(t *testing.T) {
 	}
 }
 
-// TestQueryConnectorLevelLiveFallbackUsesConnectorArtifacts verifies connector-level live sources do not over-filter local fallback artifacts.
+// TestQueryConnectorLevelLiveFallbackUsesConnectorArtifacts verifies connector-level rows do not over-filter local artifacts.
 func TestQueryConnectorLevelLiveFallbackUsesConnectorArtifacts(t *testing.T) {
 	events := &fakeEventRepository{events: []repository.IngestEvent{{
 		ID:          "evt-github",
@@ -760,8 +757,8 @@ func TestQueryConnectorLevelLiveFallbackUsesConnectorArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
-	if live.query.SourceURI != "github" {
-		t.Fatalf("live SourceURI = %q, want github", live.query.SourceURI)
+	if live.calls != 0 {
+		t.Fatalf("live calls = %d, want no connector-level live lookup", live.calls)
 	}
 	if events.lastQuery.SourceURI != "" {
 		t.Fatalf("local query SourceURI = %q, want connector-wide fallback", events.lastQuery.SourceURI)

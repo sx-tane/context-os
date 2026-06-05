@@ -621,6 +621,45 @@ export async function cleanupLiveEvidence(
   }
 }
 
+/** Delete user-selected Activity artifacts from the local workspace database. */
+export async function deleteArtifacts(body: {
+  workspace_id: string;
+  ids: string[];
+}): Promise<
+  | { ok: true; status: number; body: ActivityCleanupResult }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  try {
+    const res = await apiFetch(`${API_URL}/artifacts/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const responseBody = await readJSON(res);
+    if (res.ok) {
+      return {
+        ok: true,
+        status: res.status,
+        body: responseBody as unknown as ActivityCleanupResult,
+      };
+    }
+    return {
+      ok: false,
+      status: res.status,
+      body: responseBody,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message: "API is unreachable. Activity delete did not run.",
+      },
+    };
+  }
+}
+
 export async function getAnalysisBasket(
   workspaceID: string,
 ): Promise<AnalysisBasketPayload | null> {

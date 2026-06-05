@@ -117,6 +117,7 @@ func Routes(ctx context.Context, sqlDB *sql.DB) []Route {
 	if handlers.artifacts != nil {
 		routes = append(routes,
 			Route{Pattern: "/artifacts", Handler: http.HandlerFunc(handlers.artifacts.Query), CORS: true},
+			Route{Pattern: "/artifacts/delete", Handler: http.HandlerFunc(handlers.artifacts.Delete), CORS: true},
 			Route{Pattern: "/artifacts/live-evidence/cleanup", Handler: http.HandlerFunc(handlers.artifacts.CleanupLiveEvidence), CORS: true},
 		)
 	}

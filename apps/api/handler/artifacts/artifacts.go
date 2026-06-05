@@ -4,6 +4,7 @@ package artifacts
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -30,6 +31,13 @@ type CleanupResult struct {
 	MatchedCount  int      `json:"matched_count"`
 	DeletedCount  int      `json:"deleted_count"`
 	DeletedIDs    []string `json:"deleted_ids"`
+}
+
+// DeleteRequest is the JSON body accepted by POST /artifacts/delete.
+type DeleteRequest struct {
+	WorkspaceID   string   `json:"workspace_id"`
+	WorkspacePath string   `json:"workspace_path"`
+	IDs           []string `json:"ids"`
 }
 
 // Handler holds repository dependencies for artifact HTTP handlers.
@@ -187,6 +195,78 @@ func (h *Handler) CleanupLiveEvidence(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Delete handles POST /artifacts/delete.
+//
+// @Summary      Delete selected artifacts
+// @Description  Explicitly removes user-selected workspace-scoped Activity artifacts by ID.
+// @Tags         artifacts
+// @Accept       json
+// @Produce      json
+// @Param        request  body      DeleteRequest  true  "Artifact IDs to delete"
+// @Success      200      {object}  CleanupResult
+// @Failure      400      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      405      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /artifacts/delete [post]
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+		return
+	}
+	if h.workspaces == nil || h.events == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "artifact store is unavailable")
+		return
+	}
+	deleter, ok := h.events.(repository.EventDeleter)
+	if !ok {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "artifact delete is unavailable")
+		return
+	}
+
+	var req DeleteRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64*1024)).Decode(&req); err != nil {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "invalid JSON body")
+		return
+	}
+	workspaceRef := firstNonEmpty(strings.TrimSpace(req.WorkspaceID), strings.TrimSpace(req.WorkspacePath))
+	if workspaceRef == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "workspace_id is required")
+		return
+	}
+	ids := cleanArtifactIDs(req.IDs)
+	if len(ids) == 0 {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "at least one artifact id is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), artifactsRequestTimeout)
+	defer cancel()
+
+	workspace, err := h.resolveWorkspace(ctx, workspaceRef)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.WriteError(w, http.StatusNotFound, "not_found", "workspace not found")
+			return
+		}
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+
+	deleted, err := deleter.DeleteByIDs(ctx, workspace.ID, ids)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
+	response.WriteJSON(w, http.StatusOK, CleanupResult{
+		WorkspaceID:   workspace.ID,
+		WorkspacePath: workspace.Path,
+		MatchedCount:  len(ids),
+		DeletedCount:  deleted,
+		DeletedIDs:    ids,
+	})
+}
+
 func (h *Handler) resolveWorkspace(ctx context.Context, ref string) (repository.Workspace, error) {
 	workspace, err := h.workspaces.GetByPath(ctx, ref)
 	if err != nil {
@@ -238,6 +318,32 @@ func workspaceRefFromRequest(r *http.Request) string {
 		workspaceRef = strings.TrimSpace(r.URL.Query().Get("workspace_path"))
 	}
 	return workspaceRef
+}
+
+func cleanArtifactIDs(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	if len(out) > 500 {
+		return out[:500]
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func noisyLiveEvidenceIDs(events []repository.IngestEvent) []string {

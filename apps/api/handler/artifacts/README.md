@@ -7,6 +7,7 @@ HTTP handler for querying persisted source artifacts in a workspace.
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/artifacts` | Returns workspace-scoped artifacts from persisted ingest events. |
+| POST | `/artifacts/delete` | Explicitly removes user-selected workspace-scoped Activity artifacts by ID. |
 | POST | `/artifacts/live-evidence/cleanup` | Explicitly removes old noisy `live_chat_answer` artifacts created from duplicate full answers, URL path fragments, or generic terms. |
 
 ## Query Parameters
@@ -23,11 +24,11 @@ HTTP handler for querying persisted source artifacts in a workspace.
 
 ## Files
 
-- `artifacts.go` contains `Handler.Query`, `Handler.CleanupLiveEvidence`, workspace resolution, event query construction, query parameter parsing, and the conservative noisy-live-evidence selector.
+- `artifacts.go` contains `Handler.Query`, `Handler.Delete`, `Handler.CleanupLiveEvidence`, workspace resolution, event query construction, query parameter parsing, explicit selected-ID deletion, and the conservative noisy-live-evidence selector.
 
 ## Maintenance Notes
 
 - Keep artifact responses backed by `repository.EventRepository`; do not re-query live connectors from this handler.
-- Keep live evidence cleanup explicit; it must not auto-run during artifact queries.
+- Keep live evidence cleanup and selected Activity deletion explicit; they must not auto-run during artifact queries.
 - Preserve the 10 second request timeout unless repository query behavior changes.
 - Update `apps/api/README.md` when route registration, request parameters, or response shape changes.

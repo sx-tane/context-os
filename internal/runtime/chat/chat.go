@@ -454,6 +454,7 @@ func (s *Service) shouldAskLiveFirst(result Result) bool {
 	return s.live != nil &&
 		result.SourceURI != "" &&
 		result.Connector != "filesystem" &&
+		!isConnectorScopeURI(result.Connector, result.SourceURI) &&
 		supportsLiveConnector(result.Connector)
 }
 
@@ -514,10 +515,13 @@ func classifyIntent(message, connector, sourceURI string) string {
 }
 
 func liveFanoutScopes(message string, requested []string, explicitConnector, explicitSourceURI, inferredConnector string, syncs []repository.ConnectorSync) []repository.ConnectorSync {
-	if explicitConnector != "" || explicitSourceURI != "" || inferredConnector != "" {
+	if explicitConnector != "" || explicitSourceURI != "" {
 		return nil
 	}
 	connectors := normalizedConnectorSet(requested)
+	if len(connectors) == 0 && inferredConnector != "" {
+		return nil
+	}
 	if len(connectors) == 0 && !shouldAutoFanoutPrompt(message) {
 		return nil
 	}
@@ -538,7 +542,6 @@ func normalizedConnectorSet(values []string) map[string]bool {
 
 func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bool) []repository.ConnectorSync {
 	concrete := map[string][]repository.ConnectorSync{}
-	broad := map[string]repository.ConnectorSync{}
 	seen := map[string]bool{}
 	for _, sync := range syncs {
 		connector := normalizeConnector(sync.Connector)
@@ -560,9 +563,6 @@ func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bo
 		sync.Connector = connector
 		sync.SourceURI = sourceURI
 		if isConnectorScopeURI(connector, sourceURI) {
-			if _, ok := broad[connector]; !ok {
-				broad[connector] = sync
-			}
 			continue
 		}
 		concrete[connector] = append(concrete[connector], sync)
@@ -572,10 +572,6 @@ func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bo
 	for _, connector := range order {
 		if len(concrete[connector]) > 0 {
 			out = append(out, concrete[connector]...)
-			continue
-		}
-		if scope, ok := broad[connector]; ok {
-			out = append(out, scope)
 		}
 	}
 	return out
