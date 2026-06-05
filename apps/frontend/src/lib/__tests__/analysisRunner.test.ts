@@ -23,7 +23,7 @@ const mockPostFindings = postFindings as jest.Mock;
 type AnalysisRunnerTestState = {
   busyCalls: boolean[];
   lastFindings: FindingsResult | null;
-  replacements: Array<{ text: string }>;
+  replacements: Array<{ text: string; card?: unknown }>;
   addMessage: jest.Mock;
   replaceMessage: jest.Mock;
   setBusy: jest.Mock;
@@ -119,8 +119,13 @@ describe("runAnalysis", () => {
     expect(mockPostFindings).toHaveBeenCalledTimes(2);
     expect(state.busyCalls).toEqual([true, false]);
     expect(state.lastFindings?.mismatch_count).toBe(1);
-    expect(state.replacements.at(-1)?.text).toContain("Failed:");
-    expect(state.replacements.at(-1)?.text).toContain("slack:channel - unauthorized");
+    const finalMessage = state.replacements.at(-1)!;
+    expect(finalMessage.text.indexOf("**Summary**")).toBeLessThan(
+      finalMessage.text.indexOf("**Answer**"),
+    );
+    expect(finalMessage.text).toContain("Failed:");
+    expect(finalMessage.text).toContain("slack:channel - unauthorized");
+    expect(finalMessage.card).toMatchObject({ kind: "findings" });
     expect(state.refreshWorkspace).toHaveBeenCalled();
   });
 
@@ -145,6 +150,8 @@ describe("runAnalysis", () => {
 
     expect(mockPostFindings).not.toHaveBeenCalled();
     expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("Analysis skipped");
+    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("**Summary**");
+    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("**Answer**");
     expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("Skipped chat-only scopes");
     expect(state.refreshWorkspace).toHaveBeenCalled();
   });
@@ -194,6 +201,8 @@ describe("runAnalysis", () => {
       uri: "owner/repo",
     });
     expect(state.replacements.at(-1)?.text).toContain("1/1 concrete source");
+    expect(state.replacements.at(-1)?.text).toContain("**Summary**");
+    expect(state.replacements.at(-1)?.text).toContain("**Answer**");
     expect(state.replacements.at(-1)?.text).toContain("Skipped chat-only scopes");
     expect(state.replacements.at(-1)?.text).not.toContain("Failed:");
   });
@@ -252,6 +261,8 @@ describe("runAnalysis", () => {
       uri: "BKGDEV-8551",
     });
     expect(state.replacements.at(-1)?.text).toContain("1/1 concrete source");
+    expect(state.replacements.at(-1)?.text).toContain("**Summary**");
+    expect(state.replacements.at(-1)?.text).toContain("**Answer**");
     expect(state.replacements.at(-1)?.text).toContain("Skipped chat-only scopes");
   });
 
@@ -425,7 +436,7 @@ function makeState(): AnalysisRunnerTestState {
     },
     replacements,
     addMessage: jest.fn(),
-    replaceMessage: jest.fn((_id: string, message: { text: string }) => {
+    replaceMessage: jest.fn((_id: string, message: { text: string; card?: unknown }) => {
       replacements.push(message);
     }),
     setBusy: jest.fn((value: boolean) => busyCalls.push(value)),

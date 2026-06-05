@@ -487,7 +487,7 @@ describe("workspace UI state", () => {
       actions: [
         {
           findingId: "finding-1",
-          status: "checking",
+          status: "false_positive",
           updatedAt: "2026-06-04T00:00:00.000Z",
         },
       ],

@@ -39,7 +39,7 @@ type GraphReader interface {
 Reasoning currently runs four deterministic rules:
 
 - `keyword_signal`: emit when entity names contain `missing`, `mismatch`, or `outdated`.
-- `requirement_gap`: emit when a `Requirement` has no `requirement_affects_api` or `requirement_affects_service` edge.
+- `requirement_gap`: emit when a `Requirement` shares an evidence scope with API or service entities but has no `requirement_affects_api` or `requirement_affects_service` edge.
 - `cross_layer_contract_drift`: emit when an `APIField` has explicit contract exposure context (typed edge other than `co_occurs_in_document`) but no `api_backed_by_db` edge.
 - `dependency_risk`: emit for every `service_depends_on` edge.
 

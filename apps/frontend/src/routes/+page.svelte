@@ -70,11 +70,13 @@
         buildAnalysisPreview,
         buildSourceHealth,
         buildWorkspaceSnapshotMarkdown,
+        findingActionLabel,
         mergeBasketItem,
     } from "$lib/workflow/viewModel";
     import {
         assistantMsg,
         classifyChatCommand,
+        formatAssistantResultText,
         runChatQuery,
         userMsg,
     } from "$lib/chat/controller";
@@ -366,7 +368,7 @@
             const result = demoPlanningTourResult();
             lastChatResult = result;
             addMessage(
-                assistantMsg(result.answer, {
+                assistantMsg(formatAssistantResultText(result), {
                     kind: "query",
                     chatResult: result,
                 }),
@@ -568,7 +570,7 @@
             ...findingActions.filter((item) => item.findingId !== findingID),
         ];
         findingActions = nextActions;
-        workflowMessage = `Finding marked ${status}.`;
+        workflowMessage = `Finding marked ${findingActionLabel(status)}.`;
         if (workspacePath === DEMO_WORKSPACE_PATH) {
             workflowMessage = `${workflowMessage} Demo state is session-only.`;
             return;

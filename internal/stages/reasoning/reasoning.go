@@ -29,13 +29,14 @@ func DetectMismatches(g GraphReader) []types.Mismatch {
 	rels := g.AllRelationships()
 	outgoing := outgoingByEntity(rels) // index edges by source entity for gap and drift checks
 	incoming := incomingByEntity(rels) // index edges by target entity for drift context checks
+	deliveryScopes := deliveryScopesBySource(all)
 
 	mismatches := []types.Mismatch{}
 	for _, entity := range all {
 		if m, ok := keywordSignal(entity); ok {
 			mismatches = append(mismatches, m)
 		}
-		if m, ok := requirementGap(entity, outgoing); ok {
+		if m, ok := requirementGap(entity, outgoing, deliveryScopes); ok {
 			mismatches = append(mismatches, m)
 		}
 		if m, ok := crossLayerContractDrift(entity, outgoing, incoming); ok {
@@ -75,9 +76,12 @@ func keywordSignal(entity entities.CanonicalEntity) (types.Mismatch, bool) {
 	}, true
 }
 
-// requirementGap flags requirements that are not linked to any API or service that delivers them.
-func requirementGap(entity entities.CanonicalEntity, outgoing map[string][]types.Relationship) (types.Mismatch, bool) {
+// requirementGap flags requirements that have same-source delivery candidates but are not linked to them.
+func requirementGap(entity entities.CanonicalEntity, outgoing map[string][]types.Relationship, deliveryScopes map[string]struct{}) (types.Mismatch, bool) {
 	if entity.Entity.Type != types.Requirement {
+		return types.Mismatch{}, false
+	}
+	if _, ok := deliveryScopes[entitySourceScope(entity)]; !ok {
 		return types.Mismatch{}, false
 	}
 	for _, rel := range outgoing[entity.Entity.ID] {
@@ -181,6 +185,31 @@ func incomingByEntity(rels []types.Relationship) map[string][]types.Relationship
 		index[rel.ToID] = append(index[rel.ToID], rel)
 	}
 	return index
+}
+
+// deliveryScopesBySource records evidence scopes that contain implementation-layer entities.
+func deliveryScopesBySource(all []entities.CanonicalEntity) map[string]struct{} {
+	scopes := map[string]struct{}{}
+	for _, entity := range all {
+		if entity.Entity.Type != types.APIField && entity.Entity.Type != types.Service {
+			continue
+		}
+		scope := entitySourceScope(entity)
+		if scope == "" {
+			continue
+		}
+		scopes[scope] = struct{}{}
+	}
+	return scopes
+}
+
+// entitySourceScope returns the stable evidence scope for same-source reasoning.
+func entitySourceScope(entity entities.CanonicalEntity) string {
+	source := strings.TrimSpace(entity.Entity.Metadata[contracts.MetadataSourceURI])
+	if source != "" {
+		return source
+	}
+	return strings.TrimSpace(entity.Entity.SourceID)
 }
 
 // entityEvidence builds a traceable source reference for an entity-derived finding.

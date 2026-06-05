@@ -1,6 +1,6 @@
 # ContextOS
 
-[English README](README.md) | [Wiki](docs/WIKI.md) | [贡献指南](CONTRIBUTING.md) | [许可证](LICENSE)
+[English README](README.md) | [Wiki](https://github.com/sx-tane/context-os/wiki) | [贡献指南](CONTRIBUTING.md) | [许可证](LICENSE)
 
 ContextOS 是一个本地优先的工作区智能系统，用来发现工程和业务上下文之间的交付偏差。
 
@@ -148,7 +148,7 @@ Compose 会启动 PostgreSQL/pgvector、NATS、Go API、Python worker 和 Svelte
 
 ## 文档
 
-- [Wiki](docs/WIKI.md)：快速用户指南、界面说明、启动流程、故障排查和贡献流程。
+- [Wiki](https://github.com/sx-tane/context-os/wiki)：快速用户指南、界面说明、启动流程、故障排查和贡献流程。
 - [Architecture](docs/ARCHITECTURE.md)：流水线阶段、包边界和数据流。
 - [Production Readiness](docs/PRODUCTION_READINESS.md)：当前 readiness gate 和剩余差距。
 - [MCP Connectors](docs/mcp-connectors.md)：连接器行为和集成说明。

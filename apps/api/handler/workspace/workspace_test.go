@@ -499,7 +499,7 @@ func TestFindingActionsRoundTrip(t *testing.T) {
 	uiState := newRecordingUIStateRepo()
 	handler := workspacehandler.NewHandler(workspaceRepo{workspaces: []repository.Workspace{workspace}}, nil, nil, nil, nil).
 		WithUIStateRepository(uiState)
-	body := []byte(`{"workspace_id":"/workspace","actions":[{"findingId":"finding-1","status":"checking","note":"follow up","updatedAt":"2026-06-04T00:00:00Z"}]}`)
+	body := []byte(`{"workspace_id":"/workspace","actions":[{"findingId":"finding-1","status":"checking","note":"follow up","updatedAt":"2026-06-04T00:00:00Z"},{"findingId":"finding-2","status":"false_positive","updatedAt":"2026-06-04T00:00:00Z"},{"findingId":"finding-3","status":"ignored","updatedAt":"2026-06-04T00:00:00Z"}]}`)
 
 	putReq := httptest.NewRequest(http.MethodPut, "/workspace/finding-actions", bytes.NewReader(body))
 	putRec := httptest.NewRecorder()
@@ -523,6 +523,12 @@ func TestFindingActionsRoundTrip(t *testing.T) {
 	if actions[0]["status"] != "checking" {
 		t.Fatalf("action status = %v, want checking", actions[0]["status"])
 	}
+	if actions[1]["status"] != "false_positive" {
+		t.Fatalf("action status = %v, want false_positive", actions[1]["status"])
+	}
+	if actions[2]["status"] != "ignored" {
+		t.Fatalf("action status = %v, want ignored", actions[2]["status"])
+	}
 }
 
 // TestFindingActionsRejectsInvalidStatus verifies checklist statuses are constrained to supported values.
@@ -540,7 +546,7 @@ func TestFindingActionsRejectsInvalidStatus(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 	responseBody := decodeObject(t, rec.Body.Bytes())
-	if responseBody["message"] != "actions[0].status must be open, checking, or done" {
+	if responseBody["message"] != "actions[0].status must be open, checking, done, ignored, or false_positive" {
 		t.Fatalf("message = %v, want invalid status message", responseBody["message"])
 	}
 }

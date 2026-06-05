@@ -446,9 +446,9 @@ func validateFindingActionsPayload(body []byte) (string, []byte, error) {
 			return "", nil, fmt.Errorf("actions[%d].findingId is required", index)
 		}
 		switch strings.TrimSpace(item.Status) {
-		case "open", "checking", "done":
+		case "open", "checking", "done", "ignored", "false_positive":
 		default:
-			return "", nil, fmt.Errorf("actions[%d].status must be open, checking, or done", index)
+			return "", nil, fmt.Errorf("actions[%d].status must be open, checking, done, ignored, or false_positive", index)
 		}
 	}
 	normalized, err := json.Marshal(payload)

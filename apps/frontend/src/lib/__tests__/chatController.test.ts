@@ -10,6 +10,7 @@ import {
   buildStreamSummary,
   classifyChatCommand,
   detectResponseLanguage,
+  formatAssistantResultText,
   isNearBottom,
   localDateString,
   localDBStatusLine,
@@ -155,6 +156,22 @@ describe("stream helpers", () => {
   });
 });
 
+describe("formatAssistantResultText", () => {
+  it("renders summary first and answer second when both add detail", () => {
+    expect(formatAssistantResultText(makeChatResult({
+      summary: "Short version",
+      answer: "Longer direct answer with extra detail.",
+    }))).toBe("**Summary**\nShort version\n\n**Answer**\nLonger direct answer with extra detail.");
+  });
+
+  it("does not repeat the answer when summary and answer are duplicates", () => {
+    expect(formatAssistantResultText(makeChatResult({
+      summary: "Same answer",
+      answer: "Same answer",
+    }))).toBe("**Summary**\nSame answer");
+  });
+});
+
 describe("liveConnectorHint", () => {
   it("returns unique ready live connectors and skips filesystem sources", () => {
     expect(liveConnectorHint([
@@ -232,7 +249,7 @@ describe("runChatQuery", () => {
     expect(state.replacements[0].stream?.latestLine).toContain("standard chat query");
     expect(state.replacements[0].stream?.lines.join("\n")).toContain("Streaming unavailable");
     expect(state.lastChatResult?.answer).toBe("Answer");
-    expect(state.replacements.at(-1)?.text).toBe("Answer");
+    expect(state.replacements.at(-1)?.text).toBe("**Summary**\nSummary\n\n**Answer**\nAnswer");
     expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
     expect(state.replacements.at(-1)?.stream?.summary).toBe("Summary");
     expect(state.replacements.at(-1)?.card).toBeDefined();
@@ -355,11 +372,12 @@ describe("runChatQuery", () => {
     expect(state.addMessage.mock.calls[0][0].stream.lines.join("\n")).toContain("GitHub plugin lookup");
     expect(state.replacements[0].stream?.latestLine).toContain("› Live Codex");
     expect(state.replacements.at(-2)?.stream?.latestLine).toContain("• Saving live answer evidence to Local DB...");
-    expect(state.replacements.at(-2)?.text).toContain("Live answer");
+    expect(state.replacements.at(-2)?.text).toContain("**Summary**\nLive summary");
+    expect(state.replacements.at(-2)?.text).toContain("**Answer**\nLive answer");
     expect(state.replacements.at(-2)?.stream?.status).toBe("running");
     expect(state.lastChatResult?.answer).toBe("Live answer");
     expect(state.lastChatResult?.evidence_save_status).toBe("saved");
-    expect(state.replacements.at(-1)?.text).toBe("Live answer");
+    expect(state.replacements.at(-1)?.text).toBe("**Summary**\nLive summary\n\n**Answer**\nLive answer");
     expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
     expect(state.replacements.at(-1)?.stream?.summary).toBe("Local DB: saved 2 artifacts; graph updated");
     expect(state.refreshWorkspace).toHaveBeenCalled();
@@ -472,7 +490,7 @@ describe("runChatQuery", () => {
     });
 
     expect(mockPostChatQuery).not.toHaveBeenCalled();
-    expect(state.replacements.at(-1)?.text).toBe("BKGDEV-8466 is done.");
+    expect(state.replacements.at(-1)?.text).toBe("**Summary**\nBKGDEV-8466 is done.");
     expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
     expect(state.replacements.at(-1)?.stream?.latestLine).toContain("Local DB save failed");
     expect(state.replacements.at(-1)?.stream?.summary).toContain("Local DB: save failed");
@@ -505,6 +523,25 @@ describe("runChatQuery", () => {
     expect(state.replacements.at(-1)?.stream?.lines.join("\n")).toContain("› Live Codex");
     expect(state.replacements.at(-1)?.stream?.latestLine).toContain("Live Codex lookup failed");
     expect(state.replacements.at(-1)?.stream?.latestLine).toContain("timed out after 5m0s");
+  });
+
+  it("uses the summary-first formatter for demo chat responses", async () => {
+    const state = makeState();
+
+    await runChatQuery({
+      text: "show basket preview checklist export workflow",
+      workspacePath: "contextos-demo",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery).not.toHaveBeenCalled();
+    expect(state.replacements.at(-1)?.text).toContain("**Summary**\nDemo workflow showcase");
+    expect(state.replacements.at(-1)?.text).toContain("**Answer**");
   });
 });
 

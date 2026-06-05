@@ -1,6 +1,6 @@
 # ContextOS
 
-[中文 README](README.zh-CN.md) | [Wiki](docs/WIKI.md) | [Contributing](CONTRIBUTING.md) | [License](LICENSE)
+[中文 README](README.zh-CN.md) | [Wiki](https://github.com/sx-tane/context-os/wiki) | [Contributing](CONTRIBUTING.md) | [License](LICENSE)
 
 Local-first workspace intelligence for detecting delivery context drift across engineering and business sources.
 
@@ -148,7 +148,7 @@ The compose stack starts PostgreSQL with pgvector, NATS, the Go API, the Python 
 
 ## Documentation
 
-- [Wiki](docs/WIKI.md): fast user guide, screen meanings, startup, troubleshooting, and contribution flow.
+- [Wiki](https://github.com/sx-tane/context-os/wiki): fast user guide, screen meanings, startup, troubleshooting, and contribution flow.
 - [Architecture](docs/ARCHITECTURE.md): pipeline stages, package boundaries, and data flow.
 - [Production Readiness](docs/PRODUCTION_READINESS.md): current readiness gates and remaining gaps.
 - [MCP Connectors](docs/mcp-connectors.md): connector behavior and integration notes.

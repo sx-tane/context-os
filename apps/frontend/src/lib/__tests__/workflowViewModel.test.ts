@@ -7,9 +7,12 @@ import {
   buildSourceHealth,
   buildWorkspaceSnapshotMarkdown,
   filterActivityArtifacts,
+  findingActionLabel,
   findingShareText,
+  isFindingVisible,
   mergeBasketItem,
   nextFindingActionStatus,
+  uniqueFindings,
 } from "../workflow/viewModel";
 
 import type {
@@ -132,11 +135,37 @@ describe("finding workflow helpers", () => {
 
     expect(nextFindingActionStatus("open")).toBe("checking");
     expect(nextFindingActionStatus("checking")).toBe("done");
+    expect(nextFindingActionStatus("done")).toBe("open");
+    expect(findingActionLabel("false_positive")).toBe("false positive");
+    expect(isFindingVisible({
+      findingId: "finding-1",
+      status: "false_positive",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    }, "active")).toBe(false);
+    expect(isFindingVisible({
+      findingId: "finding-1",
+      status: "false_positive",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    }, "false_positive")).toBe(true);
     expect(findingShareText(finding, {
       findingId: "finding-1",
       status: "checking",
       updatedAt: "2026-06-04T00:00:00.000Z",
     })).toContain("Align receipt_issuer enum");
+  });
+
+  it("keeps only the first finding for each stable id", () => {
+    const findings: FindingsMismatch[] = [
+      { id: "finding-1", summary: "Payment type mismatch" },
+      { id: "finding-1", summary: "Payment type mismatch duplicate" },
+      { summary: "Fallback summary identity" },
+      { summary: "Fallback summary identity" },
+    ];
+
+    expect(uniqueFindings(findings)).toEqual([
+      { id: "finding-1", summary: "Payment type mismatch" },
+      { summary: "Fallback summary identity" },
+    ]);
   });
 });
 

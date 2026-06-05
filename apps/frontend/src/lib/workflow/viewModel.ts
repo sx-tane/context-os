@@ -26,6 +26,7 @@ import type {
 import type {
   EvidenceBasketItem,
   FindingActionItem,
+  FindingActionStatus,
 } from "$lib/workflow/types";
 
 export interface AnalysisPreviewInput {
@@ -242,10 +243,42 @@ export function findingActionFor(
   };
 }
 
+export function uniqueFindings(findings: FindingsMismatch[]) {
+  const seen = new Set<string>();
+  return findings.filter((finding) => {
+    const id = String(finding.id ?? findingSummary(finding));
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 export function nextFindingActionStatus(status: FindingActionItem["status"]) {
   if (status === "open") return "checking";
   if (status === "checking") return "done";
   return "open";
+}
+
+export function visibleFindingStatuses(
+  statusFilter: "active" | FindingActionStatus | "all",
+): FindingActionStatus[] {
+  if (statusFilter === "all") {
+    return ["open", "checking", "done", "ignored", "false_positive"];
+  }
+  if (statusFilter === "active") return ["open", "checking", "done"];
+  return [statusFilter];
+}
+
+export function isFindingVisible(
+  action: FindingActionItem,
+  statusFilter: "active" | FindingActionStatus | "all",
+) {
+  return visibleFindingStatuses(statusFilter).includes(action.status);
+}
+
+export function findingActionLabel(status: FindingActionStatus) {
+  if (status === "false_positive") return "false positive";
+  return status.replaceAll("_", " ");
 }
 
 export function findingShareText(

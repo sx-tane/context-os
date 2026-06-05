@@ -54,13 +54,12 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     options.setLastFindings(findings);
     options.setLastAnalysisAt(new Date().toISOString());
     options.addMessage(
-      assistantMsg(
+      assistantMsg(formatAnalysisResultMessage(
         "Demo analysis complete for 3 selected sources. Found 2 findings.",
-        {
-          kind: "findings",
-          findingsResult: findings,
-        },
-      ),
+      ), {
+        kind: "findings",
+        findingsResult: findings,
+      }),
     );
     return;
   }
@@ -93,7 +92,7 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     });
     options.setLastFindings(null);
     options.setLastAnalysisAt(new Date().toISOString());
-    options.addMessage(assistantMsg(summary));
+    options.addMessage(assistantMsg(formatAnalysisResultMessage(summary)));
     await options.refreshWorkspace();
     return;
   }
@@ -230,7 +229,7 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
 
     options.replaceMessage(
       load.id,
-      assistantMsg(summary, {
+      assistantMsg(formatAnalysisResultMessage(summary), {
         kind: "findings",
         findingsResult: aggregated ?? undefined,
       }),
@@ -274,6 +273,13 @@ export function buildAnalysisProgress(
   return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed${cancelText}${skipText}.\n${lines.join("\n")}`;
 }
 
+export function formatAnalysisResultMessage(summary: string) {
+  const [headline = "", ...detailSections] = summary.trim().split(/\n{2,}/);
+  const details = detailSections.join("\n\n").trim();
+  const answer = analysisAnswerText(headline);
+  return `**Summary**\n${headline.trim()}\n\n**Answer**\n${[answer, details].filter(Boolean).join("\n\n")}`;
+}
+
 export function analysisProvider(connector: ConnectorKind) {
   const codexConnectors = new Set<ConnectorKind>([
     "github",
@@ -303,6 +309,20 @@ function markCanceled(statuses: AnalysisSourceStatus[], startIndex: number) {
       };
     }
   }
+}
+
+function analysisAnswerText(headline: string) {
+  const lower = headline.toLowerCase();
+  if (lower.includes("analysis skipped")) {
+    return "No concrete source was ready for analysis. Ask chat about a specific ticket, channel, repo, PR, document, folder, or file so saved evidence can become analysis-ready.";
+  }
+  if (lower.includes("found ")) {
+    return "The Findings preview is attached with the detected mismatch signals and source details for follow-up.";
+  }
+  if (lower.includes("no mismatch signals")) {
+    return "No mismatch signals were detected in the completed sources. Source counts, skipped scopes, and failures are listed below when applicable.";
+  }
+  return "Review the attached analysis details and source status before taking follow-up action.";
 }
 
 function findingsErrorMessage(body: { error?: string; message?: string; examples?: string[] }) {

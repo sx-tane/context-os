@@ -8,7 +8,7 @@ The docs in this folder are intentionally cross-layer. Deep implementation detai
 
 | Document | Use it for |
 | --- | --- |
-| [Wiki](WIKI.md) | Fast user-facing guide: what ContextOS is, how to start it, what each screen means, and common troubleshooting. |
+| [Wiki](https://github.com/sx-tane/context-os/wiki) | Fast user-facing guide: what ContextOS is, how to start it, what each screen means, and common troubleshooting. |
 | [Architecture](ARCHITECTURE.md) | Current runtime map across frontend, API, Codex plugins, local DB, storage, AI worker, pipeline stages, graph, and findings. |
 | [Production Readiness](PRODUCTION_READINESS.md) | Production gates, current readiness by runtime layer and pipeline stage, and the priority order for hardening. |
 | [MCP Connectors](mcp-connectors.md) | Active connector portfolio, Codex-live versus direct ingest behavior, and route-family overview. |
@@ -31,7 +31,7 @@ The docs in this folder are intentionally cross-layer. Deep implementation detai
 ```mermaid
 flowchart TD
   ROOT[docs/] --> ARCH[ARCHITECTURE.md]
-  ROOT --> WIKI[WIKI.md]
+  ROOT --> WIKI[GitHub Wiki]
   ROOT --> PROD[PRODUCTION_READINESS.md]
   ROOT --> MCP[mcp-connectors.md]
   ROOT --> CODEX[../.codex/README.md]

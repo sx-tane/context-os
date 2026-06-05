@@ -78,10 +78,20 @@ func TestDetectMismatchesGraphRules(t *testing.T) {
 		wantLen  int
 	}{
 		{
-			name: "requirement without owning api or service is a gap",
+			name: "standalone requirement without delivery evidence is not a gap",
 			reader: graphReader{
 				entities: []entities.CanonicalEntity{
 					{Entity: types.Entity{ID: "req-1", Name: "refundsMustBeReversible", Type: types.Requirement, SourceID: "doc-req"}},
+				},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "requirement with same-source api but no owning edge is a gap",
+			reader: graphReader{
+				entities: []entities.CanonicalEntity{
+					{Entity: types.Entity{ID: "req-1", Name: "refundsMustBeReversible", Type: types.Requirement, SourceID: "doc-req"}},
+					{Entity: types.Entity{ID: "api-1", Name: "refundReference", Type: types.APIField, SourceID: "doc-req"}},
 				},
 			},
 			wantType: "requirement_gap",

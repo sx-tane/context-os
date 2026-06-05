@@ -2,12 +2,19 @@ package relationship
 
 import (
 	"fmt" // used to build deterministic relationship IDs
+	"strings"
 
 	"context-os/domain/entities" // CanonicalEntity input type
 	"context-os/domain/types"    // Relationship output type
 )
 
 const maxCoOccurrenceEdgesPerSource = 25
+
+const (
+	unknownEndpointConfidence = 0.6
+	minFallbackConfidence     = 0.6
+	maxFallbackConfidence     = 0.7
+)
 
 // Build derives typed relationships between canonical entities that share a source document.
 //
@@ -69,10 +76,11 @@ func classify(a, b types.Entity) types.Relationship {
 	if kind, from, to, ok := typedKind(a, b); ok {
 		return edge(from, to, kind, 0.8)
 	}
-	if isLowConfidenceRegexOnly(a, b) {
+	confidence, ok := fallbackConfidence(a, b)
+	if !ok {
 		return types.Relationship{}
 	}
-	return edge(a, b, types.CoOccursInDocument, 0.5)
+	return edge(a, b, types.CoOccursInDocument, confidence)
 }
 
 // typedKind returns the delivery-semantic edge for a pair, oriented from->to, when one applies.
@@ -120,9 +128,57 @@ func relationshipID(fromID, toID string, kind types.RelationshipKind) string {
 	return fmt.Sprintf("%s->%s:%s", fromID, toID, kind)
 }
 
-func isLowConfidenceRegexOnly(a, b types.Entity) bool {
-	if a.ExtractionMethod != "regex_token" || b.ExtractionMethod != "regex_token" {
+func fallbackConfidence(a, b types.Entity) (float64, bool) {
+	if isLowSignalFallbackEndpoint(a) || isLowSignalFallbackEndpoint(b) {
+		return 0, false
+	}
+
+	aConfidence := endpointConfidence(a)
+	bConfidence := endpointConfidence(b)
+	aRegex := isRegexToken(a)
+	bRegex := isRegexToken(b)
+
+	if (aRegex && aConfidence < 0.7) || (bRegex && bConfidence < 0.7) {
+		return 0, false
+	}
+	if aRegex && bRegex && (aConfidence < 0.75 || bConfidence < 0.75) {
+		return 0, false
+	}
+
+	return clamp((aConfidence+bConfidence)/2, minFallbackConfidence, maxFallbackConfidence), true
+}
+
+func isLowSignalFallbackEndpoint(entity types.Entity) bool {
+	name := strings.ToLower(strings.TrimSpace(entity.Name))
+	if name == "" {
+		return true
+	}
+
+	switch name {
+	case "content", "data", "description", "field", "id", "item", "metadata", "name", "object", "record", "status", "type", "value":
+		return true
+	default:
 		return false
 	}
-	return a.Confidence < 0.6 || b.Confidence < 0.6
+}
+
+func endpointConfidence(entity types.Entity) float64 {
+	if entity.Confidence <= 0 {
+		return unknownEndpointConfidence
+	}
+	return entity.Confidence
+}
+
+func isRegexToken(entity types.Entity) bool {
+	return entity.ExtractionMethod == "regex_token"
+}
+
+func clamp(value, min, max float64) float64 {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }

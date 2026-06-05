@@ -50,11 +50,19 @@ For each same-source pair:
 
 - Skip the pair if `SourceID` differs.
 - Orient and type the edge using the relationship-kind vocabulary below.
-- Fall back to `co_occurs_in_document` when no typed delivery rule applies and the pair is not low-confidence regex-only noise.
+- Fall back to `co_occurs_in_document` only when no typed delivery rule applies and the pair passes the deterministic fallback quality gate.
 - Create relationship ID as `from.ID + "->" + to.ID + ":" + kind` so distinct edge kinds never collide.
-- Set `Confidence` (0.8 for typed edges, 0.5 for co-occurrence) and `Evidence` (`source#name` for both endpoints).
+- Set `Confidence` (0.8 for typed edges; co-occurrence confidence clamped to `0.6`-`0.7` from endpoint confidence) and `Evidence` (`source#name` for both endpoints).
 - Store `source_id` metadata.
 - Drop edges that fail `Validate` (empty endpoints, self-loops, or empty kind) so invalid edges never reach storage.
+
+The fallback quality gate applies only to `co_occurs_in_document` edges. It drops fallback pairs
+when either endpoint name is blank or a common low-signal label such as `status`, `field`, or
+`content`; when either endpoint came from `regex_token` extraction with confidence below `0.7`;
+or when both endpoints are `regex_token` and either confidence is below `0.75`. Missing or zero
+endpoint confidence is treated as unknown `0.6`, so absence of a score does not become strong
+fallback evidence. This improves persisted graph cleanliness at relationship generation time; it
+does not change identity resolution or merge decisions.
 
 For each accepted assistant proposal:
 
@@ -112,7 +120,7 @@ contextGraph.AddRelationships(relationships)
 ## Implementation Notes
 
 - Typed edges model real delivery semantics (requirement → api → db, service → dependency); untyped pairs degrade to co-occurrence only when they have enough provenance signal.
-- Low-confidence `regex_token` dependency pairs no longer emit generic `co_occurs_in_document` links, which keeps stopword-like persisted entities from outranking delivery entities.
+- Weak `regex_token` endpoints and common-label entities no longer emit generic `co_occurs_in_document` links, which keeps noisy persisted entities from outranking delivery entities.
 - Relationship kinds are a stable `types.RelationshipKind` vocabulary documented above.
 - Confidence and evidence are populated on every edge so reasoning findings can point back to source evidence.
 - `Validate` enforces graph constraints so invalid edges do not silently enter persistent storage.

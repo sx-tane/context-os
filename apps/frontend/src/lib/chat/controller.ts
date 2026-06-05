@@ -52,6 +52,18 @@ export function assistantMsg(
   };
 }
 
+export function formatAssistantResultText(result: ChatQueryResult) {
+  const summary = result.summary?.trim() ?? "";
+  const answer = result.answer?.trim() ?? "";
+  if (!summary) return answer;
+
+  const distinctAnswer = distinctDetail(summary, answer);
+  if (!distinctAnswer) {
+    return `**Summary**\n${summary}`;
+  }
+  return `**Summary**\n${summary}\n\n**Answer**\n${distinctAnswer}`;
+}
+
 export function loadingMsg(text: string): ChatMessage {
   return {
     id: makeId(),
@@ -171,7 +183,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
       options.setActivityArtifacts(result.artifacts);
       options.replaceMessage(
         load.id,
-        assistantMsg(result.answer, {
+        assistantMsg(formatAssistantResultText(result), {
           kind: "query",
           chatResult: result,
         }),
@@ -212,7 +224,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
         },
         onAnswer: (result) => {
           streamedAnswer = result;
-          streamedAnswerText = result.answer;
+          streamedAnswerText = formatAssistantResultText(result);
           options.setLastChatResult(result);
           stream = { ...stream, summary: buildStreamSummary(result) };
           options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
@@ -237,7 +249,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
         options.replaceMessage(
           load.id,
           {
-            ...assistantMsg(failedResult.answer, {
+            ...assistantMsg(formatAssistantResultText(failedResult), {
               kind: "query",
               chatResult: failedResult,
             }),
@@ -277,7 +289,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
       options.replaceMessage(
         load.id,
         {
-          ...assistantMsg(finalStreamedResult.answer, {
+          ...assistantMsg(formatAssistantResultText(finalStreamedResult), {
             kind: "query",
             chatResult: finalStreamedResult,
           }),
@@ -306,7 +318,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
       options.replaceMessage(
         load.id,
         {
-          ...assistantMsg(res.body.answer, {
+          ...assistantMsg(formatAssistantResultText(res.body), {
             kind: "query",
             chatResult: res.body,
           }),
@@ -391,6 +403,23 @@ function previewAnswer(answer: string) {
   const clean = answer.trim().replace(/\s+/g, " ");
   if (!clean) return "";
   return clean.length > 160 ? `${clean.slice(0, 157)}...` : clean;
+}
+
+function distinctDetail(summary: string, answer: string) {
+  if (!answer) return "";
+  if (normalizeText(answer) === normalizeText(summary)) return "";
+
+  const trimmedAnswer = answer.trim();
+  const trimmedSummary = summary.trim();
+  if (normalizeText(trimmedAnswer).startsWith(normalizeText(trimmedSummary))) {
+    const remainder = trimmedAnswer.slice(trimmedSummary.length).trim();
+    return remainder.replace(/^[\s:.;,-]+/, "").trim();
+  }
+  return trimmedAnswer;
+}
+
+function normalizeText(text: string) {
+  return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function finalStreamSummary(result: ChatQueryResult) {

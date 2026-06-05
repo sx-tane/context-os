@@ -269,7 +269,12 @@ export interface AnalysisBasketPayload {
   items: EvidenceBasketItem[];
 }
 
-export type FindingActionStatus = "open" | "checking" | "done";
+export type FindingActionStatus =
+  | "open"
+  | "checking"
+  | "done"
+  | "ignored"
+  | "false_positive";
 
 export interface FindingActionItem {
   findingId: string;

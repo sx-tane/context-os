@@ -27,7 +27,7 @@ HTTP handlers for registering, resetting, deleting, listing, inspecting, and sav
 - Connected external source setup writes `connector_syncs` with `status="connected"`, `event_count=0`, and `last_synced_at=nil`; it does not ingest content or create findings.
 - UI-state endpoints require a workspace path or ID, store JSON by stable state keys, and return empty typed payloads when no row has been saved yet.
 - `analysis_basket` items require `id`, `connector`, `uri`, `label`, `origin`, and `addedAt`; optional fields preserve the source artifact or chat message that added the item.
-- `finding_actions` items require `findingId`, `status`, and `updatedAt`; supported statuses are `open`, `checking`, and `done`.
+- `finding_actions` items require `findingId`, `status`, and `updatedAt`; supported statuses are `open`, `checking`, `done`, `ignored`, and `false_positive`.
 - `DELETE /workspace` verifies the workspace row is gone before returning success; the frontend should not clear local state when this endpoint fails.
 - Reset/delete cleanup removes `storage/parsed/<workspace_id>/`, `storage/snapshots/<workspace_id>.json`, `storage/snapshots/<workspace_id>_*.json`, and the stored Codex chat session pointer under `storage/codex-chat-sessions/` when local artifact/session directories are configured.
 - Keep detailed status counts best-effort so missing optional repositories do not hide the core workspace status.

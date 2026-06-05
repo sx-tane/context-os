@@ -94,12 +94,28 @@ func TestBuildEmitsTypedDeliveryEdges(t *testing.T) {
 			wantTo:   "d:api",
 		},
 		{
+			name:     "requirement affects service",
+			from:     canonical("d:req", "d", types.Requirement, "checkout"),
+			to:       canonical("d:svc", "d", types.Service, "billing"),
+			wantKind: types.RequirementAffectsService,
+			wantFrom: "d:req",
+			wantTo:   "d:svc",
+		},
+		{
 			name:     "api backed by db",
 			from:     canonical("d:api", "d", types.APIField, "amount"),
 			to:       canonical("d:col", "d", types.DBColumn, "amount_cents"),
 			wantKind: types.APIBackedByDB,
 			wantFrom: "d:api",
 			wantTo:   "d:col",
+		},
+		{
+			name:     "enum constrains field",
+			from:     canonical("d:enum", "d", types.Enum, "approved"),
+			to:       canonical("d:api", "d", types.APIField, "status"),
+			wantKind: types.EnumConstrainsField,
+			wantFrom: "d:enum",
+			wantTo:   "d:api",
 		},
 		{
 			name:     "service depends on dependency",
@@ -145,6 +161,24 @@ func TestBuildEmitsTypedDeliveryEdges(t *testing.T) {
 	}
 }
 
+// TestBuildKeepsTypedDeliveryEdgesWithWeakEndpointConfidence verifies typed rules bypass the fallback quality gate.
+func TestBuildKeepsTypedDeliveryEdgesWithWeakEndpointConfidence(t *testing.T) {
+	input := []entities.CanonicalEntity{
+		{Entity: types.Entity{ID: "d:req", SourceID: "d", Type: types.Requirement, Name: "checkout requirement", ExtractionMethod: "regex_token", Confidence: 0.2}},
+		{Entity: types.Entity{ID: "d:api", SourceID: "d", Type: types.APIField, Name: "status"}},
+	}
+
+	got := relationship.Build(input)
+
+	rel, ok := findKind(got, types.RequirementAffectsAPI)
+	if !ok {
+		t.Fatalf("Build() missing typed edge, got %+v", got)
+	}
+	if rel.FromID != "d:req" || rel.ToID != "d:api" {
+		t.Fatalf("typed edge endpoints = %q -> %q, want d:req -> d:api", rel.FromID, rel.ToID)
+	}
+}
+
 // TestBuildFallsBackToCoOccurrence verifies untyped pairs still produce an auditable edge.
 func TestBuildFallsBackToCoOccurrence(t *testing.T) {
 	input := []entities.CanonicalEntity{
@@ -158,22 +192,94 @@ func TestBuildFallsBackToCoOccurrence(t *testing.T) {
 	if !ok {
 		t.Fatalf("Build() missing co-occurrence edge, got %+v", got)
 	}
-	if rel.Confidence != 0.5 {
-		t.Errorf("Confidence = %v, want 0.5", rel.Confidence)
+	if rel.Confidence < 0.6 {
+		t.Errorf("Confidence = %v, want >= 0.6", rel.Confidence)
 	}
 }
 
-// TestBuildSkipsLowConfidenceRegexOnlyCoOccurrence verifies generic regex-only dependency pairs do not create noisy edges.
-func TestBuildSkipsLowConfidenceRegexOnlyCoOccurrence(t *testing.T) {
+// TestBuildSkipsLowConfidenceRegexTokenCoOccurrence verifies weak regex-token endpoints do not create noisy edges.
+func TestBuildSkipsLowConfidenceRegexTokenCoOccurrence(t *testing.T) {
+	tests := []struct {
+		name string
+		a    entities.CanonicalEntity
+		b    entities.CanonicalEntity
+	}{
+		{
+			name: "single weak regex token",
+			a:    entities.CanonicalEntity{Entity: types.Entity{ID: "d:dep1", SourceID: "d", Type: types.Dependency, Name: "kafka", ExtractionMethod: "regex_token", Confidence: 0.58}},
+			b:    entities.CanonicalEntity{Entity: types.Entity{ID: "d:dep2", SourceID: "d", Type: types.Dependency, Name: "redis", Confidence: 0.9}},
+		},
+		{
+			name: "both regex tokens below pair threshold",
+			a:    entities.CanonicalEntity{Entity: types.Entity{ID: "d:dep1", SourceID: "d", Type: types.Dependency, Name: "kafka", ExtractionMethod: "regex_token", Confidence: 0.74}},
+			b:    entities.CanonicalEntity{Entity: types.Entity{ID: "d:dep2", SourceID: "d", Type: types.Dependency, Name: "redis", ExtractionMethod: "regex_token", Confidence: 0.74}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := relationship.Build([]entities.CanonicalEntity{tt.a, tt.b})
+			if _, ok := findKind(got, types.CoOccursInDocument); ok {
+				t.Errorf("Build() emitted low-confidence regex co-occurrence edge: %+v", got)
+			}
+		})
+	}
+}
+
+// TestBuildSkipsCommonLabelCoOccurrence verifies generic endpoint names do not create fallback edges.
+func TestBuildSkipsCommonLabelCoOccurrence(t *testing.T) {
+	tests := []struct {
+		name string
+		a    entities.CanonicalEntity
+		b    entities.CanonicalEntity
+	}{
+		{
+			name: "status",
+			a:    canonical("d:dep1", "d", types.Dependency, "status"),
+			b:    canonical("d:dep2", "d", types.Dependency, "redis"),
+		},
+		{
+			name: "field",
+			a:    canonical("d:dep1", "d", types.Dependency, "kafka"),
+			b:    canonical("d:dep2", "d", types.Dependency, "field"),
+		},
+		{
+			name: "content",
+			a:    canonical("d:dep1", "d", types.Dependency, "content"),
+			b:    canonical("d:dep2", "d", types.Dependency, "redis"),
+		},
+		{
+			name: "blank",
+			a:    canonical("d:dep1", "d", types.Dependency, ""),
+			b:    canonical("d:dep2", "d", types.Dependency, "redis"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := relationship.Build([]entities.CanonicalEntity{tt.a, tt.b})
+			if _, ok := findKind(got, types.CoOccursInDocument); ok {
+				t.Errorf("Build() emitted common-label co-occurrence edge: %+v", got)
+			}
+		})
+	}
+}
+
+// TestBuildKeepsHighConfidenceRegexTokenCoOccurrence verifies strong fallback evidence is retained with bounded confidence.
+func TestBuildKeepsHighConfidenceRegexTokenCoOccurrence(t *testing.T) {
 	input := []entities.CanonicalEntity{
-		{Entity: types.Entity{ID: "d:dep1", SourceID: "d", Type: types.Dependency, Name: "kafka", ExtractionMethod: "regex_token", Confidence: 0.58}},
-		{Entity: types.Entity{ID: "d:dep2", SourceID: "d", Type: types.Dependency, Name: "redis", ExtractionMethod: "regex_token", Confidence: 0.58}},
+		{Entity: types.Entity{ID: "d:dep1", SourceID: "d", Type: types.Dependency, Name: "kafka", ExtractionMethod: "regex_token", Confidence: 0.82}},
+		{Entity: types.Entity{ID: "d:dep2", SourceID: "d", Type: types.Dependency, Name: "redis", ExtractionMethod: "regex_token", Confidence: 0.76}},
 	}
 
 	got := relationship.Build(input)
 
-	if _, ok := findKind(got, types.CoOccursInDocument); ok {
-		t.Fatalf("Build() emitted low-confidence regex co-occurrence edge: %+v", got)
+	rel, ok := findKind(got, types.CoOccursInDocument)
+	if !ok {
+		t.Fatalf("Build() missing high-confidence co-occurrence edge, got %+v", got)
+	}
+	if rel.Confidence < 0.6 || rel.Confidence > 0.7 {
+		t.Errorf("Confidence = %v, want between 0.6 and 0.7", rel.Confidence)
 	}
 }
 

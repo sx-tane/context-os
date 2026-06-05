@@ -24,9 +24,17 @@
     } from "$lib/findings/viewModel";
     import {
         findingActionFor,
+        findingActionLabel,
         findingShareText,
+        isFindingVisible,
         nextFindingActionStatus,
+        uniqueFindings,
     } from "$lib/workflow/viewModel";
+
+    type FindingStatusFilter =
+        | "active"
+        | "all"
+        | FindingActionStatus;
 
     export let lastFindings: FindingsResult | null = null;
     export let lastAnalysisAt = "";
@@ -41,6 +49,8 @@
         status: FindingActionStatus,
     ) => void | Promise<void> = () => {};
     export let onCopyFinding: (text: string) => void | Promise<void> = () => {};
+
+    let statusFilter: FindingStatusFilter = "active";
 
     function shouldShowStatusNote(status: InsightStatus | null) {
         return status !== null && status.findingsState !== "current";
@@ -85,6 +95,13 @@
         return String(mismatch.id ?? findingSummary(mismatch));
     }
 
+    $: allFindings = uniqueFindings(lastFindings?.mismatches ?? []);
+    $: visibleFindings = allFindings.filter((mismatch) => {
+        const action = findingActionFor(findingActions, findingID(mismatch));
+        return isFindingVisible(action, statusFilter);
+    });
+    $: hiddenFindingCount = allFindings.length - visibleFindings.length;
+
     function evidenceIsURL(value: string) {
         return /^https?:\/\//i.test(value);
     }
@@ -92,6 +109,26 @@
 
 <div class="findings-view">
     {#if lastFindings?.mismatches?.length}
+        <div class="finding-toolbar">
+            <label>
+                <span>Status</span>
+                <select bind:value={statusFilter}>
+                    <option value="active">Active</option>
+                    <option value="open">Open</option>
+                    <option value="checking">Checking</option>
+                    <option value="done">Done</option>
+                    <option value="ignored">Ignored</option>
+                    <option value="false_positive">False positive</option>
+                    <option value="all">All</option>
+                </select>
+            </label>
+            <small>
+                {visibleFindings.length}/{allFindings.length} shown
+                {#if hiddenFindingCount > 0}
+                    · {hiddenFindingCount} hidden by filter
+                {/if}
+            </small>
+        </div>
         {#if shouldShowStatusNote(insightStatus)}
             <div
                 class="findings-state-row"
@@ -109,7 +146,13 @@
                 {/if}
             </div>
         {/if}
-        {#each lastFindings.mismatches.slice(0, 6) as mismatch}
+        {#if visibleFindings.length === 0}
+            <div class="empty-state">
+                <strong>No findings in this filter</strong>
+                <p>Change the status filter to see hidden, ignored, or false-positive findings.</p>
+            </div>
+        {/if}
+        {#each visibleFindings.slice(0, 12) as mismatch}
             {@const id = findingID(mismatch)}
             {@const action = findingActionFor(findingActions, id)}
             <article>
@@ -136,19 +179,41 @@
                 <div class="finding-checklist">
                     <div>
                         <small>Action status</small>
-                        <strong>{action.status}</strong>
+                        <strong>{findingActionLabel(action.status)}</strong>
                     </div>
                     <div class="finding-checklist-actions">
-                        <button
-                            type="button"
-                            on:click={() =>
-                                onSetFindingAction(
-                                    id,
-                                    nextFindingActionStatus(action.status),
-                                )}
-                        >
-                            Mark {nextFindingActionStatus(action.status)}
-                        </button>
+                        {#if action.status === "ignored" || action.status === "false_positive"}
+                            <button
+                                type="button"
+                                on:click={() => onSetFindingAction(id, "open")}
+                            >
+                                Reopen
+                            </button>
+                        {:else}
+                            <button
+                                type="button"
+                                on:click={() =>
+                                    onSetFindingAction(
+                                        id,
+                                        nextFindingActionStatus(action.status),
+                                    )}
+                            >
+                                Mark {findingActionLabel(nextFindingActionStatus(action.status))}
+                            </button>
+                            <button
+                                type="button"
+                                on:click={() => onSetFindingAction(id, "ignored")}
+                            >
+                                Hide
+                            </button>
+                            <button
+                                type="button"
+                                class="danger"
+                                on:click={() => onSetFindingAction(id, "false_positive")}
+                            >
+                                False positive
+                            </button>
+                        {/if}
                         <button
                             type="button"
                             on:click={() => onCopyFinding(findingShareText(mismatch, action))}
@@ -219,9 +284,34 @@
 
     .findings-view article,
     .findings-state-row,
-    .empty-state {
+    .empty-state,
+    .finding-toolbar {
         border-bottom: 1px solid #d7d2c8;
         padding: 14px 0;
+    }
+
+    .finding-toolbar {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 14px;
+        padding-top: 0;
+    }
+
+    .finding-toolbar label {
+        display: grid;
+        gap: 4px;
+        min-width: 180px;
+    }
+
+    .finding-toolbar select {
+        border: 0;
+        border-bottom: 1px solid #bdb7a8;
+        border-radius: 0;
+        background: transparent;
+        color: #1c1b18;
+        font: inherit;
+        padding: 4px 0;
     }
 
     .findings-view span {
@@ -327,6 +417,10 @@
 
     .finding-checklist button:hover {
         border-bottom-color: #1c1b18;
+    }
+
+    .finding-checklist button.danger {
+        color: #9c3f2d;
     }
 
     .finding-evidence {
