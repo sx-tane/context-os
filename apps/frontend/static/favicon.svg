@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ContextOS favicon">
+  <rect width="64" height="64" rx="14" fill="#1c1b18"/>
+  <path d="M38.5 17.5a17.5 17.5 0 1 0 0 29" fill="none" stroke="#ebe8e0" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="41" cy="20" r="4.5" fill="#d9b36c"/>
+  <circle cx="47" cy="32" r="4.5" fill="#7f9f8a"/>
+  <circle cx="41" cy="44" r="4.5" fill="#b96b5b"/>
+  <path d="M41 20l6 12-6 12M22 32h25" fill="none" stroke="#ebe8e0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".82"/>
+  <circle cx="22" cy="32" r="5" fill="#ebe8e0"/>
+  <circle cx="22" cy="32" r="2.1" fill="#1c1b18"/>
+</svg>
