@@ -114,6 +114,7 @@
         background-size: 200% 100%;
         color: #1c1b18;
         font-size: 11px;
+        padding: 5px 12px;
         transition:
             background-position 0.18s ease,
             color 0.15s,
