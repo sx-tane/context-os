@@ -56,13 +56,14 @@ export function assistantMsg(
 export function formatAssistantResultText(result: ChatQueryResult) {
   const summary = result.summary?.trim() ?? "";
   const answer = result.answer?.trim() ?? "";
+  if (!answer) return summary;
   if (!summary) return answer;
 
-  const distinctAnswer = distinctDetail(summary, answer);
-  if (!distinctAnswer) {
-    return `**Summary**\n${summary}`;
+  const distinctSummary = distinctDetail(answer, summary);
+  if (!distinctSummary) {
+    return answer;
   }
-  return `**Summary**\n${summary}\n\n**Answer**\n${distinctAnswer}`;
+  return `${answer}\n\n**Source summary**\n${distinctSummary}`;
 }
 
 export function loadingMsg(text: string): ChatMessage {

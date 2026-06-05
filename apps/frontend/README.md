@@ -37,6 +37,10 @@ Projects are keyed by **workspace folder path** (stored in `localStorage` and mi
 
 Natural language source questions do not fall back to findings. If live Codex lookup fails, the answer says so before using local artifacts. If no matching local artifact exists, the answer says no local data was found. Broad connector lookups such as `jira` or `github` remain read-only; concrete sources such as `BKGDEV-8466`, Jira browse URLs, GitHub repositories, Slack channels, and docs show a compact `Local DB:` save status. Live chat does not impose a fixed API timeout; the request runs until Codex returns or the browser cancels it. Activity refreshes after a saved live answer and includes an explicit **Clean noisy live evidence** action for old regex-generated rows, while Graph and Findings update only after the user runs analysis.
 
+Chat replies are answer-first: the direct answer appears before any source summary, and stream or trace details stay collapsed in the transcript. Analysis completion replies show counts plus the top three actionable issues; the full decision queue lives in the Findings tab.
+
+Findings shows actionable top issues by default, grouped by topic. Generic service dependency rows are quieter Review candidates, counted separately and hidden behind a collapsed section so dependency-only graphs show `0 findings` plus candidate count instead of a medium-severity feed.
+
 ## Initial Knowledge Installment
 
 The `KnowledgeInstall` component (`src/lib/components/knowledge/KnowledgeInstall.svelte`) is the core first-run flow:

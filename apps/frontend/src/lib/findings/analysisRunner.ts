@@ -4,6 +4,11 @@ import {
   buildFindingsRunSummary,
   type FindingsFailure,
 } from "$lib/findings/aggregator";
+import {
+  findingSummary,
+  reviewCandidateCount,
+  topActionableFindings,
+} from "$lib/findings/viewModel";
 import { DEMO_WORKSPACE_PATH } from "$lib/workspace/projectStore";
 import type {
   Artifact,
@@ -56,6 +61,7 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
     options.addMessage(
       assistantMsg(formatAnalysisResultMessage(
         "Demo analysis complete for 3 selected sources. Found 2 findings.",
+        findings,
       ), {
         kind: "findings",
         findingsResult: findings,
@@ -156,11 +162,11 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
         );
         if (res.ok) {
           completed.push(res.body);
-          sourceStatuses[index] = {
-            ...sourceStatuses[index],
-            status: "done",
-            detail: `${res.body.event_count ?? 0} events, ${res.body.mismatch_count ?? res.body.mismatches?.length ?? 0} findings`,
-          };
+      sourceStatuses[index] = {
+        ...sourceStatuses[index],
+        status: "done",
+        detail: `${res.body.event_count ?? 0} events, ${res.body.mismatch_count ?? res.body.mismatches?.length ?? 0} findings, ${res.body.review_candidate_count ?? res.body.review_candidates?.length ?? 0} candidates`,
+      };
         } else {
           const message = findingsErrorMessage(res.body);
           failures.push({
@@ -229,7 +235,7 @@ export async function runAnalysis(options: AnalysisRunnerOptions) {
 
     options.replaceMessage(
       load.id,
-      assistantMsg(formatAnalysisResultMessage(summary), {
+      assistantMsg(formatAnalysisResultMessage(summary, aggregated), {
         kind: "findings",
         findingsResult: aggregated ?? undefined,
       }),
@@ -273,11 +279,18 @@ export function buildAnalysisProgress(
   return `Running local analysis... ${done}/${statuses.length} complete, ${failed} failed${cancelText}${skipText}.\n${lines.join("\n")}`;
 }
 
-export function formatAnalysisResultMessage(summary: string) {
+export function formatAnalysisResultMessage(
+  summary: string,
+  result: FindingsResult | null = null,
+) {
   const [headline = "", ...detailSections] = summary.trim().split(/\n{2,}/);
   const details = detailSections.join("\n\n").trim();
-  const answer = analysisAnswerText(headline);
-  return `**Summary**\n${headline.trim()}\n\n**Answer**\n${[answer, details].filter(Boolean).join("\n\n")}`;
+  const answer = analysisAnswerText(headline, result);
+  const sections = [answer];
+  if (details) {
+    sections.push(`**Run details**\n${details}`);
+  }
+  return sections.filter(Boolean).join("\n\n");
 }
 
 export function analysisProvider(connector: ConnectorKind) {
@@ -311,18 +324,35 @@ function markCanceled(statuses: AnalysisSourceStatus[], startIndex: number) {
   }
 }
 
-function analysisAnswerText(headline: string) {
+function analysisAnswerText(headline: string, result: FindingsResult | null) {
   const lower = headline.toLowerCase();
   if (lower.includes("analysis skipped")) {
     return "No concrete source was ready for analysis. Ask chat about a specific ticket, channel, repo, PR, document, folder, or file so saved evidence can become analysis-ready.";
   }
-  if (lower.includes("found ")) {
-    return "The Findings preview is attached with the detected mismatch signals and source details for follow-up.";
+  if (result) {
+    const actionableCount = result.mismatch_count ?? result.mismatches?.length ?? 0;
+    const candidateCount = reviewCandidateCount(result);
+    const sourceLabel = result.uri || "completed sources";
+    const top = topActionableFindings(result, 3);
+    const lines = [
+      `${headline.trim()} Open Findings for the full decision queue.`,
+      `Counts: ${actionableCount} actionable findings, ${candidateCount} review candidates, ${sourceLabel}.`,
+    ];
+    if (top.length > 0) {
+      lines.push(
+        `**Top issues**\n${top
+          .map((finding, index) => `${index + 1}. ${findingSummary(finding)}`)
+          .join("\n")}`,
+      );
+    } else {
+      lines.push("No top actionable issues were detected. Dependency-only signals are kept under Review candidates.");
+    }
+    return lines.join("\n\n");
   }
   if (lower.includes("no mismatch signals")) {
-    return "No mismatch signals were detected in the completed sources. Source counts, skipped scopes, and failures are listed below when applicable.";
+    return `${headline.trim()} Source counts, skipped scopes, and failures are listed below when applicable.`;
   }
-  return "Review the attached analysis details and source status before taking follow-up action.";
+  return headline.trim() || "Review the analysis details and source status before taking follow-up action.";
 }
 
 function findingsErrorMessage(body: { error?: string; message?: string; examples?: string[] }) {

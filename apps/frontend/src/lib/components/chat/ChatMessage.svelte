@@ -1,5 +1,9 @@
 <script lang="ts">
     import type { ChatMessage } from "$lib/types";
+    import {
+        reviewCandidateCount,
+        topActionableFindings,
+    } from "$lib/findings/viewModel";
 
     export let message: ChatMessage;
 
@@ -66,16 +70,17 @@
 
                 {#if card.kind === "findings" && card.findingsResult}
                     {@const f = card.findingsResult}
+                    {@const topFindings = topActionableFindings(f, 3)}
                     <div class="card findings-card">
                         <h4>Findings — {f.role}</h4>
                         <p class="summary">{f.summary}</p>
                         <p>
-                            <strong>{f.mismatch_count}</strong> mismatches ·
-                            confidence based on {f.mismatches?.length ?? 0} items
+                            <strong>{f.mismatch_count ?? topFindings.length}</strong> top issues ·
+                            {reviewCandidateCount(f)} review candidates
                         </p>
-                        {#if f.mismatches?.length}
+                        {#if topFindings.length}
                             <ul class="mismatches">
-                                {#each f.mismatches.slice(0, 5) as m}
+                                {#each topFindings as m}
                                     <li class={severityClass(m.severity)}>
                                         <strong>{m.severity ?? "review"}</strong> · {m.summary ?? m.description ?? m.type ?? m.id}
                                         {#if m.recommended}
@@ -85,14 +90,6 @@
                                         {/if}
                                     </li>
                                 {/each}
-                                {#if f.mismatches.length > 5}
-                                    <li class="more">
-                                        <a href="/findings"
-                                            >View all {f.mismatches.length} findings
-                                            →</a
-                                        >
-                                    </li>
-                                {/if}
                             </ul>
                         {/if}
                     </div>
@@ -293,10 +290,6 @@
         color: #2563eb;
         font-size: 0.78rem;
         margin-top: 2px;
-    }
-    .more a {
-        color: #2563eb;
-        font-size: 0.78rem;
     }
 
     .summary {

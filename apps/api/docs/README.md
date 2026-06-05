@@ -27,7 +27,7 @@ Last regenerated to include workspace-scoped source, chat, graph, presentation, 
 - `response.ChatQuery.evidence_save_status`, `evidence_event_count`, and `evidence_save_error` document live-chat evidence persistence into the Local DB.
 - `/artifacts/live-evidence/cleanup` documents explicit cleanup of old noisy `live_chat_answer` rows.
 - `/graph` documents flattened graph entities, persisted relationship edges, and the `include_noise` query option for low-signal graph debugging.
-- `response.PresentationFindings` includes `entity_count` and `relationship_count` for presentation/finding summaries and generated frontend typings.
+- `response.PresentationFindings` includes `entity_count`, `relationship_count`, `review_candidates`, and `review_candidate_count` so generated frontend typings can separate actionable findings from low-signal dependency review candidates.
 - Google Drive connector docs include status and ingest endpoints for Docs, Sheets, and Slides sources.
 
 ## Verification

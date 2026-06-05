@@ -12,7 +12,9 @@
         findingSummary,
         formatTime,
         markdownBulletList,
+        reviewCandidateCount,
         severityLabel,
+        topActionableFindings,
     } from "$lib/findings/viewModel";
     import {
         askChatPromptForEvidence,
@@ -420,24 +422,33 @@
                             {/each}
                         </details>
                     {/if}
-                    {#if message.card?.findingsResult?.mismatches?.length}
+                    {#if message.card?.findingsResult}
+                        {@const topFindings = topActionableFindings(message.card.findingsResult, 3)}
                         <details>
-                            <summary>{message.card.findingsResult.mismatch_count ?? message.card.findingsResult.mismatches.length} findings</summary>
-                            {#each message.card.findingsResult.mismatches.slice(0, 5) as mismatch}
-                                <div class="evidence-item">
-                                    <div class="finding-preview-head">
-                                        <span>{severityLabel(mismatch.severity)}</span>
-                                        <strong>{findingSummary(mismatch)}</strong>
+                            <summary>
+                                {message.card.findingsResult.mismatch_count ?? topFindings.length} top issues · {reviewCandidateCount(message.card.findingsResult)} review candidates
+                            </summary>
+                            {#if topFindings.length}
+                                {#each topFindings as mismatch}
+                                    <div class="evidence-item">
+                                        <div class="finding-preview-head">
+                                            <span>{severityLabel(mismatch.severity)}</span>
+                                            <strong>{findingSummary(mismatch)}</strong>
+                                        </div>
+                                        <p>{findingDescription(mismatch)}</p>
+                                        {#if findingImpact(mismatch)}
+                                            <p><b>Impact:</b> {findingImpact(mismatch)}</p>
+                                        {/if}
+                                        {#if findingRecommendedAction(mismatch)}
+                                            <p><b>Recommended:</b> {findingRecommendedAction(mismatch)}</p>
+                                        {/if}
                                     </div>
-                                    <p>{findingDescription(mismatch)}</p>
-                                    {#if findingImpact(mismatch)}
-                                        <p><b>Impact:</b> {findingImpact(mismatch)}</p>
-                                    {/if}
-                                    {#if findingRecommendedAction(mismatch)}
-                                        <p><b>Recommended:</b> {findingRecommendedAction(mismatch)}</p>
-                                    {/if}
+                                {/each}
+                            {:else}
+                                <div class="evidence-item">
+                                    <p>No top actionable issues. Dependency-only signals are under Review candidates.</p>
                                 </div>
-                            {/each}
+                            {/if}
                         </details>
                     {/if}
                 </article>

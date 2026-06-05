@@ -41,7 +41,7 @@ Reasoning currently runs four deterministic rules:
 - `keyword_signal`: emit when entity names contain `missing`, `mismatch`, or `outdated`.
 - `requirement_gap`: emit when a `Requirement` shares an evidence scope with API or service entities but has no `requirement_affects_api` or `requirement_affects_service` edge.
 - `cross_layer_contract_drift`: emit when an `APIField` has explicit contract exposure context (typed edge other than `co_occurs_in_document`) but no `api_backed_by_db` edge.
-- `dependency_risk`: emit for every `service_depends_on` edge.
+- `dependency_review`: emit for every `service_depends_on` edge as a low-severity review candidate, not a top actionable finding.
 
 For keyword findings, the emitted mismatch uses:
 
@@ -80,6 +80,19 @@ flowchart TD
   presentation --> reasoning
   pipeline --> reasoning
 ```
+
+## Presentation Split
+
+```mermaid
+flowchart LR
+  graph[Context graph] --> rules[Reasoning rules]
+  rules --> actionable[Actionable mismatches]
+  rules --> candidates[Review candidates]
+  actionable --> top[Findings top issues]
+  candidates --> review[Collapsed dependency review]
+```
+
+The reasoning stage still emits dependency review rows with evidence, confidence, impact, affected roles, and recommendations so provenance is preserved. The presentation API separates those rows into `review_candidates` and keeps `mismatches` for actionable findings only.
 
 ## Example Usage
 

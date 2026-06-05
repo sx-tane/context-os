@@ -10,6 +10,10 @@ import {
   buildAnalysisSources,
   type SkippedAnalysisSource,
 } from "$lib/sources/analysisEligibility";
+import {
+  actionableFindingCount,
+  reviewCandidateCount,
+} from "$lib/findings/viewModel";
 
 export type FindingsInsightState =
   | "not_run"
@@ -44,6 +48,7 @@ export interface InsightStatus {
   graphLabel: string;
   graphRefreshLabel: string;
   findingCount: number;
+  reviewCandidateCount: number;
   lastAnalysisAt: string;
   lastAnalysisLabel: string;
   findingsState: FindingsInsightState;
@@ -73,6 +78,7 @@ export function buildInsightStatus({
   const graphLinkCount = graphData?.relationship_count ?? graphData?.relationships?.length ?? 0;
   const hasGraphContext = graphNodeCount > 0 || graphLinkCount > 0;
   const findingCount = findingsCount(lastFindings);
+  const candidateCount = reviewCandidatesCount(lastFindings);
   const findingsState = deriveFindingsState({
     concreteSourceCount: eligible.length,
     latestActivityAt,
@@ -98,6 +104,7 @@ export function buildInsightStatus({
   const findingsDetailLabel = buildFindingsDetailLabel(
     findingsState,
     findingCount,
+    candidateCount,
     sourceScopeLabel,
   );
   const findingsMessage = buildFindingsMessage(
@@ -123,6 +130,7 @@ export function buildInsightStatus({
     graphLabel,
     graphRefreshLabel,
     findingCount,
+    reviewCandidateCount: candidateCount,
     lastAnalysisAt,
     lastAnalysisLabel: lastAnalysisAt
       ? `last run ${formatInsightTimestamp(lastAnalysisAt)}`
@@ -176,7 +184,12 @@ function timestampAfter(candidate: string, baseline: string) {
 
 function findingsCount(findings: FindingsResult | null) {
   if (!findings) return 0;
-  return findings.mismatch_count ?? findings.mismatches?.length ?? 0;
+  return actionableFindingCount(findings);
+}
+
+function reviewCandidatesCount(findings: FindingsResult | null) {
+  if (!findings) return 0;
+  return reviewCandidateCount(findings);
 }
 
 function buildActivityLabel(count: number) {
@@ -198,11 +211,15 @@ function buildSourceScopeLabel(
 function buildFindingsDetailLabel(
   state: FindingsInsightState,
   findingCount: number,
+  candidateCount: number,
   sourceScopeLabel: string,
 ) {
   if (state === "not_run") return sourceScopeLabel;
   if (state === "no_concrete_sources") return sourceScopeLabel;
-  return `${plural(findingCount, "finding")}; ${sourceScopeLabel}`;
+  const candidateLabel = candidateCount > 0
+    ? `; ${plural(candidateCount, "review candidate")}`
+    : "";
+  return `${plural(findingCount, "finding")}${candidateLabel}; ${sourceScopeLabel}`;
 }
 
 function findingsStateLabel(state: FindingsInsightState) {

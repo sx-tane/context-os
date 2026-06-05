@@ -300,6 +300,79 @@ const docTemplate = `{
                 }
             }
         },
+        "/chat/session/reset": {
+            "post": {
+                "description": "Deletes persisted workspace-scoped Codex chat session metadata without deleting Codex global session files.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Reset workspace chat session",
+                "parameters": [
+                    {
+                        "description": "Chat session reset request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ChatSessionReset"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/codex/login": {
             "post": {
                 "description": "Runs ` + "`" + `codex login --device-auth` + "`" + ` and streams log lines as SSE events.",
@@ -1975,6 +2048,338 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspace/analysis-basket": {
+            "get": {
+                "description": "Persists selected analysis evidence for one workspace.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Read or save the workspace analysis basket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Analysis basket payload",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.AnalysisBasket"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/request.AnalysisBasket"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Persists selected analysis evidence for one workspace.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Read or save the workspace analysis basket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Analysis basket payload",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.AnalysisBasket"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/request.AnalysisBasket"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workspace/finding-actions": {
+            "get": {
+                "description": "Persists finding action statuses for one workspace.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Read or save the workspace finding action checklist",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Finding actions payload",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.FindingActions"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/request.FindingActions"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Persists finding action statuses for one workspace.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "Read or save the workspace finding action checklist",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace path or ID",
+                        "name": "workspace_id",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Finding actions payload",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.FindingActions"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/request.FindingActions"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/workspace/reset": {
             "post": {
                 "description": "Deletes DB-backed local memory and workspace-scoped local JSON artifacts, then recreates an empty workspace row.",
@@ -1995,7 +2400,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/workspace.upsertRequest"
+                            "$ref": "#/definitions/request.WorkspaceUpsert"
                         }
                     }
                 ],
@@ -2056,7 +2461,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/workspace.sourceRequest"
+                            "$ref": "#/definitions/request.WorkspaceSource"
                         }
                     }
                 ],
@@ -2192,7 +2597,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/workspace.upsertRequest"
+                            "$ref": "#/definitions/request.WorkspaceUpsert"
                         }
                     }
                 ],
@@ -2452,6 +2857,51 @@ const docTemplate = `{
                 }
             }
         },
+        "request.AnalysisBasket": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "description": "Items are selected evidence sources for analysis.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/request.AnalysisBasketItem"
+                    }
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is a workspace path or ID.",
+                    "type": "string"
+                }
+            }
+        },
+        "request.AnalysisBasketItem": {
+            "type": "object",
+            "properties": {
+                "addedAt": {
+                    "type": "string"
+                },
+                "artifactId": {
+                    "type": "string"
+                },
+                "connector": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "messageId": {
+                    "type": "string"
+                },
+                "origin": {
+                    "type": "string"
+                },
+                "uri": {
+                    "type": "string"
+                }
+            }
+        },
         "request.ChatQuery": {
             "type": "object",
             "properties": {
@@ -2514,6 +2964,21 @@ const docTemplate = `{
                 }
             }
         },
+        "request.ChatSessionReset": {
+            "type": "object",
+            "properties": {
+                "workspace_id": {
+                    "description": "WorkspaceID is the selected workspace path or stored workspace identifier.",
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                },
+                "workspace_path": {
+                    "description": "WorkspacePath is an optional explicit workspace path; it takes precedence over WorkspaceID.",
+                    "type": "string",
+                    "example": "/home/user/myproject"
+                }
+            }
+        },
         "request.FilesystemIngest": {
             "type": "object",
             "properties": {
@@ -2546,6 +3011,39 @@ const docTemplate = `{
                 "workspace_id": {
                     "type": "string",
                     "example": "/home/user/myproject"
+                }
+            }
+        },
+        "request.FindingActionItem": {
+            "type": "object",
+            "properties": {
+                "findingId": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "request.FindingActions": {
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "description": "Actions are durable finding checklist entries.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/request.FindingActionItem"
+                    }
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is a workspace path or ID.",
+                    "type": "string"
                 }
             }
         },
@@ -2803,6 +3301,40 @@ const docTemplate = `{
                 "workspace_id": {
                     "type": "string",
                     "example": "/home/user/myproject"
+                }
+            }
+        },
+        "request.WorkspaceSource": {
+            "type": "object",
+            "properties": {
+                "connector": {
+                    "description": "Connector is the connector name, e.g. github or jira.",
+                    "type": "string"
+                },
+                "source_uri": {
+                    "description": "SourceURI is the external source URI to save.",
+                    "type": "string"
+                },
+                "uri": {
+                    "description": "URI is accepted for frontend compatibility with existing source forms.",
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is a workspace path or ID.",
+                    "type": "string"
+                }
+            }
+        },
+        "request.WorkspaceUpsert": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "Name is the optional human-readable workspace name.",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Path is the absolute local folder path for the workspace.",
+                    "type": "string"
                 }
             }
         },
@@ -3186,6 +3718,15 @@ const docTemplate = `{
                 "relationship_count": {
                     "type": "integer"
                 },
+                "review_candidate_count": {
+                    "type": "integer"
+                },
+                "review_candidates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Mismatch"
+                    }
+                },
                 "role": {
                     "type": "string"
                 },
@@ -3389,40 +3930,6 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "stable category for the detection rule that produced this finding",
-                    "type": "string"
-                }
-            }
-        },
-        "workspace.sourceRequest": {
-            "type": "object",
-            "properties": {
-                "connector": {
-                    "description": "Connector is the connector name, e.g. github or jira.",
-                    "type": "string"
-                },
-                "source_uri": {
-                    "description": "SourceURI is the external source URI to save.",
-                    "type": "string"
-                },
-                "uri": {
-                    "description": "URI is accepted for frontend compatibility with existing source forms.",
-                    "type": "string"
-                },
-                "workspace_id": {
-                    "description": "WorkspaceID is a workspace path or ID.",
-                    "type": "string"
-                }
-            }
-        },
-        "workspace.upsertRequest": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "description": "Name is the optional human-readable workspace name.",
-                    "type": "string"
-                },
-                "path": {
-                    "description": "Path is the absolute local folder path for the workspace.",
                     "type": "string"
                 }
             }

@@ -21,8 +21,13 @@ export function aggregateFindings(results: FindingsResult[]): FindingsResult | n
   if (results.length === 0) return null;
 
   const mismatches = results.flatMap((result) => result.mismatches ?? []);
+  const reviewCandidates = results.flatMap((result) => result.review_candidates ?? []);
   const mismatchCount = results.reduce(
     (sum, result) => sum + (result.mismatch_count ?? result.mismatches?.length ?? 0),
+    0,
+  );
+  const reviewCandidateCount = results.reduce(
+    (sum, result) => sum + (result.review_candidate_count ?? result.review_candidates?.length ?? 0),
     0,
   );
   const eventCount = results.reduce((sum, result) => sum + (result.event_count ?? 0), 0);
@@ -43,12 +48,14 @@ export function aggregateFindings(results: FindingsResult[]): FindingsResult | n
     trace_id: results.map((result) => result.trace_id).filter(Boolean).join(","),
     summary:
       mismatchCount > 0
-        ? `Aggregated ${mismatchCount} mismatch signal${mismatchCount === 1 ? "" : "s"} across ${results.length} source${results.length === 1 ? "" : "s"}.`
-        : `Analysis ran, no mismatch signals detected across ${results.length} source${results.length === 1 ? "" : "s"}.`,
+        ? `Aggregated ${mismatchCount} actionable finding${mismatchCount === 1 ? "" : "s"} and ${reviewCandidateCount} review candidate${reviewCandidateCount === 1 ? "" : "s"} across ${results.length} source${results.length === 1 ? "" : "s"}.`
+        : `Analysis ran with 0 actionable findings and ${reviewCandidateCount} review candidate${reviewCandidateCount === 1 ? "" : "s"} across ${results.length} source${results.length === 1 ? "" : "s"}.`,
     mismatches,
+    review_candidates: reviewCandidates,
     event_count: eventCount,
     entity_count: entityCount,
     mismatch_count: mismatchCount,
+    review_candidate_count: reviewCandidateCount,
     severity_count: severityCount,
     mismatch_ids: mismatchIDs,
   };
@@ -63,6 +70,7 @@ export function buildFindingsRunSummary(params: {
   skipped?: FindingsSkipped[];
 }): string {
   const mismatchCount = params.result?.mismatch_count ?? 0;
+  const reviewCandidateCount = params.result?.review_candidate_count ?? 0;
   const eventCount = params.result?.event_count ?? 0;
   const entityCount = params.result?.entity_count ?? 0;
   const analysisSourceCount = params.analysisSourceCount ?? params.sourceCount;
@@ -72,9 +80,9 @@ export function buildFindingsRunSummary(params: {
   if (analysisSourceCount === 0) {
     base = `Analysis skipped: 0 concrete sources were ready. Ask chat about a specific ticket, channel, repo, PR, document, folder, or file so saved evidence can become analysis-ready.`;
   } else if (mismatchCount > 0) {
-    base = `Analysis complete for ${params.completedCount}/${analysisSourceCount} concrete ${sourceWord}. Found ${mismatchCount} ${findingWord}.`;
+    base = `Analysis complete for ${params.completedCount}/${analysisSourceCount} concrete ${sourceWord}. Found ${mismatchCount} actionable ${findingWord} and ${reviewCandidateCount} review candidate${reviewCandidateCount === 1 ? "" : "s"}.`;
   } else {
-    base = `Analysis ran, no mismatch signals detected across ${params.completedCount}/${analysisSourceCount} concrete ${sourceWord}. Sources: ${params.completedCount}. Events: ${eventCount}. Entities: ${entityCount}.`;
+    base = `Analysis ran with 0 actionable findings and ${reviewCandidateCount} review candidate${reviewCandidateCount === 1 ? "" : "s"} across ${params.completedCount}/${analysisSourceCount} concrete ${sourceWord}. Sources: ${params.completedCount}. Events: ${eventCount}. Entities: ${entityCount}.`;
   }
 
   const sections = [base];

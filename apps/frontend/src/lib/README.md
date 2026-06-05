@@ -100,11 +100,11 @@ Provides the protected `contextos-demo` workspace records used by the homepage w
 
 ### findings/analysisRunner.ts
 
-Owns the homepage analysis execution loop. It runs concrete ready sources one at a time, chooses direct token vs Codex provider, updates progress messages, aggregates successful findings, preserves per-source failures, supports route-owned cancellation through `AbortSignal`, and reports a clear zero-finding result when analysis completes without mismatch signals. Connector-only live scopes such as `github:github` remain chat-ready but are skipped before findings analysis because the backend requires a concrete repo, project, issue, channel, thread, document, folder, or file. When the route passes analysis basket items, the runner uses those concrete sources only and leaves other available evidence for preview/status display.
+Owns the homepage analysis execution loop. It runs concrete ready sources one at a time, chooses direct token vs Codex provider, updates progress messages, aggregates successful findings, preserves per-source failures, supports route-owned cancellation through `AbortSignal`, and reports a clear zero-actionable-finding result while counting review candidates separately. Connector-only live scopes such as `github:github` remain chat-ready but are skipped before findings analysis because the backend requires a concrete repo, project, issue, channel, thread, document, folder, or file. When the route passes analysis basket items, the runner uses those concrete sources only and leaves other available evidence for preview/status display.
 
 ### findings/aggregator.ts
 
-Merges per-source `postFindings` responses into one `FindingsResult` for the homepage. It combines mismatch arrays, sums mismatch/event/entity counts, and builds the chat summary text that distinguishes a successful zero-finding analysis from source failures.
+Merges per-source `postFindings` responses into one `FindingsResult` for the homepage. It combines actionable mismatch arrays, review candidate arrays, event/entity counts, and builds the chat summary text that distinguishes top issues from dependency review candidates and source failures.
 
 ### findings/viewModel.ts
 
@@ -224,7 +224,7 @@ Central type registry for the frontend.
 | `IngestRequest` | Unified request envelope sent to `postIngest`; collapses per-connector swagger types. |
 | `ApiErrorBody` | Shape of `{ error?, message?, examples? }` returned on non-2xx responses, including source-scope examples for broad connector failures. |
 | `SourceMetadataField` | Descriptor for a metadata field rendered inside `SourceConnector`. |
-| `FindingsResult` | Aggregated findings response with mismatch, event, entity, and relationship counts for the insight panel. |
+| `FindingsResult` | Aggregated findings response with actionable mismatch, review candidate, event, entity, and relationship counts for the insight panel. |
 | `GraphData` | Graph response contract with flattened entities, relationships, summary stats, filtered/total counts, and display metadata used by the graph view model. |
 | `SupportedFormat` | One row in a supported-formats table. |
 | `SourceConnectorConfig` | Full static config that drives a `SourceConnector` card. |

@@ -145,7 +145,7 @@ func TestDetectMismatchesGraphRules(t *testing.T) {
 			wantLen: 0,
 		},
 		{
-			name: "service dependency edge is a delivery risk",
+			name: "service dependency edge is a review candidate",
 			reader: graphReader{
 				entities: []entities.CanonicalEntity{
 					{Entity: types.Entity{ID: "svc-1", Name: "PaymentsService", Type: types.Service}},
@@ -155,7 +155,7 @@ func TestDetectMismatchesGraphRules(t *testing.T) {
 					{ID: "svc-1->dep-1", FromID: "svc-1", ToID: "dep-1", Kind: types.ServiceDependsOn, Evidence: []string{"repo://svc#dep"}},
 				},
 			},
-			wantType: "dependency_risk",
+			wantType: "dependency_review",
 			wantLen:  1,
 		},
 	}
@@ -174,8 +174,11 @@ func TestDetectMismatchesGraphRules(t *testing.T) {
 			if finding.Type != tt.wantType {
 				t.Errorf("Type = %q, want %q", finding.Type, tt.wantType)
 			}
-			if tt.wantType == "dependency_risk" && finding.Summary != "Service PaymentsService depends on OrderIdRepository; confirm the dependency is healthy and owned" {
+			if tt.wantType == "dependency_review" && finding.Summary != "Service PaymentsService depends on OrderIdRepository; confirm the dependency is healthy and owned" {
 				t.Errorf("Summary = %q, want readable dependency names", finding.Summary)
+			}
+			if tt.wantType == "dependency_review" && finding.Severity != "low" {
+				t.Errorf("Severity = %q, want low", finding.Severity)
 			}
 			if finding.Confidence <= 0 || finding.Confidence > 1 {
 				t.Errorf("Confidence = %v, want within (0,1]", finding.Confidence)

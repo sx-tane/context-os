@@ -14,12 +14,15 @@
         InsightStatus,
     } from "$lib/insights/status";
     import {
+        actionableFindings,
         findingDescription,
         findingDetectedTime,
         findingEvidenceTime,
         findingImpact,
         findingRecommendedAction,
         findingSummary,
+        groupFindingsByTopic,
+        reviewCandidates,
         severityLabel,
     } from "$lib/findings/viewModel";
     import {
@@ -51,6 +54,7 @@
     export let onCopyFinding: (text: string) => void | Promise<void> = () => {};
 
     let statusFilter: FindingStatusFilter = "active";
+    let showReviewCandidates = false;
 
     function shouldShowStatusNote(status: InsightStatus | null) {
         return status !== null && status.findingsState !== "current";
@@ -95,12 +99,19 @@
         return String(mismatch.id ?? findingSummary(mismatch));
     }
 
-    $: allFindings = uniqueFindings(lastFindings?.mismatches ?? []);
+    $: allFindings = uniqueFindings(actionableFindings(lastFindings));
+    $: candidateFindings = uniqueFindings(reviewCandidates(lastFindings));
     $: visibleFindings = allFindings.filter((mismatch) => {
         const action = findingActionFor(findingActions, findingID(mismatch));
         return isFindingVisible(action, statusFilter);
     });
+    $: visibleCandidates = candidateFindings.filter((mismatch) => {
+        const action = findingActionFor(findingActions, findingID(mismatch));
+        return isFindingVisible(action, statusFilter);
+    });
+    $: groupedVisibleFindings = groupFindingsByTopic(visibleFindings);
     $: hiddenFindingCount = allFindings.length - visibleFindings.length;
+    $: hiddenCandidateCount = candidateFindings.length - visibleCandidates.length;
 
     function evidenceIsURL(value: string) {
         return /^https?:\/\//i.test(value);
@@ -108,7 +119,7 @@
 </script>
 
 <div class="findings-view">
-    {#if lastFindings?.mismatches?.length}
+    {#if allFindings.length || candidateFindings.length}
         <div class="finding-toolbar">
             <label>
                 <span>Status</span>
@@ -123,9 +134,12 @@
                 </select>
             </label>
             <small>
-                {visibleFindings.length}/{allFindings.length} shown
+                {visibleFindings.length}/{allFindings.length} top issues shown
                 {#if hiddenFindingCount > 0}
                     · {hiddenFindingCount} hidden by filter
+                {/if}
+                {#if candidateFindings.length > 0}
+                    · {candidateFindings.length} review candidates
                 {/if}
             </small>
         </div>
@@ -148,94 +162,182 @@
         {/if}
         {#if visibleFindings.length === 0}
             <div class="empty-state">
-                <strong>No findings in this filter</strong>
+                <strong>No top issues in this filter</strong>
                 <p>Change the status filter to see hidden, ignored, or false-positive findings.</p>
             </div>
         {/if}
-        {#each visibleFindings.slice(0, 12) as mismatch}
-            {@const id = findingID(mismatch)}
-            {@const action = findingActionFor(findingActions, id)}
-            <article>
-                <div class="finding-title-row">
-                    <span>{severityLabel(mismatch.severity)}</span>
-                    <strong>{findingSummary(mismatch)}</strong>
+        {#each groupedVisibleFindings as group}
+            <section class="finding-group">
+                <div class="finding-group-header">
+                    <strong>{group.label}</strong>
+                    <small>{group.findings.length} issue{group.findings.length === 1 ? "" : "s"}</small>
                 </div>
-                <div class="finding-time-row">
-                    <small>Detected: {findingDetectedTime(lastAnalysisAt)}</small>
-                    <small>Evidence: {findingEvidenceTime(recentArtifacts, lastAnalysisAt)}</small>
-                </div>
-                <div class="finding-copy">
-                    <p>{findingDescription(mismatch)}</p>
-                    {#if findingImpact(mismatch)}
-                        <p><b>Impact:</b> {findingImpact(mismatch)}</p>
-                    {/if}
-                </div>
-                {#if findingRecommendedAction(mismatch)}
-                    <div class="finding-action">
-                        <small>Recommended action</small>
-                        <p>{findingRecommendedAction(mismatch)}</p>
-                    </div>
-                {/if}
-                <div class="finding-checklist">
-                    <div>
-                        <small>Action status</small>
-                        <strong>{findingActionLabel(action.status)}</strong>
-                    </div>
-                    <div class="finding-checklist-actions">
-                        {#if action.status === "ignored" || action.status === "false_positive"}
-                            <button
-                                type="button"
-                                on:click={() => onSetFindingAction(id, "open")}
-                            >
-                                Reopen
-                            </button>
-                        {:else}
-                            <button
-                                type="button"
-                                on:click={() =>
-                                    onSetFindingAction(
-                                        id,
-                                        nextFindingActionStatus(action.status),
-                                    )}
-                            >
-                                Mark {findingActionLabel(nextFindingActionStatus(action.status))}
-                            </button>
-                            <button
-                                type="button"
-                                on:click={() => onSetFindingAction(id, "ignored")}
-                            >
-                                Hide
-                            </button>
-                            <button
-                                type="button"
-                                class="danger"
-                                on:click={() => onSetFindingAction(id, "false_positive")}
-                            >
-                                False positive
-                            </button>
-                        {/if}
-                        <button
-                            type="button"
-                            on:click={() => onCopyFinding(findingShareText(mismatch, action))}
-                        >
-                            Copy
-                        </button>
-                    </div>
-                </div>
-                {#if mismatch.evidence?.length}
-                    <div class="finding-evidence">
-                        <small>Evidence links</small>
-                        {#each mismatch.evidence as evidence}
-                            {#if evidenceIsURL(evidence)}
-                                <a href={evidence} target="_blank" rel="noreferrer">{evidence}</a>
-                            {:else}
-                                <code>{evidence}</code>
+                {#each group.findings.slice(0, 12) as mismatch}
+                    {@const id = findingID(mismatch)}
+                    {@const action = findingActionFor(findingActions, id)}
+                    <article>
+                        <div class="finding-title-row">
+                            <span>{severityLabel(mismatch.severity)}</span>
+                            <strong>{findingSummary(mismatch)}</strong>
+                        </div>
+                        <div class="finding-time-row">
+                            <small>Detected: {findingDetectedTime(lastAnalysisAt)}</small>
+                            <small>Evidence: {findingEvidenceTime(recentArtifacts, lastAnalysisAt)}</small>
+                        </div>
+                        <div class="finding-copy">
+                            <p>{findingDescription(mismatch)}</p>
+                            {#if findingImpact(mismatch)}
+                                <p><b>Impact:</b> {findingImpact(mismatch)}</p>
                             {/if}
-                        {/each}
-                    </div>
-                {/if}
-            </article>
+                        </div>
+                        {#if findingRecommendedAction(mismatch)}
+                            <div class="finding-action">
+                                <small>Recommended action</small>
+                                <p>{findingRecommendedAction(mismatch)}</p>
+                            </div>
+                        {/if}
+                        <div class="finding-checklist">
+                            <div>
+                                <small>Action status</small>
+                                <strong>{findingActionLabel(action.status)}</strong>
+                            </div>
+                            <div class="finding-checklist-actions">
+                                {#if action.status === "ignored" || action.status === "false_positive"}
+                                    <button
+                                        type="button"
+                                        on:click={() => onSetFindingAction(id, "open")}
+                                    >
+                                        Reopen
+                                    </button>
+                                {:else}
+                                    <button
+                                        type="button"
+                                        on:click={() =>
+                                            onSetFindingAction(
+                                                id,
+                                                nextFindingActionStatus(action.status),
+                                            )}
+                                    >
+                                        Mark {findingActionLabel(nextFindingActionStatus(action.status))}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        on:click={() => onSetFindingAction(id, "ignored")}
+                                    >
+                                        Hide
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="danger"
+                                        on:click={() => onSetFindingAction(id, "false_positive")}
+                                    >
+                                        False positive
+                                    </button>
+                                {/if}
+                                <button
+                                    type="button"
+                                    on:click={() => onCopyFinding(findingShareText(mismatch, action))}
+                                >
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                        {#if mismatch.evidence?.length}
+                            <div class="finding-evidence">
+                                <small>Evidence links</small>
+                                {#each mismatch.evidence as evidence}
+                                    {#if evidenceIsURL(evidence)}
+                                        <a href={evidence} target="_blank" rel="noreferrer">{evidence}</a>
+                                    {:else}
+                                        <code>{evidence}</code>
+                                    {/if}
+                                {/each}
+                            </div>
+                        {/if}
+                    </article>
+                {/each}
+            </section>
         {/each}
+        {#if candidateFindings.length > 0}
+            <section class="review-candidates">
+                <button
+                    type="button"
+                    class="review-candidates-toggle"
+                    on:click={() => (showReviewCandidates = !showReviewCandidates)}
+                >
+                    <span>{showReviewCandidates ? "Hide" : "Show"} Review candidates</span>
+                    <strong>{visibleCandidates.length}/{candidateFindings.length}</strong>
+                </button>
+                {#if hiddenCandidateCount > 0}
+                    <small>{hiddenCandidateCount} candidates hidden by filter</small>
+                {/if}
+                {#if showReviewCandidates}
+                    {#each visibleCandidates.slice(0, 20) as mismatch}
+                        {@const id = findingID(mismatch)}
+                        {@const action = findingActionFor(findingActions, id)}
+                        <article class="candidate">
+                            <div class="finding-title-row">
+                                <span>REVIEW</span>
+                                <strong>{findingSummary(mismatch)}</strong>
+                            </div>
+                            <div class="finding-copy">
+                                <p>{findingDescription(mismatch)}</p>
+                                {#if findingRecommendedAction(mismatch)}
+                                    <p><b>Review note:</b> {findingRecommendedAction(mismatch)}</p>
+                                {/if}
+                            </div>
+                            <div class="finding-checklist">
+                                <div>
+                                    <small>Action status</small>
+                                    <strong>{findingActionLabel(action.status)}</strong>
+                                </div>
+                                <div class="finding-checklist-actions">
+                                    {#if action.status === "ignored" || action.status === "false_positive"}
+                                        <button
+                                            type="button"
+                                            on:click={() => onSetFindingAction(id, "open")}
+                                        >
+                                            Reopen
+                                        </button>
+                                    {:else}
+                                        <button
+                                            type="button"
+                                            on:click={() => onSetFindingAction(id, "checking")}
+                                        >
+                                            Mark checking
+                                        </button>
+                                        <button
+                                            type="button"
+                                            on:click={() => onSetFindingAction(id, "ignored")}
+                                        >
+                                            Hide
+                                        </button>
+                                    {/if}
+                                    <button
+                                        type="button"
+                                        on:click={() => onCopyFinding(findingShareText(mismatch, action))}
+                                    >
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
+                            {#if mismatch.evidence?.length}
+                                <div class="finding-evidence">
+                                    <small>Evidence links</small>
+                                    {#each mismatch.evidence as evidence}
+                                        {#if evidenceIsURL(evidence)}
+                                            <a href={evidence} target="_blank" rel="noreferrer">{evidence}</a>
+                                        {:else}
+                                            <code>{evidence}</code>
+                                        {/if}
+                                    {/each}
+                                </div>
+                            {/if}
+                        </article>
+                    {/each}
+                {/if}
+            </section>
+        {/if}
     {:else if lastFindings}
         <div class="empty-state">
             <strong>{zeroFindingTitle(insightStatus)}</strong>
@@ -285,9 +387,22 @@
     .findings-view article,
     .findings-state-row,
     .empty-state,
-    .finding-toolbar {
+    .finding-toolbar,
+    .finding-group,
+    .review-candidates {
         border-bottom: 1px solid #d7d2c8;
         padding: 14px 0;
+    }
+
+    .finding-group article,
+    .review-candidates article {
+        border-bottom-color: rgba(215, 210, 200, 0.62);
+    }
+
+    .finding-group article:last-child,
+    .review-candidates article:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
     }
 
     .finding-toolbar {
@@ -312,6 +427,51 @@
         color: #1c1b18;
         font: inherit;
         padding: 4px 0;
+    }
+
+    .finding-group-header,
+    .review-candidates-toggle {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .finding-group-header {
+        padding-bottom: 8px;
+    }
+
+    .review-candidates-toggle {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid #bdb7a8;
+        border-radius: 0;
+        background: transparent;
+        color: #1c1b18;
+        cursor: pointer;
+        font: inherit;
+        padding: 0 0 8px;
+        text-align: left;
+    }
+
+    .review-candidates-toggle:hover {
+        border-bottom-color: #1c1b18;
+    }
+
+    .review-candidates-toggle span {
+        color: #5f5b50;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
+    article.candidate {
+        color: #5f5b50;
+    }
+
+    article.candidate .finding-title-row span {
+        color: #8a8678;
     }
 
     .findings-view span {

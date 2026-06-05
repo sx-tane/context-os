@@ -147,7 +147,7 @@ func hasContractExposure(entityID string, outgoing, incoming map[string][]types.
 	return false
 }
 
-// dependencyRisk surfaces service-to-dependency edges as delivery risk that needs an owner.
+// dependencyRisk surfaces service-to-dependency edges as quiet review candidates.
 func dependencyRisk(rel types.Relationship, entityNames map[string]string) (types.Mismatch, bool) {
 	if rel.Kind != types.ServiceDependsOn {
 		return types.Mismatch{}, false
@@ -160,15 +160,15 @@ func dependencyRisk(rel types.Relationship, entityNames map[string]string) (type
 	toName := entityDisplayName(rel.ToID, entityNames)
 	return types.Mismatch{
 		ID:            fmt.Sprintf("dependency_risk:%s", rel.ID),
-		Type:          "dependency_risk",
+		Type:          "dependency_review",
 		Summary:       fmt.Sprintf("Service %s depends on %s; confirm the dependency is healthy and owned", fromName, toName),
 		EntityIDs:     []string{rel.FromID, rel.ToID},
-		Severity:      "medium",
+		Severity:      "low",
 		Confidence:    0.75,
-		Impact:        "medium",
+		Impact:        "low",
 		Evidence:      evidence,
 		AffectedRoles: []string{"service", "pmo"},
-		Recommended:   "Verify the dependency owner, version, and availability before committing to delivery dates.",
+		Recommended:   "Review the dependency owner, version, and availability when this area becomes delivery-critical.",
 	}, true
 }
 

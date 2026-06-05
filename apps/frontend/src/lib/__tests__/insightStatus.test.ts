@@ -125,6 +125,25 @@ describe("buildInsightStatus", () => {
     expect(status.footerLabel).toContain("Graph:");
     expect(status.footerLabel).toContain("Findings:");
   });
+
+  it("counts review candidates separately from actionable findings", () => {
+    const status = buildInsightStatus({
+      readySources: [readySource("filesystem", "/tmp/workspace")],
+      lastFindings: {
+        mismatch_count: 0,
+        review_candidate_count: 40,
+        mismatches: [],
+        review_candidates: [
+          { id: "dependency_risk:r1", type: "dependency_review" },
+        ],
+      },
+      lastAnalysisAt: "2026-06-04T09:00:00.000Z",
+    });
+
+    expect(status.findingCount).toBe(0);
+    expect(status.reviewCandidateCount).toBe(40);
+    expect(status.findingsDetailLabel).toContain("0 findings; 40 review candidates");
+  });
 });
 
 function readySource(

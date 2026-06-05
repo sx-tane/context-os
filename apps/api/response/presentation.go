@@ -4,21 +4,23 @@ import "context-os/domain/types"
 
 // PresentationFindings is the JSON payload returned by POST /presentation/findings.
 type PresentationFindings struct {
-	Connector         string            `json:"connector"`
-	URI               string            `json:"uri"`
-	Role              string            `json:"role"`
-	TraceID           string            `json:"trace_id"`
-	Summary           string            `json:"summary"`
-	EventCount        int               `json:"event_count"`
-	EntityCount       int               `json:"entity_count,omitempty"`
-	RelationshipCount int               `json:"relationship_count,omitempty"`
-	MismatchCount     int               `json:"mismatch_count"`
-	SeverityCount     map[string]int    `json:"severity_count"`
-	MismatchIDs       []string          `json:"mismatch_ids"`
-	Mismatches        []types.Mismatch  `json:"mismatches"`
-	Views             RoleViews         `json:"views"`
-	PMO               PMOSummary        `json:"pmo"`
-	Execution         ExecutionEvidence `json:"execution"`
+	Connector            string            `json:"connector"`
+	URI                  string            `json:"uri"`
+	Role                 string            `json:"role"`
+	TraceID              string            `json:"trace_id"`
+	Summary              string            `json:"summary"`
+	EventCount           int               `json:"event_count"`
+	EntityCount          int               `json:"entity_count,omitempty"`
+	RelationshipCount    int               `json:"relationship_count,omitempty"`
+	MismatchCount        int               `json:"mismatch_count"`
+	ReviewCandidateCount int               `json:"review_candidate_count"`
+	SeverityCount        map[string]int    `json:"severity_count"`
+	MismatchIDs          []string          `json:"mismatch_ids"`
+	Mismatches           []types.Mismatch  `json:"mismatches"`
+	ReviewCandidates     []types.Mismatch  `json:"review_candidates,omitempty"`
+	Views                RoleViews         `json:"views"`
+	PMO                  PMOSummary        `json:"pmo"`
+	Execution            ExecutionEvidence `json:"execution"`
 }
 
 // RoleSummaryView carries one role-specific summary contract.

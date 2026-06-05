@@ -175,8 +175,10 @@ export interface FindingsResult {
   trace_id?: string;
   summary?: string;
   mismatches?: FindingsMismatch[];
+  review_candidates?: FindingsMismatch[];
   event_count?: number;
   mismatch_count?: number;
+  review_candidate_count?: number;
   severity_count?: Record<"high" | "medium" | "low", number>;
   mismatch_ids?: string[];
   views?: Record<string, FindingsRoleView>;

@@ -6,11 +6,14 @@ import {
   artifactOrigin,
   artifactProvider,
   artifactSourceLabel,
+  actionableFindings,
   filterArtifactsByTime,
   findingDescription,
   findingImpact,
   findingRecommendedAction,
   findingSummary,
+  findingTopic,
+  groupFindingsByTopic,
   groupArtifactsBySource,
   latestFindingsRunFromMessages,
   markdownBulletList,
@@ -18,10 +21,13 @@ import {
   normalizeActivityTimeFilter,
   previewMarkdownText,
   previewText,
+  reviewCandidateCount,
+  reviewCandidates,
   severityLabel,
+  topActionableFindings,
 } from "../findings/viewModel";
 
-import type { Artifact, ChatMessage } from "../types";
+import type { Artifact, ChatMessage, FindingsResult } from "../types";
 
 describe("severityLabel", () => {
   it("normalizes known severities and falls back to review", () => {
@@ -61,6 +67,49 @@ describe("finding display helpers", () => {
     expect(findingSummary(finding)).toBe(
       "Service WbcVeritransCreditApiService depends on OrderIdRepository; confirm the dependency is healthy and owned",
     );
+  });
+});
+
+describe("finding quality helpers", () => {
+  it("splits dependency review candidates from actionable findings", () => {
+    const result: FindingsResult = {
+      mismatches: [
+        { id: "m1", type: "requirement_gap", summary: "Missing API edge" },
+        { id: "dependency_risk:r1", type: "dependency_risk", summary: "Service depends on Repo" },
+      ],
+      review_candidates: [
+        { id: "dependency_risk:r2", type: "dependency_review", summary: "Service depends on DB" },
+      ],
+      mismatch_count: 1,
+      review_candidate_count: 1,
+    };
+
+    expect(actionableFindings(result).map((finding) => finding.id)).toEqual(["m1"]);
+    expect(reviewCandidates(result).map((finding) => finding.id)).toEqual([
+      "dependency_risk:r2",
+      "dependency_risk:r1",
+    ]);
+    expect(reviewCandidateCount(result)).toBe(2);
+    expect(topActionableFindings(result, 3)).toHaveLength(1);
+  });
+
+  it("groups findings by topic in the default decision order", () => {
+    const groups = groupFindingsByTopic([
+      { id: "k1", type: "keyword_signal" },
+      { id: "d1", type: "dependency_review" },
+      { id: "r1", type: "requirement_gap" },
+      { id: "c1", type: "cross_layer_contract_drift" },
+      { id: "o1", type: "unknown" },
+    ]);
+
+    expect(groups.map((group) => group.topic)).toEqual([
+      "contract_drift",
+      "requirement_gap",
+      "keyword_signal",
+      "dependency_review",
+      "other",
+    ]);
+    expect(findingTopic({ type: "dependency_risk" })).toBe("dependency_review");
   });
 });
 

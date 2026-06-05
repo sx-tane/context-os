@@ -7,9 +7,11 @@ import {
 import {
   artifactLink,
   artifactSourceLabel,
+  actionableFindings,
   findingRecommendedAction,
   findingSummary,
   formatTime,
+  reviewCandidateCount,
 } from "$lib/findings/viewModel";
 import type {
   AnswerSection,
@@ -304,7 +306,8 @@ export function buildWorkspaceSnapshotMarkdown(input: {
   recentArtifacts: Artifact[];
   basketItems: EvidenceBasketItem[];
 }) {
-  const findings = input.findings?.mismatches ?? [];
+  const findings = actionableFindings(input.findings);
+  const candidateCount = reviewCandidateCount(input.findings);
   return [
     `# ContextOS Snapshot: ${input.workspacePath}`,
     "",
@@ -325,6 +328,7 @@ export function buildWorkspaceSnapshotMarkdown(input: {
           return `- [${action.status}] ${findingSummary(finding)}`;
         })
       : ["- No findings loaded"]),
+    candidateCount > 0 ? `- Review candidates: ${candidateCount}` : "",
     "",
     "## Graph",
     `- Nodes: ${input.graphData?.entity_count ?? input.graphData?.entities?.length ?? 0}`,

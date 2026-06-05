@@ -138,6 +138,39 @@ export interface paths {
       };
     };
   };
+  "/chat/session/reset": {
+    /** Deletes persisted workspace-scoped Codex chat session metadata without deleting Codex global session files. */
+    post: {
+      parameters: {
+        body: {
+          /** Chat session reset request */
+          body: definitions["request.ChatSessionReset"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: { [key: string]: boolean };
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/codex/login": {
     /** Runs `codex login --device-auth` and streams log lines as SSE events. */
     post: {
@@ -949,13 +982,173 @@ export interface paths {
       };
     };
   };
+  "/workspace/analysis-basket": {
+    /** Persists selected analysis evidence for one workspace. */
+    get: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id?: string;
+        };
+        body: {
+          /** Analysis basket payload */
+          body?: definitions["request.AnalysisBasket"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["request.AnalysisBasket"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+    /** Persists selected analysis evidence for one workspace. */
+    put: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id?: string;
+        };
+        body: {
+          /** Analysis basket payload */
+          body?: definitions["request.AnalysisBasket"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["request.AnalysisBasket"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
+  "/workspace/finding-actions": {
+    /** Persists finding action statuses for one workspace. */
+    get: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id?: string;
+        };
+        body: {
+          /** Finding actions payload */
+          body?: definitions["request.FindingActions"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["request.FindingActions"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+    /** Persists finding action statuses for one workspace. */
+    put: {
+      parameters: {
+        query: {
+          /** Workspace path or ID */
+          workspace_id?: string;
+        };
+        body: {
+          /** Finding actions payload */
+          body?: definitions["request.FindingActions"];
+        };
+      };
+      responses: {
+        /** OK */
+        200: {
+          schema: definitions["request.FindingActions"];
+        };
+        /** Bad Request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Not Found */
+        404: {
+          schema: { [key: string]: string };
+        };
+        /** Method Not Allowed */
+        405: {
+          schema: { [key: string]: string };
+        };
+        /** Internal Server Error */
+        500: {
+          schema: { [key: string]: string };
+        };
+        /** Service Unavailable */
+        503: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
   "/workspace/reset": {
     /** Deletes DB-backed local memory and workspace-scoped local JSON artifacts, then recreates an empty workspace row. */
     post: {
       parameters: {
         body: {
           /** Workspace reset request */
-          body: definitions["workspace.upsertRequest"];
+          body: definitions["request.WorkspaceUpsert"];
         };
       };
       responses: {
@@ -984,7 +1177,7 @@ export interface paths {
       parameters: {
         body: {
           /** Connected source registration request */
-          body: definitions["workspace.sourceRequest"];
+          body: definitions["request.WorkspaceSource"];
         };
       };
       responses: {
@@ -1050,7 +1243,7 @@ export interface paths {
       parameters: {
         body: {
           /** Workspace upsert request */
-          body: definitions["workspace.upsertRequest"];
+          body: definitions["request.WorkspaceUpsert"];
         };
       };
       responses: {
@@ -1163,6 +1356,22 @@ export interface definitions {
     /** @description UpdatedAt is the UTC timestamp of the last write to the workspace row. */
     updatedAt?: string;
   };
+  "request.AnalysisBasket": {
+    /** @description Items are selected evidence sources for analysis. */
+    items?: definitions["request.AnalysisBasketItem"][];
+    /** @description WorkspaceID is a workspace path or ID. */
+    workspace_id?: string;
+  };
+  "request.AnalysisBasketItem": {
+    addedAt?: string;
+    artifactId?: string;
+    connector?: string;
+    id?: string;
+    label?: string;
+    messageId?: string;
+    origin?: string;
+    uri?: string;
+  };
   "request.ChatQuery": {
     /**
      * @description Connector optionally pins the query to a connector such as slack, github, jira, or filesystem.
@@ -1219,6 +1428,18 @@ export interface definitions {
      */
     workspace_path?: string;
   };
+  "request.ChatSessionReset": {
+    /**
+     * @description WorkspaceID is the selected workspace path or stored workspace identifier.
+     * @example /home/user/myproject
+     */
+    workspace_id?: string;
+    /**
+     * @description WorkspacePath is an optional explicit workspace path; it takes precedence over WorkspaceID.
+     * @example /home/user/myproject
+     */
+    workspace_path?: string;
+  };
   "request.FilesystemIngest": {
     /** @example Optional raw content instead of reading from URI */
     content?: string;
@@ -1232,6 +1453,18 @@ export interface definitions {
     /** @example storage/raw/README.md */
     uri?: string;
     /** @example /home/user/myproject */
+    workspace_id?: string;
+  };
+  "request.FindingActionItem": {
+    findingId?: string;
+    note?: string;
+    status?: string;
+    updatedAt?: string;
+  };
+  "request.FindingActions": {
+    /** @description Actions are durable finding checklist entries. */
+    actions?: definitions["request.FindingActionItem"][];
+    /** @description WorkspaceID is a workspace path or ID. */
     workspace_id?: string;
   };
   "request.GithubIngest": {
@@ -1352,6 +1585,22 @@ export interface definitions {
     /** @example /home/user/myproject */
     workspace_id?: string;
   };
+  "request.WorkspaceSource": {
+    /** @description Connector is the connector name, e.g. github or jira. */
+    connector?: string;
+    /** @description SourceURI is the external source URI to save. */
+    source_uri?: string;
+    /** @description URI is accepted for frontend compatibility with existing source forms. */
+    uri?: string;
+    /** @description WorkspaceID is a workspace path or ID. */
+    workspace_id?: string;
+  };
+  "request.WorkspaceUpsert": {
+    /** @description Name is the optional human-readable workspace name. */
+    name?: string;
+    /** @description Path is the absolute local folder path for the workspace. */
+    path?: string;
+  };
   "response.AnswerSection": {
     coding_notes?: string[];
     confidence?: number;
@@ -1461,6 +1710,8 @@ export interface definitions {
     mismatches?: definitions["types.Mismatch"][];
     pmo?: definitions["response.PMOSummary"];
     relationship_count?: number;
+    review_candidate_count?: number;
+    review_candidates?: definitions["types.Mismatch"][];
     role?: string;
     severity_count?: { [key: string]: number };
     summary?: string;
@@ -1531,22 +1782,6 @@ export interface definitions {
     summary?: string;
     /** @description stable category for the detection rule that produced this finding */
     type?: string;
-  };
-  "workspace.sourceRequest": {
-    /** @description Connector is the connector name, e.g. github or jira. */
-    connector?: string;
-    /** @description SourceURI is the external source URI to save. */
-    source_uri?: string;
-    /** @description URI is accepted for frontend compatibility with existing source forms. */
-    uri?: string;
-    /** @description WorkspaceID is a workspace path or ID. */
-    workspace_id?: string;
-  };
-  "workspace.upsertRequest": {
-    /** @description Name is the optional human-readable workspace name. */
-    name?: string;
-    /** @description Path is the absolute local folder path for the workspace. */
-    path?: string;
   };
 }
 

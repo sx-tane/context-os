@@ -163,3 +163,37 @@ func TestFindingsCanDisableExecution(t *testing.T) {
 		t.Fatalf("Execution.Enabled = %v, want false", payload.Execution.Enabled)
 	}
 }
+
+// TestFindingsSplitsDependencyReviewCandidates verifies service dependency edges do not count as actionable findings.
+func TestFindingsSplitsDependencyReviewCandidates(t *testing.T) {
+	body := `{"connector":"filesystem","uri":"inline.txt","content":"Payments context.\nCONTEXTOS_LABELS_JSON: {\"entities\":{\"requirement\":[],\"api_field\":[],\"service\":[{\"name\":\"PaymentsService\",\"evidence\":\"PaymentsService depends on OrderIdRepository\",\"confidence\":0.9}],\"dependency\":[{\"name\":\"OrderIdRepository\",\"evidence\":\"PaymentsService depends on OrderIdRepository\",\"confidence\":0.9}],\"enum\":[],\"db_column\":[]},\"risks\":[],\"decisions\":[],\"status\":[]}","include_execution":false}`
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/presentation/findings", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	presentation.Findings(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("Findings() status = %d, want 200 (body: %s)", recorder.Code, recorder.Body.String())
+	}
+
+	var payload response.PresentationFindings
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if payload.MismatchCount != 0 {
+		t.Fatalf("MismatchCount = %d, want 0", payload.MismatchCount)
+	}
+	if len(payload.Mismatches) != 0 {
+		t.Fatalf("Mismatches length = %d, want 0", len(payload.Mismatches))
+	}
+	if payload.ReviewCandidateCount == 0 || len(payload.ReviewCandidates) == 0 {
+		t.Fatalf("ReviewCandidates = %v, want dependency review candidate", payload.ReviewCandidates)
+	}
+	if payload.ReviewCandidates[0].Type != "dependency_review" {
+		t.Fatalf("ReviewCandidates[0].Type = %q, want dependency_review", payload.ReviewCandidates[0].Type)
+	}
+	if payload.ReviewCandidates[0].Severity != "low" {
+		t.Fatalf("ReviewCandidates[0].Severity = %q, want low", payload.ReviewCandidates[0].Severity)
+	}
+}

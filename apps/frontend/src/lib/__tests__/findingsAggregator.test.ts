@@ -21,6 +21,7 @@ describe("aggregateFindings", () => {
         connector: "slack",
         uri: "channel",
         mismatch_count: 2,
+        review_candidate_count: 3,
         event_count: 5,
         entity_count: 6,
         severity_count: { high: 0, medium: 2, low: 0 },
@@ -29,15 +30,20 @@ describe("aggregateFindings", () => {
           { id: "m2", severity: "medium", description: "gap" },
           { id: "m3", severity: "medium", description: "risk" },
         ],
+        review_candidates: [
+          { id: "dependency_risk:r1", type: "dependency_review" },
+        ],
       },
     ]);
 
     expect(result?.connector).toBe("multiple");
     expect(result?.mismatch_count).toBe(3);
+    expect(result?.review_candidate_count).toBe(3);
     expect(result?.event_count).toBe(8);
     expect(result?.entity_count).toBe(10);
     expect(result?.severity_count).toEqual({ high: 1, medium: 2, low: 0 });
     expect(result?.mismatches).toHaveLength(3);
+    expect(result?.review_candidates).toHaveLength(1);
     expect(result?.mismatch_ids).toEqual(["m1", "m2", "m3"]);
   });
 
@@ -47,7 +53,7 @@ describe("aggregateFindings", () => {
     ]);
 
     expect(result?.mismatch_count).toBe(0);
-    expect(result?.summary).toContain("no mismatch signals detected");
+    expect(result?.summary).toContain("0 actionable findings");
     expect(result?.event_count).toBe(7);
     expect(result?.entity_count).toBe(2);
   });
@@ -62,7 +68,7 @@ describe("buildFindingsRunSummary", () => {
       failures: [],
     });
 
-    expect(message).toContain("Analysis ran, no mismatch signals detected");
+    expect(message).toContain("0 actionable findings");
     expect(message).toContain("Sources: 1");
     expect(message).toContain("Events: 4");
     expect(message).toContain("Entities: 3");
@@ -80,7 +86,7 @@ describe("buildFindingsRunSummary", () => {
     });
 
     expect(message).toContain("Analysis complete for 1/2 concrete sources");
-    expect(message).toContain("Found 1 finding");
+    expect(message).toContain("Found 1 actionable finding");
     expect(message).toContain("Failed:");
     expect(message).toContain("jira:project - unauthorized");
   });

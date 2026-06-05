@@ -156,6 +156,36 @@ definitions:
           row.
         type: string
     type: object
+  request.AnalysisBasket:
+    properties:
+      items:
+        description: Items are selected evidence sources for analysis.
+        items:
+          $ref: '#/definitions/request.AnalysisBasketItem'
+        type: array
+      workspace_id:
+        description: WorkspaceID is a workspace path or ID.
+        type: string
+    type: object
+  request.AnalysisBasketItem:
+    properties:
+      addedAt:
+        type: string
+      artifactId:
+        type: string
+      connector:
+        type: string
+      id:
+        type: string
+      label:
+        type: string
+      messageId:
+        type: string
+      origin:
+        type: string
+      uri:
+        type: string
+    type: object
   request.ChatQuery:
     properties:
       connector:
@@ -210,6 +240,19 @@ definitions:
         example: /home/user/myproject
         type: string
     type: object
+  request.ChatSessionReset:
+    properties:
+      workspace_id:
+        description: WorkspaceID is the selected workspace path or stored workspace
+          identifier.
+        example: /home/user/myproject
+        type: string
+      workspace_path:
+        description: WorkspacePath is an optional explicit workspace path; it takes
+          precedence over WorkspaceID.
+        example: /home/user/myproject
+        type: string
+    type: object
   request.FilesystemIngest:
     properties:
       content:
@@ -233,6 +276,28 @@ definitions:
         type: string
       workspace_id:
         example: /home/user/myproject
+        type: string
+    type: object
+  request.FindingActionItem:
+    properties:
+      findingId:
+        type: string
+      note:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  request.FindingActions:
+    properties:
+      actions:
+        description: Actions are durable finding checklist entries.
+        items:
+          $ref: '#/definitions/request.FindingActionItem'
+        type: array
+      workspace_id:
+        description: WorkspaceID is a workspace path or ID.
         type: string
     type: object
   request.GithubIngest:
@@ -421,6 +486,31 @@ definitions:
         type: string
       workspace_id:
         example: /home/user/myproject
+        type: string
+    type: object
+  request.WorkspaceSource:
+    properties:
+      connector:
+        description: Connector is the connector name, e.g. github or jira.
+        type: string
+      source_uri:
+        description: SourceURI is the external source URI to save.
+        type: string
+      uri:
+        description: URI is accepted for frontend compatibility with existing source
+          forms.
+        type: string
+      workspace_id:
+        description: WorkspaceID is a workspace path or ID.
+        type: string
+    type: object
+  request.WorkspaceUpsert:
+    properties:
+      name:
+        description: Name is the optional human-readable workspace name.
+        type: string
+      path:
+        description: Path is the absolute local folder path for the workspace.
         type: string
     type: object
   response.AnswerSection:
@@ -683,6 +773,12 @@ definitions:
         $ref: '#/definitions/response.PMOSummary'
       relationship_count:
         type: integer
+      review_candidate_count:
+        type: integer
+      review_candidates:
+        items:
+          $ref: '#/definitions/types.Mismatch'
+        type: array
       role:
         type: string
       severity_count:
@@ -820,31 +916,6 @@ definitions:
         type: string
       type:
         description: stable category for the detection rule that produced this finding
-        type: string
-    type: object
-  workspace.sourceRequest:
-    properties:
-      connector:
-        description: Connector is the connector name, e.g. github or jira.
-        type: string
-      source_uri:
-        description: SourceURI is the external source URI to save.
-        type: string
-      uri:
-        description: URI is accepted for frontend compatibility with existing source
-          forms.
-        type: string
-      workspace_id:
-        description: WorkspaceID is a workspace path or ID.
-        type: string
-    type: object
-  workspace.upsertRequest:
-    properties:
-      name:
-        description: Name is the optional human-readable workspace name.
-        type: string
-      path:
-        description: Path is the absolute local folder path for the workspace.
         type: string
     type: object
 host: localhost:8080
@@ -1046,6 +1117,55 @@ paths:
               type: string
             type: object
       summary: Stream workspace context query
+      tags:
+      - chat
+  /chat/session/reset:
+    post:
+      consumes:
+      - application/json
+      description: Deletes persisted workspace-scoped Codex chat session metadata
+        without deleting Codex global session files.
+      parameters:
+      - description: Chat session reset request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ChatSessionReset'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Reset workspace chat session
       tags:
       - chat
   /codex/login:
@@ -2186,6 +2306,224 @@ paths:
       summary: List workspaces
       tags:
       - workspace
+  /workspace/analysis-basket:
+    get:
+      consumes:
+      - application/json
+      description: Persists selected analysis evidence for one workspace.
+      parameters:
+      - description: Workspace path or ID
+        in: query
+        name: workspace_id
+        type: string
+      - description: Analysis basket payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/request.AnalysisBasket'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/request.AnalysisBasket'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read or save the workspace analysis basket
+      tags:
+      - workspace
+    put:
+      consumes:
+      - application/json
+      description: Persists selected analysis evidence for one workspace.
+      parameters:
+      - description: Workspace path or ID
+        in: query
+        name: workspace_id
+        type: string
+      - description: Analysis basket payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/request.AnalysisBasket'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/request.AnalysisBasket'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read or save the workspace analysis basket
+      tags:
+      - workspace
+  /workspace/finding-actions:
+    get:
+      consumes:
+      - application/json
+      description: Persists finding action statuses for one workspace.
+      parameters:
+      - description: Workspace path or ID
+        in: query
+        name: workspace_id
+        type: string
+      - description: Finding actions payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/request.FindingActions'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/request.FindingActions'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read or save the workspace finding action checklist
+      tags:
+      - workspace
+    put:
+      consumes:
+      - application/json
+      description: Persists finding action statuses for one workspace.
+      parameters:
+      - description: Workspace path or ID
+        in: query
+        name: workspace_id
+        type: string
+      - description: Finding actions payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/request.FindingActions'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/request.FindingActions'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read or save the workspace finding action checklist
+      tags:
+      - workspace
   /workspace/reset:
     post:
       consumes:
@@ -2198,7 +2536,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/workspace.upsertRequest'
+          $ref: '#/definitions/request.WorkspaceUpsert'
       produces:
       - application/json
       responses:
@@ -2239,7 +2577,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/workspace.sourceRequest'
+          $ref: '#/definitions/request.WorkspaceSource'
       produces:
       - application/json
       responses:
@@ -2329,7 +2667,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/workspace.upsertRequest'
+          $ref: '#/definitions/request.WorkspaceUpsert'
       produces:
       - application/json
       responses:

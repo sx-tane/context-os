@@ -84,9 +84,11 @@ describe("runAnalysis", () => {
           connector: "github",
           uri: "repo",
           mismatch_count: 1,
+          review_candidate_count: 4,
           event_count: 2,
           entity_count: 3,
-          mismatches: [{ id: "m1", severity: "high" }],
+          mismatches: [{ id: "m1", severity: "high", summary: "API field drift" }],
+          review_candidates: [{ id: "dependency_risk:r1", type: "dependency_review" }],
           mismatch_ids: ["m1"],
         },
       })
@@ -120,9 +122,11 @@ describe("runAnalysis", () => {
     expect(state.busyCalls).toEqual([true, false]);
     expect(state.lastFindings?.mismatch_count).toBe(1);
     const finalMessage = state.replacements.at(-1)!;
-    expect(finalMessage.text.indexOf("**Summary**")).toBeLessThan(
-      finalMessage.text.indexOf("**Answer**"),
-    );
+    expect(finalMessage.text).toContain("Found 1 actionable finding");
+    expect(finalMessage.text).toContain("4 review candidates");
+    expect(finalMessage.text).toContain("**Top issues**");
+    expect(finalMessage.text).toContain("1. API field drift");
+    expect(finalMessage.text).not.toContain("Findings preview is attached");
     expect(finalMessage.text).toContain("Failed:");
     expect(finalMessage.text).toContain("slack:channel - unauthorized");
     expect(finalMessage.card).toMatchObject({ kind: "findings" });
@@ -193,9 +197,7 @@ describe("runAnalysis", () => {
     });
 
     expect(mockPostFindings).not.toHaveBeenCalled();
-    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("Analysis skipped");
-    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("**Summary**");
-    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("**Answer**");
+    expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("No concrete source was ready");
     expect(state.addMessage.mock.calls.at(-1)?.[0].text).toContain("Skipped chat-only scopes");
     expect(state.refreshWorkspace).toHaveBeenCalled();
   });
@@ -245,8 +247,6 @@ describe("runAnalysis", () => {
       uri: "owner/repo",
     });
     expect(state.replacements.at(-1)?.text).toContain("1/1 concrete source");
-    expect(state.replacements.at(-1)?.text).toContain("**Summary**");
-    expect(state.replacements.at(-1)?.text).toContain("**Answer**");
     expect(state.replacements.at(-1)?.text).toContain("Skipped chat-only scopes");
     expect(state.replacements.at(-1)?.text).not.toContain("Failed:");
   });
@@ -305,8 +305,6 @@ describe("runAnalysis", () => {
       uri: "BKGDEV-8551",
     });
     expect(state.replacements.at(-1)?.text).toContain("1/1 concrete source");
-    expect(state.replacements.at(-1)?.text).toContain("**Summary**");
-    expect(state.replacements.at(-1)?.text).toContain("**Answer**");
     expect(state.replacements.at(-1)?.text).toContain("Skipped chat-only scopes");
   });
 

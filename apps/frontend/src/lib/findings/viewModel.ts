@@ -31,6 +31,35 @@ export type LatestFindingsRun = {
   analyzedAt: string;
 };
 
+export type FindingTopic =
+  | "contract_drift"
+  | "requirement_gap"
+  | "keyword_signal"
+  | "dependency_review"
+  | "other";
+
+export type FindingTopicGroup = {
+  topic: FindingTopic;
+  label: string;
+  findings: FindingsMismatch[];
+};
+
+export const findingTopicOrder: FindingTopic[] = [
+  "contract_drift",
+  "requirement_gap",
+  "keyword_signal",
+  "dependency_review",
+  "other",
+];
+
+export const findingTopicLabels: Record<FindingTopic, string> = {
+  contract_drift: "Contract drift",
+  requirement_gap: "Requirement gaps",
+  keyword_signal: "Keyword signals",
+  dependency_review: "Dependency review",
+  other: "Other",
+};
+
 export function formatTime(value?: string) {
   if (!value) return "never";
   return new Intl.DateTimeFormat(undefined, {
@@ -93,6 +122,72 @@ export function findingImpact(mismatch: FindingsMismatch | unknown) {
   return String(record.impact ?? "");
 }
 
+export function isReviewCandidate(mismatch: FindingsMismatch | unknown) {
+  const record = mismatch as Record<string, unknown>;
+  const type = String(record.type ?? record.mismatch_type ?? "").toLowerCase();
+  const id = String(record.id ?? "").toLowerCase();
+  return type === "dependency_review" ||
+    type === "dependency_risk" ||
+    id.startsWith("dependency_risk:");
+}
+
+export function actionableFindings(result: FindingsResult | null | undefined) {
+  if (!result) return [];
+  return (result.mismatches ?? []).filter((mismatch) => !isReviewCandidate(mismatch));
+}
+
+export function reviewCandidates(result: FindingsResult | null | undefined) {
+  if (!result) return [];
+  const explicit = result.review_candidates ?? [];
+  const historical = (result.mismatches ?? []).filter(isReviewCandidate);
+  return uniqueByFindingID([...explicit, ...historical]);
+}
+
+export function actionableFindingCount(result: FindingsResult | null | undefined) {
+  return actionableFindings(result).length;
+}
+
+export function reviewCandidateCount(result: FindingsResult | null | undefined) {
+  if (!result) return 0;
+  return Math.max(result.review_candidate_count ?? 0, reviewCandidates(result).length);
+}
+
+export function findingTopic(mismatch: FindingsMismatch | unknown): FindingTopic {
+  const record = mismatch as Record<string, unknown>;
+  const type = String(record.type ?? record.mismatch_type ?? "").toLowerCase();
+  if (type === "cross_layer_contract_drift" || type === "contract_drift") {
+    return "contract_drift";
+  }
+  if (type === "requirement_gap") return "requirement_gap";
+  if (type === "keyword_signal") return "keyword_signal";
+  if (isReviewCandidate(record)) return "dependency_review";
+  return "other";
+}
+
+export function groupFindingsByTopic(findings: FindingsMismatch[]) {
+  const groups = new Map<FindingTopic, FindingsMismatch[]>();
+  for (const topic of findingTopicOrder) {
+    groups.set(topic, []);
+  }
+  for (const finding of findings) {
+    groups.get(findingTopic(finding))?.push(finding);
+  }
+  return findingTopicOrder
+    .map((topic) => ({
+      topic,
+      label: findingTopicLabels[topic],
+      findings: groups.get(topic) ?? [],
+    }))
+    .filter((group) => group.findings.length > 0);
+}
+
+export function topActionableFindings(
+  result: FindingsResult | null | undefined,
+  limit = 3,
+) {
+  return actionableFindings(result).slice(0, limit);
+}
+
 function readableFindingSummary(record: Record<string, unknown>) {
   const summary = String(record.summary ?? record.mismatch_type ?? record.id ?? "Finding");
   if (!summary.includes("event:")) {
@@ -121,6 +216,18 @@ function evidenceAnchorNames(value: unknown) {
 function compactGraphID(value: string) {
   const parts = value.trim().split(":").filter(Boolean);
   return parts.at(-1) ?? value;
+}
+
+function uniqueByFindingID(findings: FindingsMismatch[]) {
+  const seen = new Set<string>();
+  const out: FindingsMismatch[] = [];
+  for (const finding of findings) {
+    const id = String(finding.id ?? findingSummary(finding));
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(finding);
+  }
+  return out;
 }
 
 export function latestFindingsRunFromMessages(

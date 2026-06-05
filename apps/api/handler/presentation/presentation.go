@@ -274,6 +274,7 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 		response.WriteConnectorError(w, err)
 		return
 	}
+	actionable, reviewCandidates := splitPresentationFindings(result.Mismatches)
 
 	// ── record connector sync cursor ───────────────────────────────────────────
 	if workspaceID != "" && h.syncRepo != nil {
@@ -304,11 +305,12 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 			SourceURI:   strings.TrimSpace(req.URI),
 			TraceID:     stores.TraceID,
 			Payload: map[string]string{
-				"route":              "presentation.findings",
-				"event_count":        strconv.Itoa(result.EventCount),
-				"entity_count":       strconv.Itoa(len(result.Entities)),
-				"relationship_count": strconv.Itoa(len(result.Relationships)),
-				"mismatch_count":     strconv.Itoa(len(result.Mismatches)),
+				"route":                  "presentation.findings",
+				"event_count":            strconv.Itoa(result.EventCount),
+				"entity_count":           strconv.Itoa(len(result.Entities)),
+				"relationship_count":     strconv.Itoa(len(result.Relationships)),
+				"mismatch_count":         strconv.Itoa(len(actionable)),
+				"review_candidate_count": strconv.Itoa(len(reviewCandidates)),
 			},
 		})
 		h.logAudit(ctx, repository.AuditEvent{
@@ -323,7 +325,7 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 				"relationship_count": strconv.Itoa(len(result.Relationships)),
 			},
 		})
-		if len(result.Mismatches) > 0 {
+		if len(actionable) > 0 {
 			h.logAudit(ctx, repository.AuditEvent{
 				WorkspaceID: workspaceID,
 				EventType:   "findings.detected",
@@ -331,18 +333,18 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 				Connector:   strings.ToLower(strings.TrimSpace(req.Connector)),
 				SourceURI:   strings.TrimSpace(req.URI),
 				TraceID:     stores.TraceID,
-				Payload:     map[string]string{"mismatch_count": strconv.Itoa(len(result.Mismatches))},
+				Payload:     map[string]string{"mismatch_count": strconv.Itoa(len(actionable))},
 			})
 		}
 	}
 
 	role := parseRole(req.Role)
-	mismatchIDs := collectMismatchIDs(result.Mismatches)
+	mismatchIDs := collectMismatchIDs(actionable)
 	// Display trace incorporates mismatch content so the same findings always
 	// map to the same ID (content-addressable). The run trace in stores.TraceID
 	// was already used by persistResult; we only use the display trace here.
 	traceID := buildTraceID(req.Connector, req.URI, mismatchIDs)
-	views := buildRoleViews(result.Mismatches)
+	views := buildRoleViews(actionable)
 
 	executionEvidence := response.ExecutionEvidence{
 		Enabled:   false,
@@ -354,47 +356,52 @@ func (h *Handler) Findings(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	if req.IncludeExecution == nil || *req.IncludeExecution {
-		executionEvidence = h.runAssistiveExecution(r.Context(), traceID, req, role, mismatchIDs, result.Mismatches)
+		executionEvidence = h.runAssistiveExecution(r.Context(), traceID, req, role, mismatchIDs, actionable)
 	}
 
 	response.WriteJSON(w, http.StatusOK, response.PresentationFindings{
-		Connector:         strings.ToLower(strings.TrimSpace(req.Connector)),
-		URI:               strings.TrimSpace(req.URI),
-		Role:              string(role),
-		TraceID:           traceID,
-		Summary:           stagepresentation.RenderSummary(role, result.Mismatches),
-		EventCount:        result.EventCount,
-		EntityCount:       len(result.Entities),
-		RelationshipCount: len(result.Relationships),
-		MismatchCount:     len(result.Mismatches),
-		SeverityCount:     severityCount(result.Mismatches),
-		MismatchIDs:       mismatchIDs,
-		Mismatches:        result.Mismatches,
-		Views:             views,
-		PMO:               buildPMOSummary(result.Mismatches),
-		Execution:         executionEvidence,
+		Connector:            strings.ToLower(strings.TrimSpace(req.Connector)),
+		URI:                  strings.TrimSpace(req.URI),
+		Role:                 string(role),
+		TraceID:              traceID,
+		Summary:              renderFindingsSummary(role, actionable, reviewCandidates),
+		EventCount:           result.EventCount,
+		EntityCount:          len(result.Entities),
+		RelationshipCount:    len(result.Relationships),
+		MismatchCount:        len(actionable),
+		ReviewCandidateCount: len(reviewCandidates),
+		SeverityCount:        severityCount(actionable),
+		MismatchIDs:          mismatchIDs,
+		Mismatches:           actionable,
+		ReviewCandidates:     reviewCandidates,
+		Views:                views,
+		PMO:                  buildPMOSummary(actionable),
+		Execution:            executionEvidence,
 	})
 }
 
 // writeFindingsFromCache returns persisted mismatches without re-ingesting.
 func (h *Handler) writeFindingsFromCache(w http.ResponseWriter, req request.PresentationFindings, workspaceID string, cached []types.Mismatch) {
+	actionable, reviewCandidates := splitPresentationFindings(cached)
 	role := parseRole(req.Role)
-	mismatchIDs := collectMismatchIDs(cached)
+	mismatchIDs := collectMismatchIDs(actionable)
 	traceID := buildTraceID(req.Connector, req.URI, mismatchIDs)
-	views := buildRoleViews(cached)
+	views := buildRoleViews(actionable)
 
 	response.WriteJSON(w, http.StatusOK, response.PresentationFindings{
-		Connector:     strings.ToLower(strings.TrimSpace(req.Connector)),
-		URI:           strings.TrimSpace(req.URI),
-		Role:          string(role),
-		TraceID:       traceID,
-		Summary:       stagepresentation.RenderSummary(role, cached),
-		MismatchCount: len(cached),
-		SeverityCount: severityCount(cached),
-		MismatchIDs:   mismatchIDs,
-		Mismatches:    cached,
-		Views:         views,
-		PMO:           buildPMOSummary(cached),
+		Connector:            strings.ToLower(strings.TrimSpace(req.Connector)),
+		URI:                  strings.TrimSpace(req.URI),
+		Role:                 string(role),
+		TraceID:              traceID,
+		Summary:              renderFindingsSummary(role, actionable, reviewCandidates),
+		MismatchCount:        len(actionable),
+		ReviewCandidateCount: len(reviewCandidates),
+		SeverityCount:        severityCount(actionable),
+		MismatchIDs:          mismatchIDs,
+		Mismatches:           actionable,
+		ReviewCandidates:     reviewCandidates,
+		Views:                views,
+		PMO:                  buildPMOSummary(actionable),
 		Execution: response.ExecutionEvidence{
 			Enabled:   false,
 			Assistive: true,
@@ -552,6 +559,46 @@ func buildRoleViews(mismatches []types.Mismatch) response.RoleViews {
 	}
 }
 
+func splitPresentationFindings(mismatches []types.Mismatch) ([]types.Mismatch, []types.Mismatch) {
+	actionable := make([]types.Mismatch, 0, len(mismatches))
+	reviewCandidates := []types.Mismatch{}
+	for _, mismatch := range mismatches {
+		if isReviewCandidate(mismatch) {
+			reviewCandidates = append(reviewCandidates, normalizeReviewCandidate(mismatch))
+			continue
+		}
+		actionable = append(actionable, mismatch)
+	}
+	return actionable, reviewCandidates
+}
+
+func isReviewCandidate(mismatch types.Mismatch) bool {
+	switch strings.ToLower(strings.TrimSpace(mismatch.Type)) {
+	case "dependency_risk", "dependency_review":
+		return true
+	default:
+		return strings.HasPrefix(strings.ToLower(strings.TrimSpace(mismatch.ID)), "dependency_risk:")
+	}
+}
+
+func normalizeReviewCandidate(mismatch types.Mismatch) types.Mismatch {
+	mismatch.Type = "dependency_review"
+	mismatch.Severity = "low"
+	mismatch.Impact = "low"
+	if strings.TrimSpace(mismatch.Recommended) == "" {
+		mismatch.Recommended = "Review this dependency when the affected service becomes delivery-critical."
+	}
+	return mismatch
+}
+
+func renderFindingsSummary(role stagepresentation.Role, actionable, reviewCandidates []types.Mismatch) string {
+	base := stagepresentation.RenderSummary(role, actionable)
+	if len(reviewCandidates) == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s Review candidates: %d dependency item%s kept out of Top issues.", base, len(reviewCandidates), pluralSuffix(len(reviewCandidates)))
+}
+
 func buildRoleSummary(role stagepresentation.Role, mismatches []types.Mismatch) response.RoleSummaryView {
 	return response.RoleSummaryView{
 		Role:         string(role),
@@ -665,6 +712,13 @@ func collectRecommendations(mismatches []types.Mismatch) []string {
 		out = append(out, recommended)
 	}
 	return out
+}
+
+func pluralSuffix(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func severityCount(mismatches []types.Mismatch) map[string]int {
