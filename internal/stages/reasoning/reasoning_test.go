@@ -147,6 +147,10 @@ func TestDetectMismatchesGraphRules(t *testing.T) {
 		{
 			name: "service dependency edge is a delivery risk",
 			reader: graphReader{
+				entities: []entities.CanonicalEntity{
+					{Entity: types.Entity{ID: "svc-1", Name: "PaymentsService", Type: types.Service}},
+					{Entity: types.Entity{ID: "dep-1", Name: "OrderIdRepository", Type: types.Dependency}},
+				},
 				relationships: []types.Relationship{
 					{ID: "svc-1->dep-1", FromID: "svc-1", ToID: "dep-1", Kind: types.ServiceDependsOn, Evidence: []string{"repo://svc#dep"}},
 				},
@@ -169,6 +173,9 @@ func TestDetectMismatchesGraphRules(t *testing.T) {
 			finding := got[0]
 			if finding.Type != tt.wantType {
 				t.Errorf("Type = %q, want %q", finding.Type, tt.wantType)
+			}
+			if tt.wantType == "dependency_risk" && finding.Summary != "Service PaymentsService depends on OrderIdRepository; confirm the dependency is healthy and owned" {
+				t.Errorf("Summary = %q, want readable dependency names", finding.Summary)
 			}
 			if finding.Confidence <= 0 || finding.Confidence > 1 {
 				t.Errorf("Confidence = %v, want within (0,1]", finding.Confidence)

@@ -27,7 +27,7 @@ flowchart TD
 
 ```
 apps/api/
-  main.go          — entry point: addr config, DB open/migrations, ListenAndServe only
+  main.go          — entry point: loopback addr config, DB open/migrations, ListenAndServe only
   bootstrap/       — API composition: handler dependency construction, route list, CORS registration
   handler/
     connectors/           — HTTP handlers for source connector routes
@@ -153,11 +153,13 @@ Filesystem responses keep the existing first-event fields (`event`, `preview`, a
 ```sh
 # Generate docs first (required), then start:
 swag init -g apps/api/main.go -o apps/api/docs
-go run ./apps/api          # listens on :8080
+go run ./apps/api          # listens on 127.0.0.1:8080
 API_ADDR=:9000 go run ./apps/api
 ```
 
 Or use `start-local.sh`, which runs `swag init` and `bun run codegen` automatically before starting.
+
+The API process installs SIGINT/SIGTERM handling. Shutdown cancels background workers and gives active HTTP requests a short graceful window before closing the server.
 
 Once running:
 

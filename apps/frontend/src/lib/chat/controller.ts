@@ -25,6 +25,7 @@ export type ChatQueryOptions = {
   setActivityArtifacts: (artifacts: Artifact[]) => void;
   refreshWorkspace: () => Promise<void>;
   readySources?: Pick<ConnectorKnowledge, "connector" | "uri" | "status">[];
+  signal?: AbortSignal;
 };
 
 export function makeId() {
@@ -176,6 +177,8 @@ export async function runChatQuery(options: ChatQueryOptions) {
   options.addMessage(load);
   options.setBusy(true);
   let refreshedWorkspace = false;
+  let stream = initialStream;
+  let streamedAnswerText = "";
   try {
     if (options.workspacePath === DEMO_WORKSPACE_PATH) {
       const result = demoChatQueryResult(options.text);
@@ -206,37 +209,47 @@ export async function runChatQuery(options: ChatQueryOptions) {
     };
     let streamedResult: ChatQueryResult | null = null;
     let streamedAnswer: ChatQueryResult | null = null;
-    let streamedAnswerText = "";
     let streamStarted = false;
-    let stream = initialStream;
     try {
-      await streamChatQuery(body, {
-        onLog: (line) => {
-          streamStarted = true;
-          stream = appendStreamLine(stream, line);
-          options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
+      await streamChatQuery(
+        body,
+        {
+          onLog: (line) => {
+            streamStarted = true;
+            stream = appendStreamLine(stream, line);
+            options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
+          },
+          onStatus: (elapsed) => {
+            streamStarted = true;
+            const statusLine = `• Codex still running... ${elapsed}s`;
+            stream = replaceStreamStatusLine(stream, statusLine);
+            options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
+          },
+          onAnswer: (result) => {
+            streamedAnswer = result;
+            streamedAnswerText = formatAssistantResultText(result);
+            options.setLastChatResult(result);
+            stream = { ...stream, summary: buildStreamSummary(result) };
+            options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
+          },
+          onResult: (result) => {
+            streamedResult = result;
+          },
+          onError: (message) => {
+            throw new Error(message);
+          },
         },
-        onStatus: (elapsed) => {
-          streamStarted = true;
-          const statusLine = `• Codex still running... ${elapsed}s`;
-          stream = replaceStreamStatusLine(stream, statusLine);
-          options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
-        },
-        onAnswer: (result) => {
-          streamedAnswer = result;
-          streamedAnswerText = formatAssistantResultText(result);
-          options.setLastChatResult(result);
-          stream = { ...stream, summary: buildStreamSummary(result) };
-          options.replaceMessage(load.id, streamMsg(load.id, stream, streamedAnswerText));
-        },
-        onResult: (result) => {
-          streamedResult = result;
-        },
-        onError: (message) => {
-          throw new Error(message);
-        },
-      });
+        { signal: options.signal },
+      );
     } catch (error) {
+      if (isAbortError(error)) {
+        stream = stoppedStream(stream);
+        options.replaceMessage(load.id, {
+          ...streamMsg(load.id, stream, streamedAnswerText),
+          loading: false,
+        });
+        return;
+      }
       const answeredResult = streamedAnswer as ChatQueryResult | null;
       if (answeredResult) {
         const failedResult: ChatQueryResult = {
@@ -309,7 +322,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
       return;
     }
 
-    const res = await postChatQuery(body);
+    const res = await postChatQuery(body, { signal: options.signal });
     if (res.ok) {
       options.setLastChatResult(res.body);
       if (res.body.artifacts?.length) {
@@ -340,6 +353,14 @@ export async function runChatQuery(options: ChatQueryOptions) {
       ),
     );
   } catch (error) {
+    if (isAbortError(error)) {
+      stream = stoppedStream(stream);
+      options.replaceMessage(load.id, {
+        ...streamMsg(load.id, stream, streamedAnswerText),
+        loading: false,
+      });
+      return;
+    }
     options.replaceMessage(
       load.id,
       assistantMsg(`Source query failed: ${String(error)}`),
@@ -354,6 +375,24 @@ export async function runChatQuery(options: ChatQueryOptions) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isAbortError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
+}
+
+function stoppedStream(stream: ChatStreamState): ChatStreamState {
+  return {
+    ...appendStreamLine(stream, "• Codex chat stopped."),
+    status: "complete",
+    summary: "Stopped by user.",
+    expanded: stream.expanded ?? false,
+  };
 }
 
 export function localDateString(date: Date) {

@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
@@ -21,10 +22,11 @@ func TestRegisterRoutesAppliesCORS(t *testing.T) {
 
 	t.Run("cors route has Access-Control-Allow-Origin header", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/with-cors", nil)
+		req.Header.Set("Origin", "http://localhost:5173")
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
-		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-			t.Errorf("Access-Control-Allow-Origin = %q, want *", got)
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+			t.Errorf("Access-Control-Allow-Origin = %q, want local frontend origin", got)
 		}
 	})
 
@@ -49,6 +51,7 @@ func TestRegisterRoutesHandlesOPTIONS(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodOptions, "/resource", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -62,7 +65,10 @@ func TestRegisterRoutesHandlesOPTIONS(t *testing.T) {
 
 // TestRoutesWithoutDBKeepsPublicFallbackRoutes verifies DB-backed routes are omitted while fallback presentation remains available.
 func TestRoutesWithoutDBKeepsPublicFallbackRoutes(t *testing.T) {
-	routes := Routes(nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	routes := Routes(ctx, nil)
 	patterns := make(map[string]bool, len(routes))
 	for _, route := range routes {
 		patterns[route.Pattern] = true
@@ -90,7 +96,10 @@ func TestRoutesWithDBIncludesChatSessionReset(t *testing.T) {
 	}
 	defer db.Close()
 
-	routes := Routes(db)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	routes := Routes(ctx, db)
 	for _, route := range routes {
 		if route.Pattern == "/chat/session/reset" {
 			return

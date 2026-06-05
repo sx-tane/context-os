@@ -1,7 +1,6 @@
 package relationship
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 
 	"context-os/domain/entities"
 	"context-os/domain/types"
+	"context-os/internal/codexio"
 )
 
 const (
@@ -79,9 +79,10 @@ func (a *CodexAssistant) run(ctx context.Context, prompt string) (string, error)
 	cmd.Env = os.Environ()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	stdoutBuf := codexio.NewBoundedBuffer(codexio.DefaultLogLimit)
+	stderrBuf := codexio.NewBoundedBuffer(codexio.DefaultLogLimit)
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 
 	if err := cmd.Start(); err != nil {
 		return "", codexCommandError(err, "")

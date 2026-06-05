@@ -47,15 +47,15 @@ type Route struct {
 }
 
 // NewMux builds the API mux and registers all public routes.
-func NewMux(sqlDB *sql.DB) *http.ServeMux {
+func NewMux(ctx context.Context, sqlDB *sql.DB) *http.ServeMux {
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, Routes(sqlDB))
+	RegisterRoutes(mux, Routes(ctx, sqlDB))
 	return mux
 }
 
 // Routes returns the full API route table. DB-backed routes are included only when sqlDB is non-nil.
-func Routes(sqlDB *sql.DB) []Route {
-	handlers := newHandlers(sqlDB)
+func Routes(ctx context.Context, sqlDB *sql.DB) []Route {
+	handlers := newHandlers(ctx, sqlDB)
 	routes := []Route{
 		{Pattern: "/health", Handler: http.HandlerFunc(health.Health), CORS: true},
 		{Pattern: "/github/ingest", Handler: http.HandlerFunc(github.Ingest), CORS: true},
@@ -150,9 +150,12 @@ type handlers struct {
 	chat         *handlerchat.Handler
 }
 
-func newHandlers(sqlDB *sql.DB) handlers {
+func newHandlers(ctx context.Context, sqlDB *sql.DB) handlers {
 	if sqlDB == nil {
 		return handlers{}
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	wsStore := store.NewWorkspaceStore(sqlDB)
@@ -177,7 +180,7 @@ func newHandlers(sqlDB *sql.DB) handlers {
 	))
 
 	syncWorker := internalsync.NewWorker(wsStore, syncStore, evStore)
-	go syncWorker.Run(context.Background(), 15*time.Minute)
+	go syncWorker.Run(ctx, 15*time.Minute)
 
 	return handlers{
 		workspace: handlerworkspace.NewHandler(wsStore, evStore, entityStore, mismatchStore, syncStore).

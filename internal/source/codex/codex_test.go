@@ -84,6 +84,44 @@ func TestConnectorCapturesLog(t *testing.T) {
 	}
 }
 
+// TestConnectorRedactsTokenOverrideFromLog verifies token overrides do not appear in emitted Codex log metadata.
+func TestConnectorRedactsTokenOverrideFromLog(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fake command is unix-only")
+	}
+
+	token := "ghp_testtoken123"
+	script := `#!/bin/sh
+echo "using token ` + token + `"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    shift
+    printf 'source content' > "$1"
+  fi
+  shift
+done
+`
+	connector := newConnector(fakeCodexCommand(t, script), t.TempDir())
+
+	events, err := connector.Ingest(context.Background(), contracts.SourceRequest{
+		URI: "https://github.com/owner/repo/issues/1",
+		Metadata: map[string]string{
+			MetadataPlugin:        PluginGitHub,
+			MetadataTokenOverride: token,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	log := events[0].Metadata[MetadataLog]
+	if strings.Contains(log, token) {
+		t.Fatalf("codex_log = %q, want token redacted", log)
+	}
+	if !strings.Contains(log, "[redacted]") {
+		t.Fatalf("codex_log = %q, want redaction marker", log)
+	}
+}
+
 // TestConnectorSupportsAtlassianRovoPlugin verifies Jira URIs routed through the Rovo plugin produce jira object_type metadata.
 func TestConnectorSupportsAtlassianRovoPlugin(t *testing.T) {
 	if runtime.GOOS == "windows" {

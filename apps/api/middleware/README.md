@@ -20,17 +20,19 @@ These lines pair with optional frontend console logs from `apps/frontend/src/lib
 
 ## WithCORS
 
-`WithCORS` wraps any `http.Handler` with permissive CORS headers so the local SvelteKit frontend can call the Go API directly when the two processes run on different ports.
+`WithCORS` wraps any `http.Handler` with local-origin CORS headers so the local SvelteKit frontend can call the Go API directly when the two processes run on different ports.
 
 ### Headers set on every response
 
-| Header                         | Value                |
-| ------------------------------ | -------------------- |
-| `Access-Control-Allow-Origin`  | `*`                  |
-| `Access-Control-Allow-Methods` | `GET, POST, OPTIONS` |
-| `Access-Control-Allow-Headers` | `Content-Type, X-ContextOS-Request-ID` |
+| Header                         | Value                                                      |
+| ------------------------------ | ---------------------------------------------------------- |
+| `Access-Control-Allow-Origin`  | Request origin when it matches the configured allowlist    |
+| `Access-Control-Allow-Methods` | `GET, POST, PUT, DELETE, OPTIONS`                         |
+| `Access-Control-Allow-Headers` | `Content-Type, X-ContextOS-Request-ID`                    |
 
-`OPTIONS` preflight requests are short-circuited with `204 No Content` — the inner handler is not called.
+Allowed origins default to `http://localhost:5173` and `http://127.0.0.1:5173`. Set `CONTEXTOS_CORS_ORIGINS` to a comma-separated allowlist when running the frontend on another local port.
+
+`OPTIONS` preflight requests from allowed origins are short-circuited with `204 No Content` — the inner handler is not called. Browser requests with any other origin receive `403 Forbidden`.
 
 ### Usage
 

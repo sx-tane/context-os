@@ -129,6 +129,50 @@ describe("runAnalysis", () => {
     expect(state.refreshWorkspace).toHaveBeenCalled();
   });
 
+  it("removes the parent abort listener after a source completes", async () => {
+    const originalWindow = (global as unknown as { window?: unknown }).window;
+    (global as unknown as { window: Pick<typeof window, "setTimeout" | "clearTimeout"> }).window = {
+      setTimeout,
+      clearTimeout,
+    };
+    mockPostFindings.mockResolvedValueOnce({
+      ok: true,
+      body: {
+        connector: "github",
+        uri: "repo",
+        mismatch_count: 0,
+        event_count: 1,
+        entity_count: 1,
+        mismatches: [],
+      },
+    });
+    const state = makeState();
+    const controller = new AbortController();
+    const add = jest.spyOn(controller.signal, "addEventListener");
+    const remove = jest.spyOn(controller.signal, "removeEventListener");
+
+    try {
+      await runAnalysis({
+        workspacePath: "workspace",
+        readySources: [{ connector: "github", uri: "repo", status: "ready" }],
+        addMessage: state.addMessage,
+        replaceMessage: state.replaceMessage,
+        setBusy: state.setBusy,
+        setLastFindings: state.setLastFindings,
+        setLastAnalysisAt: state.setLastAnalysisAt,
+        openSources: state.openSources,
+        refreshWorkspace: state.refreshWorkspace,
+        signal: controller.signal,
+        timeoutMs: 1000,
+      });
+    } finally {
+      (global as unknown as { window?: unknown }).window = originalWindow;
+    }
+
+    expect(add).toHaveBeenCalledWith("abort", expect.any(Function), { once: true });
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+
   it("skips broad connector scopes before calling findings analysis", async () => {
     const state = makeState();
 

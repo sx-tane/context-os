@@ -42,7 +42,8 @@ func (c MCPConnector) Ingest(ctx context.Context, req contracts.SourceRequest) (
 - Rejects requests where both `Content` and `URI` are blank.
 - Creates metadata with `connector` and `mcp` values.
 - Copies `URI` to `source_uri` and `Cursor` to `source_cursor` when present.
-- Copies request metadata into the emitted event metadata.
+- Copies non-sensitive request metadata into the emitted event metadata.
+- Drops authentication material such as token, secret, password, credential, and private-key metadata before events are returned or persisted.
 - Uses `URI` as the event subject when present, otherwise uses the connector name.
 - Emits a single `document.ingested` event.
 - Returns structured `contracts.ConnectorError` values for cancellation and validation failures.

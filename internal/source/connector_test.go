@@ -212,3 +212,38 @@ func TestMCPConnectorIngestReservedMetadataKeysCannotBeOverriddenByCaller(t *tes
 		t.Errorf("source_uri overridden: got %q, want %q", meta[contracts.MetadataSourceURI], req.URI)
 	}
 }
+
+// TestMCPConnectorIngestRedactsSensitiveMetadata verifies auth material is not emitted as event metadata.
+func TestMCPConnectorIngestRedactsSensitiveMetadata(t *testing.T) {
+	connector := source.NewMCPConnector("github", contracts.CapabilityRepository)
+	req := contracts.SourceRequest{
+		URI:     "repo://context-os/issues/6",
+		Content: "metadata redaction",
+		Metadata: map[string]string{
+			"github_token":                       "ghp_secret",
+			"sharepoint_client_secret":           "client-secret",
+			"googledrive_oauth_credentials_path": "/home/user/credentials.json",
+			"private_key":                        "private-key",
+			"team":                               "platform",
+		},
+	}
+
+	ingested, err := connector.Ingest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	meta := ingested[0].Metadata
+	for _, key := range []string{
+		"github_token",
+		"sharepoint_client_secret",
+		"googledrive_oauth_credentials_path",
+		"private_key",
+	} {
+		if _, ok := meta[key]; ok {
+			t.Fatalf("metadata[%q] present, want redacted", key)
+		}
+	}
+	if meta["team"] != "platform" {
+		t.Fatalf("metadata[%q] = %q, want platform", "team", meta["team"])
+	}
+}

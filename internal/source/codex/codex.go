@@ -2,7 +2,6 @@
 package codex
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 
 	"context-os/domain/contracts"
 	"context-os/domain/events"
+	"context-os/internal/codexio"
 	"context-os/internal/source"
 )
 
@@ -173,13 +173,21 @@ func (c connector) ingestWithProgress(ctx context.Context, req contracts.SourceR
 	req.Metadata[MetadataProvider] = "codex_cli"
 	req.Metadata[MetadataPrompt] = prompt
 	req.Metadata[MetadataCommand] = c.command
-	req.Metadata[MetadataLog] = log
+	req.Metadata[MetadataLog] = redactValue(log, req.Metadata[MetadataTokenOverride])
 	objectType := objectTypeForPlugin(plugin)
 	req.Metadata[contracts.MetadataObjectType] = objectType
 	req.Metadata[contracts.MetadataObjectID] = uri
 	req.Metadata[events.MetadataSourceID] = "codex:" + objectType + ":" + uri
 
 	return c.base.Ingest(ctx, req)
+}
+
+func redactValue(text, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return text
+	}
+	return strings.ReplaceAll(text, value, "[redacted]")
 }
 
 // Ingest invokes Codex CLI with the selected plugin and emits the final response as source content.
@@ -222,13 +230,14 @@ func (c connector) runCodex(ctx context.Context, prompt string, envOverrides []s
 	cmd.Env = append(os.Environ(), envOverrides...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	var stdoutBuf, stderrBuf bytes.Buffer
+	stdoutBuf := codexio.NewBoundedBuffer(codexio.DefaultLogLimit)
+	stderrBuf := codexio.NewBoundedBuffer(codexio.DefaultLogLimit)
 	if progress != nil {
-		cmd.Stdout = io.MultiWriter(&stdoutBuf, progress)
-		cmd.Stderr = io.MultiWriter(&stderrBuf, progress)
+		cmd.Stdout = io.MultiWriter(stdoutBuf, progress)
+		cmd.Stderr = io.MultiWriter(stderrBuf, progress)
 	} else {
-		cmd.Stdout = &stdoutBuf
-		cmd.Stderr = &stderrBuf
+		cmd.Stdout = stdoutBuf
+		cmd.Stderr = stderrBuf
 	}
 
 	if err := cmd.Start(); err != nil {

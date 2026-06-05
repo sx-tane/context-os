@@ -778,6 +778,24 @@ describe("streamChatQuery", () => {
     expect(answers).toEqual([{ ...result, evidence_save_status: "saving" }]);
     expect(results).toEqual([result]);
   });
+
+  it("releases the stream reader after reading finishes", async () => {
+    const releaseLock = jest.fn();
+    const read = jest.fn().mockResolvedValueOnce({ done: true });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({ read, releaseLock }),
+      },
+    } as unknown as Response);
+
+    await streamChatQuery(
+      { workspace_id: "ws1", message: "status" },
+      {},
+    );
+
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---- resetChatSession ----

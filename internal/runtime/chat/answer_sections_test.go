@@ -1,6 +1,9 @@
 package chat
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestParseLiveAnswerMapsStructuredSections verifies Codex JSON output becomes a plain answer plus source sections.
 func TestParseLiveAnswerMapsStructuredSections(t *testing.T) {
@@ -55,5 +58,54 @@ func TestParseLiveAnswerKeepsPlainText(t *testing.T) {
 	}
 	if len(sections) != 0 {
 		t.Fatalf("sections length = %d, want 0", len(sections))
+	}
+}
+
+// TestBuildFanoutAnswerSynthesizesSections verifies multi-source live answers summarize behavior instead of listing sources only.
+func TestBuildFanoutAnswerSynthesizesSections(t *testing.T) {
+	sections := []AnswerSection{
+		{
+			SourceLabel: "forcia/kkg_payment linked-flag.ts",
+			Connector:   "github",
+			Summary:     "Defines the two legal linkedFlag values used by transaction history.",
+			Facts: []string{
+				"LinkedFlag.NOT_LINKED is '0'.",
+				"LinkedFlag.LINKED is '1'.",
+			},
+		},
+		{
+			SourceLabel: "forcia/kkg_payment transaction-history.repository-dynamodb.ts",
+			Connector:   "github",
+			Summary:     "Implements DynamoDB query, update, batch read, retry, and validation behavior for linkedFlag.",
+			Facts: []string{
+				"If linkedFlag is undefined, the KeyConditionExpression uses transaction_date only; otherwise it uses transaction_date AND linked_flag.",
+				"updateLinkedFlag updates each matching primary key with UpdateExpression 'SET linked_flag = :linkedFlag' and value '1'.",
+			},
+		},
+		{
+			SourceLabel: "forcia/kkg_payment PR #367",
+			Connector:   "github",
+			Summary:     "Merged PR that made omitted linkedFlag mean full-day extraction for recovery/re-run cases.",
+			Facts: []string{
+				"PR #367 changed omitted linkedFlag behavior so reruns/recovery can fetch the whole day.",
+			},
+		},
+		{
+			SourceLabel: "BKGDEV-8528 Slack thread",
+			Connector:   "slack",
+			Summary:     "Recent PR thread for permanent mitigation of DynamoDB ProvisionedThroughputExceededException.",
+			OpenItems:   []string{"PR #379 is open and unmerged, so treat it as proposed behavior."},
+		},
+	}
+
+	answer := buildFanoutAnswer(sections, nil, "en")
+
+	for _, want := range []string{"Summary:", "Meaning:", "How it works:", "Change history/current status:", "Open items:", "Evidence sources:"} {
+		if !strings.Contains(answer, want) {
+			t.Fatalf("answer = %q, want %q section", answer, want)
+		}
+	}
+	if strings.Contains(answer, "forcia/kkg_payment linked-flag.ts: Defines") {
+		t.Fatalf("answer = %q, should not be source-list-only output", answer)
 	}
 }

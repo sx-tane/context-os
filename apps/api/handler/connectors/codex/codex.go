@@ -2,7 +2,6 @@
 package codex
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 
 	"context-os/apps/api/handler/shared"
 	"context-os/apps/api/response"
+	"context-os/internal/codexio"
 )
 
 // codexPluginStatus represents a single installed plugin.
@@ -404,9 +404,9 @@ func runCodexJSON(ctx context.Context, prompt string) (string, error) {
 	started := time.Now()
 	cmd := exec.Command(binary, "exec", "--sandbox", "read-only", "--ephemeral", "--color", "never", "-o", outPath, prompt) //nolint:gosec
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+	buf := codexio.NewBoundedBuffer(codexio.DefaultLogLimit)
+	cmd.Stdout = buf
+	cmd.Stderr = buf
 
 	if err := cmd.Start(); err != nil {
 		return "", err
@@ -488,9 +488,9 @@ func resolveCodexBin() string {
 func runCodexInfo(args ...string) (string, error) {
 	binary := resolveCodexBin()
 	cmd := exec.Command(binary, args...) //nolint:gosec
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+	buf := codexio.NewBoundedBuffer(codexio.DefaultLogLimit)
+	cmd.Stdout = buf
+	cmd.Stderr = buf
 
 	done := make(chan error, 1)
 	if err := cmd.Start(); err != nil {

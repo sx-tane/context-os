@@ -22,10 +22,12 @@
     export let messages: ChatMessage[] = [];
     export let hasSources = false;
     export let busy = false;
+    export let canStop = false;
     export let command = "";
     export let basketItems: EvidenceBasketItem[] = [];
     export let onClear: () => void | Promise<void> = () => {};
     export let onSubmit: () => void | Promise<void> = () => {};
+    export let onStop: () => void | Promise<void> = () => {};
     export let onAskEvidence: (prompt: string) => void | Promise<void> = () => {};
     export let onPinEvidence: (item: EvidenceBasketItem) => void | Promise<void> = () => {};
 
@@ -457,7 +459,17 @@
             on:keydown={handleComposerKeydown}
             on:input={normalizeComposerInput}
         ></textarea>
-        <button class="send-icon" aria-label="Send message" title="Send" disabled={busy || !hasSources || command.trim() === ""}>↑</button>
+        {#if canStop}
+            <button
+                type="button"
+                class="send-icon stop-icon"
+                aria-label="Stop Codex chat"
+                title="Stop Codex chat"
+                on:click={onStop}
+            >×</button>
+        {:else}
+            <button class="send-icon" aria-label="Send message" title="Send" disabled={busy || !hasSources || command.trim() === ""}>↑</button>
+        {/if}
     </form>
 </section>
 
@@ -537,6 +549,17 @@
     .composer button:disabled {
         cursor: not-allowed;
         opacity: 0.42;
+    }
+
+    .composer .stop-icon {
+        border-bottom-color: #b4422a;
+        color: #b4422a;
+    }
+
+    .composer .stop-icon:hover {
+        border-bottom-color: #b4422a;
+        background-image: linear-gradient(90deg, #b4422a 0 50%, transparent 50% 100%);
+        color: #f8f6ef;
     }
 
     .messages {

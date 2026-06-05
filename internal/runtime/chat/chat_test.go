@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -475,6 +476,112 @@ func TestQueryRequestedConnectorsFanOutOnlyThoseLiveScopes(t *testing.T) {
 	}
 }
 
+// TestQueryFanoutUsesEveryConcreteConnectedSource verifies broad live search launches every saved source instead of one source per connector.
+func TestQueryFanoutUsesEveryConcreteConnectedSource(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "BKGDEV-8457", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "BKGDEV-8466", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "Related implementation context was found."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "kkg payment 決済GW",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if live.calls != 3 {
+		t.Fatalf("live calls = %d, want 3", live.calls)
+	}
+	if len(result.AnswerSections) != 3 {
+		t.Fatalf("answer sections = %d, want 3", len(result.AnswerSections))
+	}
+	for index, want := range []string{"BKGDEV-8457", "BKGDEV-8466", "github"} {
+		if result.AnswerSections[index].SourceURI != want {
+			t.Fatalf("answer section %d source URI = %q, want %q", index, result.AnswerSections[index].SourceURI, want)
+		}
+	}
+}
+
+// TestQueryLiveFanoutRunsConnectedScopesConcurrently verifies broad live source search starts connector lookups in parallel.
+func TestQueryLiveFanoutRunsConnectedScopesConcurrently(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{
+		answer: "Related implementation context was found.",
+		delay:  25 * time.Millisecond,
+	}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "kkg payment 決済GW",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Connector != "multiple" {
+		t.Fatalf("Connector = %q, want multiple", result.Connector)
+	}
+	if live.calls != 3 {
+		t.Fatalf("live calls = %d, want 3", live.calls)
+	}
+	if live.maxActive < 2 {
+		t.Fatalf("max active live calls = %d, want concurrent overlap", live.maxActive)
+	}
+	if len(result.AnswerSections) != 3 {
+		t.Fatalf("answer sections = %d, want 3", len(result.AnswerSections))
+	}
+	if result.AnswerSections[0].Connector != "jira" || result.AnswerSections[1].Connector != "github" || result.AnswerSections[2].Connector != "slack" {
+		t.Fatalf("answer connectors = %#v, want jira, github, slack", result.AnswerSections)
+	}
+}
+
+// TestQueryLiveFanoutRetriesParallelStartupFailures verifies failed parallel lookups are retried serially before falling back to local data.
+func TestQueryLiveFanoutRetriesParallelStartupFailures(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "jira", SourceURI: "jira", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+		{WorkspaceID: "ws1", Connector: "slack", SourceURI: "slack", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{
+		answer:             "Related implementation context was found.",
+		delay:              25 * time.Millisecond,
+		failWhenConcurrent: true,
+	}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "kkg payment 決済GW",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if live.maxActive < 2 {
+		t.Fatalf("max active live calls = %d, want concurrent first attempt", live.maxActive)
+	}
+	if live.calls <= 3 {
+		t.Fatalf("live calls = %d, want retry after parallel failure", live.calls)
+	}
+	if len(result.AnswerSections) != 3 {
+		t.Fatalf("answer sections = %d, want 3 after retry", len(result.AnswerSections))
+	}
+}
+
 // TestQueryExplicitRouteDisablesRequestedConnectorFanout verifies concrete route fields take precedence over connector lists.
 func TestQueryExplicitRouteDisablesRequestedConnectorFanout(t *testing.T) {
 	events := &fakeEventRepository{}
@@ -887,17 +994,48 @@ var _ internalchat.LiveAnswerer = (*fakeLiveAnswerer)(nil)
 var _ repository.EntityRepository = (*unusedEntityRepository)(nil)
 
 type fakeLiveAnswerer struct {
-	answer string
-	err    error
-	calls  int
-	query  internalchat.LiveQuery
+	mu                 sync.Mutex
+	answer             string
+	err                error
+	delay              time.Duration
+	failWhenConcurrent bool
+	calls              int
+	active             int
+	maxActive          int
+	query              internalchat.LiveQuery
+	queries            []internalchat.LiveQuery
 }
 
 func (f *fakeLiveAnswerer) Answer(ctx context.Context, query internalchat.LiveQuery) (string, error) {
+	f.mu.Lock()
 	f.calls += 1
+	f.active += 1
+	concurrent := f.active > 1
+	if f.active > f.maxActive {
+		f.maxActive = f.active
+	}
 	f.query = query
+	f.queries = append(f.queries, query)
+	f.mu.Unlock()
+
+	if f.delay > 0 {
+		timer := time.NewTimer(f.delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+		case <-timer.C:
+		}
+	}
+
+	f.mu.Lock()
+	f.active -= 1
+	f.mu.Unlock()
+
 	if f.err != nil {
 		return "", f.err
+	}
+	if f.failWhenConcurrent && concurrent {
+		return "", errors.New("codex cli parallel startup failed")
 	}
 	return f.answer, nil
 }

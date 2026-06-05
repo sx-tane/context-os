@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"context-os/internal/codexio"
 )
 
 var codexBinCandidates = []string{
@@ -52,10 +53,11 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	if workspaceID == "" {
 		return "", errors.New("workspace_id is required for live chat")
 	}
+	sessionKey := codexSessionKey(workspaceID, query.Connector)
 
-	unlock := a.sessions.lockWorkspace(workspaceID)
+	unlock := a.sessions.lockWorkspace(sessionKey)
 	defer unlock()
-	sessionID, err := a.sessions.Load(workspaceID)
+	sessionID, err := a.sessions.Load(sessionKey)
 	if err != nil {
 		return "", err
 	}
@@ -73,13 +75,13 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	emitProgress(query.Progress, fmt.Sprintf("› Live Codex: %s plugin lookup", plugin))
 	emitProgress(query.Progress, fmt.Sprintf("• Source: %s", sourceURI))
 
-	var log bytes.Buffer
+	log := codexio.NewBoundedBuffer(codexio.DefaultLogLimit)
 	if sessionID != "" {
 		emitProgress(query.Progress, "• Resuming Codex CLI chat session.")
-		err = a.runCodex(ctx, []string{"exec", "resume", "--json", "-o", outPath, sessionID, prompt}, &log, query.Progress)
+		err = a.runCodex(ctx, []string{"exec", "resume", "--json", "-o", outPath, sessionID, "-"}, prompt, log, query.Progress)
 		if err != nil && isResumeSessionUnavailable(log.String(), err) {
 			emitProgress(query.Progress, "• Stored Codex session is unavailable; starting a fresh chat session.")
-			if deleteErr := a.sessions.Delete(workspaceID); deleteErr != nil {
+			if deleteErr := a.sessions.Delete(sessionKey); deleteErr != nil {
 				return "", deleteErr
 			}
 			sessionID = ""
@@ -90,14 +92,13 @@ func (a CodexAnswerer) Answer(ctx context.Context, query LiveQuery) (string, err
 	}
 	if sessionID == "" {
 		emitProgress(query.Progress, "• Starting new Codex CLI chat session.")
-		if err := a.runCodex(ctx, []string{"exec", "--sandbox", "read-only", "--json", "--color", "never", "-o", outPath, prompt}, &log, query.Progress); err != nil {
+		if err := a.runCodex(ctx, []string{"exec", "--sandbox", "read-only", "--json", "--color", "never", "-o", outPath, "-"}, prompt, log, query.Progress); err != nil {
 			return "", err
 		}
 		nextSessionID := parseSessionMetaID(log.String())
 		if nextSessionID == "" {
-			return "", errors.New("codex did not report a session_meta id")
-		}
-		if err := a.sessions.Save(workspaceID, nextSessionID); err != nil {
+			emitProgress(query.Progress, "• Codex CLI did not report a reusable session id; continuing without resume metadata.")
+		} else if err := a.sessions.Save(sessionKey, nextSessionID); err != nil {
 			return "", err
 		}
 	}
@@ -129,12 +130,13 @@ func (a CodexAnswerer) ResetSession(ctx context.Context, workspaceID string) err
 	}
 	unlock := a.sessions.lockWorkspace(workspaceID)
 	defer unlock()
-	return a.sessions.Delete(workspaceID)
+	return a.sessions.DeleteWorkspace(workspaceID)
 }
 
-func (a CodexAnswerer) runCodex(ctx context.Context, args []string, log *bytes.Buffer, progress func(string)) error {
+func (a CodexAnswerer) runCodex(ctx context.Context, args []string, prompt string, log *codexio.BoundedBuffer, progress func(string)) error {
 	cmd := exec.Command(a.command, args...) //nolint:gosec
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Stdin = strings.NewReader(prompt)
 	progressLog := &progressBuffer{buf: log, progress: progress}
 	cmd.Stdout = progressLog
 	cmd.Stderr = progressLog
@@ -167,7 +169,7 @@ func (a CodexAnswerer) runCodex(ctx context.Context, args []string, log *bytes.B
 }
 
 type progressBuffer struct {
-	buf      *bytes.Buffer
+	buf      *codexio.BoundedBuffer
 	progress func(string)
 	partial  string
 }
@@ -196,6 +198,9 @@ func (p *progressBuffer) emit(line string) {
 		return
 	}
 	if strings.HasPrefix(line, "{") {
+		if summary := summarizeCodexJSONEvent(line); summary != "" {
+			p.progress(summary)
+		}
 		return
 	}
 	if strings.HasPrefix(line, "›") || strings.HasPrefix(line, "•") {
@@ -203,6 +208,76 @@ func (p *progressBuffer) emit(line string) {
 		return
 	}
 	p.progress("• " + line)
+}
+
+func summarizeCodexJSONEvent(line string) string {
+	var event map[string]any
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return ""
+	}
+	eventType := cleanProgressText(stringField(event, "type"))
+	if eventType == "" {
+		return ""
+	}
+	if eventType == "session_meta" {
+		return "• Codex session metadata received."
+	}
+	detail := codexEventDetail(event)
+	if detail == "" {
+		return "• Codex event: " + eventType
+	}
+	return "• Codex event: " + eventType + " — " + detail
+}
+
+func codexEventDetail(event map[string]any) string {
+	for _, key := range []string{"message", "text", "summary", "status", "name", "tool_name", "call_id"} {
+		if value := cleanProgressText(stringField(event, key)); value != "" {
+			return truncateProgressText(value)
+		}
+	}
+	payload, _ := event["payload"].(map[string]any)
+	for _, key := range []string{"message", "text", "summary", "status", "name", "tool_name", "call_id"} {
+		if value := cleanProgressText(stringField(payload, key)); value != "" {
+			return truncateProgressText(value)
+		}
+	}
+	if item, _ := payload["item"].(map[string]any); item != nil {
+		if value := cleanProgressText(firstNonEmpty(stringField(item, "type"), stringField(item, "name"), stringField(item, "tool_name"))); value != "" {
+			return truncateProgressText(value)
+		}
+	}
+	return ""
+}
+
+func stringField(values map[string]any, key string) string {
+	if values == nil {
+		return ""
+	}
+	value, ok := values[key]
+	if !ok {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case float64, bool:
+		return fmt.Sprint(typed)
+	default:
+		return ""
+	}
+}
+
+func cleanProgressText(value string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+}
+
+func truncateProgressText(value string) string {
+	const maxProgressDetail = 180
+	runes := []rune(value)
+	if len(runes) <= maxProgressDetail {
+		return value
+	}
+	return string(runes[:maxProgressDetail-3]) + "..."
 }
 
 func resolveCodexCommand() string {
@@ -303,6 +378,27 @@ func (s *codexSessionStore) Delete(workspaceID string) error {
 	return nil
 }
 
+func (s *codexSessionStore) DeleteWorkspace(workspaceID string) error {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return errors.New("workspace_id is required")
+	}
+	if err := s.Delete(workspaceID); err != nil {
+		return err
+	}
+	prefix := safeSessionFilename(workspaceID + "::")
+	matches, err := filepath.Glob(filepath.Join(s.dir, prefix+"*.json"))
+	if err != nil {
+		return fmt.Errorf("match codex chat sessions: %w", err)
+	}
+	for _, path := range matches {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("delete codex chat session: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *codexSessionStore) lockWorkspace(workspaceID string) func() {
 	key := strings.TrimSpace(workspaceID)
 	s.mu.Lock()
@@ -339,6 +435,15 @@ func safeSessionFilename(workspaceID string) string {
 		name = name[:180]
 	}
 	return name
+}
+
+func codexSessionKey(workspaceID, connector string) string {
+	workspaceID = strings.TrimSpace(workspaceID)
+	connector = normalizeConnector(connector)
+	if connector == "" {
+		return workspaceID
+	}
+	return workspaceID + "::" + connector
 }
 
 func parseSessionMetaID(log string) string {

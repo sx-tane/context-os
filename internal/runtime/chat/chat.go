@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"context-os/domain/repository"
@@ -102,6 +103,14 @@ type LiveAnswerer interface {
 // LiveSessionResetter clears workspace-scoped live chat conversation metadata.
 type LiveSessionResetter interface {
 	ResetSession(ctx context.Context, workspaceID string) error
+}
+
+type liveFanoutResult struct {
+	index     int
+	connector string
+	sourceURI string
+	sections  []AnswerSection
+	failure   string
 }
 
 // Service routes local chat queries to workspace repositories.
@@ -297,44 +306,85 @@ func (s *Service) answerLiveFanout(ctx context.Context, workspaceID string, quer
 		return s.answerArtifacts(ctx, workspaceID, query, result, message)
 	}
 
-	failures := []string{}
-	for _, scope := range scopes {
+	resultCh := make(chan liveFanoutResult, len(scopes))
+	var wg sync.WaitGroup
+	started := 0
+	for index, scope := range scopes {
 		connector := normalizeConnector(scope.Connector)
 		sourceURI := strings.TrimSpace(scope.SourceURI)
 		if connector == "" || sourceURI == "" || connector == "filesystem" || !supportsLiveConnector(connector) {
 			continue
 		}
+		started++
 		emitProgress(query.Progress, fmt.Sprintf("› Live Codex: %s connected-source lookup", connector))
-		answer, err := s.live.Answer(ctx, LiveQuery{
-			WorkspaceID:      result.WorkspaceID,
-			WorkspacePath:    result.WorkspacePath,
-			Connector:        connector,
-			SourceURI:        sourceURI,
-			Message:          message,
-			ResponseLanguage: query.ResponseLanguage,
-			Progress:         query.Progress,
-		})
-		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %s", connector, compactLiveError(err)))
-			emitProgress(query.Progress, fmt.Sprintf("• %s live lookup failed; continuing.", connector))
-			continue
+		wg.Add(1)
+		go func(index int, connector, sourceURI string) {
+			defer wg.Done()
+			answer, err := s.live.Answer(ctx, LiveQuery{
+				WorkspaceID:      result.WorkspaceID,
+				WorkspacePath:    result.WorkspacePath,
+				Connector:        connector,
+				SourceURI:        sourceURI,
+				Message:          message,
+				ResponseLanguage: query.ResponseLanguage,
+				Progress:         query.Progress,
+			})
+			if err != nil {
+				failure := fmt.Sprintf("%s: %s", connector, compactLiveError(err))
+				resultCh <- liveFanoutResult{index: index, connector: connector, sourceURI: sourceURI, failure: failure}
+				emitProgress(query.Progress, fmt.Sprintf("• %s live lookup failed: %s; continuing.", connector, compactLiveError(err)))
+				return
+			}
+			answer = strings.TrimSpace(answer)
+			if answer == "" {
+				resultCh <- liveFanoutResult{index: index, connector: connector, sourceURI: sourceURI, failure: fmt.Sprintf("%s: no live answer", connector)}
+				return
+			}
+			liveAnswer, sections := parseLiveAnswer(answer, connector, sourceURI)
+			if len(sections) == 0 && liveAnswer != "" {
+				sections = []AnswerSection{{
+					SourceLabel: connectorDisplayName(connector),
+					Connector:   connector,
+					SourceURI:   sourceURI,
+					Summary:     liveAnswer,
+					Confidence:  0.75,
+				}}
+			}
+			resultCh <- liveFanoutResult{index: index, connector: connector, sourceURI: sourceURI, sections: sections}
+		}(index, connector, sourceURI)
+	}
+	if started == 0 {
+		return s.answerArtifacts(ctx, workspaceID, query, result, message)
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	results := make([]liveFanoutResult, 0, started)
+	for liveResult := range resultCh {
+		results = append(results, liveResult)
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].index < results[j].index
+	})
+
+	failures := []string{}
+	for i, liveResult := range results {
+		if liveResult.failure != "" {
+			emitProgress(query.Progress, fmt.Sprintf("• Retrying %s live lookup serially.", liveResult.connector))
+			retry := s.answerLiveScope(ctx, query, result, message, liveResult.index, liveResult.connector, liveResult.sourceURI)
+			if retry.failure == "" {
+				results[i] = retry
+				liveResult = retry
+			}
 		}
-		answer = strings.TrimSpace(answer)
-		if answer == "" {
-			failures = append(failures, fmt.Sprintf("%s: no live answer", connector))
-			continue
+		if liveResult.failure != "" {
+			failures = append(failures, liveResult.failure)
+		} else {
+			result.AnswerSections = append(result.AnswerSections, liveResult.sections...)
 		}
-		liveAnswer, sections := parseLiveAnswer(answer, connector, sourceURI)
-		if len(sections) == 0 && liveAnswer != "" {
-			sections = []AnswerSection{{
-				SourceLabel: connectorDisplayName(connector),
-				Connector:   connector,
-				SourceURI:   sourceURI,
-				Summary:     liveAnswer,
-				Confidence:  0.75,
-			}}
-		}
-		result.AnswerSections = append(result.AnswerSections, sections...)
 	}
 
 	if len(result.AnswerSections) > 0 {
@@ -362,6 +412,36 @@ func (s *Service) answerLiveFanout(ctx context.Context, workspaceID string, quer
 		) + fallbackResult.Answer
 	}
 	return fallbackResult, nil
+}
+
+func (s *Service) answerLiveScope(ctx context.Context, query Query, result Result, message string, index int, connector, sourceURI string) liveFanoutResult {
+	answer, err := s.live.Answer(ctx, LiveQuery{
+		WorkspaceID:      result.WorkspaceID,
+		WorkspacePath:    result.WorkspacePath,
+		Connector:        connector,
+		SourceURI:        sourceURI,
+		Message:          message,
+		ResponseLanguage: query.ResponseLanguage,
+		Progress:         query.Progress,
+	})
+	if err != nil {
+		return liveFanoutResult{index: index, connector: connector, sourceURI: sourceURI, failure: fmt.Sprintf("%s: %s", connector, compactLiveError(err))}
+	}
+	answer = strings.TrimSpace(answer)
+	if answer == "" {
+		return liveFanoutResult{index: index, connector: connector, sourceURI: sourceURI, failure: fmt.Sprintf("%s: no live answer", connector)}
+	}
+	liveAnswer, sections := parseLiveAnswer(answer, connector, sourceURI)
+	if len(sections) == 0 && liveAnswer != "" {
+		sections = []AnswerSection{{
+			SourceLabel: connectorDisplayName(connector),
+			Connector:   connector,
+			SourceURI:   sourceURI,
+			Summary:     liveAnswer,
+			Confidence:  0.75,
+		}}
+	}
+	return liveFanoutResult{index: index, connector: connector, sourceURI: sourceURI, sections: sections}
 }
 
 func emitProgress(progress func(string), line string) {
@@ -457,7 +537,9 @@ func normalizedConnectorSet(values []string) map[string]bool {
 }
 
 func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bool) []repository.ConnectorSync {
-	byConnector := map[string]repository.ConnectorSync{}
+	concrete := map[string][]repository.ConnectorSync{}
+	broad := map[string]repository.ConnectorSync{}
+	seen := map[string]bool{}
 	for _, sync := range syncs {
 		connector := normalizeConnector(sync.Connector)
 		sourceURI := strings.TrimSpace(sync.SourceURI)
@@ -470,19 +552,30 @@ func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bo
 		if !isUsableLiveSync(sync.Status) {
 			continue
 		}
-		if existing, ok := byConnector[connector]; ok && isConnectorScopeURI(connector, existing.SourceURI) && !isConnectorScopeURI(connector, sourceURI) {
-			byConnector[connector] = sync
+		key := connector + "\x00" + sourceURI
+		if seen[key] {
 			continue
 		}
-		if _, ok := byConnector[connector]; !ok {
-			byConnector[connector] = sync
+		seen[key] = true
+		sync.Connector = connector
+		sync.SourceURI = sourceURI
+		if isConnectorScopeURI(connector, sourceURI) {
+			if _, ok := broad[connector]; !ok {
+				broad[connector] = sync
+			}
+			continue
 		}
+		concrete[connector] = append(concrete[connector], sync)
 	}
 	order := []string{"jira", "github", "slack", "googledrive", "notion", "sharepoint"}
-	out := make([]repository.ConnectorSync, 0, len(byConnector))
+	out := make([]repository.ConnectorSync, 0, len(syncs))
 	for _, connector := range order {
-		if sync, ok := byConnector[connector]; ok {
-			out = append(out, sync)
+		if len(concrete[connector]) > 0 {
+			out = append(out, concrete[connector]...)
+			continue
+		}
+		if scope, ok := broad[connector]; ok {
+			out = append(out, scope)
 		}
 	}
 	return out
@@ -833,16 +926,11 @@ func buildFanoutAnswer(sections []AnswerSection, failures []string, language str
 		"%d 件の接続済み source から live context が見つかりました。",
 		"%d개의 연결된 source에서 live context를 찾았습니다.",
 	), len(sections))
-	for _, section := range sections {
-		label := firstNonEmpty(section.SourceLabel, section.SourceURI, section.Connector)
-		summary := strings.TrimSpace(section.Summary)
-		if summary == "" && len(section.Facts) > 0 {
-			summary = section.Facts[0]
-		}
-		if summary == "" {
-			continue
-		}
-		answer += "\n- " + label + ": " + previewText(summary, 180)
+	if synthesis := buildFanoutSynthesis(sections, language); synthesis != "" {
+		answer += "\n\n" + synthesis
+	}
+	if evidence := buildFanoutEvidenceSummary(sections, language); evidence != "" {
+		answer += "\n\n" + evidence
 	}
 	if len(failures) > 0 {
 		answer += fmt.Sprintf(localized(
@@ -854,6 +942,156 @@ func buildFanoutAnswer(sections []AnswerSection, failures []string, language str
 		), len(failures))
 	}
 	return answer
+}
+
+func buildFanoutSynthesis(sections []AnswerSection, language string) string {
+	definitions := collectSectionInsights(sections, 2, containsDefinitionSignal)
+	behavior := collectSectionInsights(sections, 4, containsBehaviorSignal)
+	history := collectSectionInsights(sections, 3, containsHistorySignal)
+	openItems := collectOpenItems(sections, 2)
+	if len(definitions) == 0 && len(behavior) == 0 && len(history) == 0 && len(openItems) == 0 {
+		return ""
+	}
+
+	lines := []string{localized(
+		language,
+		"Summary:",
+		"总结：",
+		"要約:",
+		"요약:",
+	)}
+	if len(definitions) > 0 {
+		lines = append(lines, localized(language, "Meaning: ", "含义：", "意味: ", "의미: ")+strings.Join(definitions, " "))
+	}
+	if len(behavior) > 0 {
+		lines = append(lines, localized(language, "How it works: ", "工作方式：", "動作: ", "동작 방식: ")+strings.Join(behavior, " "))
+	}
+	if len(history) > 0 {
+		lines = append(lines, localized(language, "Change history/current status: ", "变更历史/当前状态：", "変更履歴/現在の状態: ", "변경 이력/현재 상태: ")+strings.Join(history, " "))
+	}
+	if len(openItems) > 0 {
+		lines = append(lines, localized(language, "Open items: ", "待确认事项：", "未確認事項: ", "미확인 항목: ")+strings.Join(openItems, " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func buildFanoutEvidenceSummary(sections []AnswerSection, language string) string {
+	connectors := map[string]int{}
+	for _, section := range sections {
+		connector := normalizeConnector(section.Connector)
+		if connector == "" {
+			continue
+		}
+		connectors[connector]++
+	}
+	if len(connectors) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(connectors))
+	for _, connector := range []string{"jira", "github", "slack", "googledrive", "notion", "sharepoint"} {
+		count := connectors[connector]
+		if count == 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s %d", connectorDisplayName(connector), count))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return localized(
+		language,
+		"Evidence sources: ",
+		"证据来源：",
+		"証拠ソース: ",
+		"근거 출처: ",
+	) + strings.Join(parts, ", ")
+}
+
+func collectSectionInsights(sections []AnswerSection, limit int, match func(string) bool) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, section := range sections {
+		candidates := section.Facts
+		if strings.TrimSpace(section.Summary) != "" {
+			candidates = append([]string{section.Summary}, candidates...)
+		}
+		for _, candidate := range candidates {
+			clean := previewText(candidate, 220)
+			if clean == "" || seen[clean] || !match(clean) {
+				continue
+			}
+			seen[clean] = true
+			out = append(out, ensureTerminalPunctuation(clean))
+			if len(out) >= limit {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+func collectOpenItems(sections []AnswerSection, limit int) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, section := range sections {
+		for _, item := range section.OpenItems {
+			clean := previewText(item, 180)
+			if clean == "" || seen[clean] {
+				continue
+			}
+			seen[clean] = true
+			out = append(out, ensureTerminalPunctuation(clean))
+			if len(out) >= limit {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+func containsDefinitionSignal(value string) bool {
+	lower := strings.ToLower(value)
+	return strings.Contains(lower, " means ") ||
+		strings.Contains(lower, " is ") ||
+		strings.Contains(lower, "defines ") ||
+		strings.Contains(lower, "documented as") ||
+		strings.Contains(lower, "'0'") ||
+		strings.Contains(lower, "'1'")
+}
+
+func containsBehaviorSignal(value string) bool {
+	lower := strings.ToLower(value)
+	return strings.Contains(lower, "calls ") ||
+		strings.Contains(lower, "creates ") ||
+		strings.Contains(lower, "query") ||
+		strings.Contains(lower, "update") ||
+		strings.Contains(lower, "uses ") ||
+		strings.Contains(lower, "uploads ") ||
+		strings.Contains(lower, "omitted") ||
+		strings.Contains(lower, "undefined")
+}
+
+func containsHistorySignal(value string) bool {
+	lower := strings.ToLower(value)
+	return strings.Contains(lower, "pr #") ||
+		strings.Contains(lower, "merged") ||
+		strings.Contains(lower, "open pr") ||
+		strings.Contains(lower, "proposes") ||
+		strings.Contains(lower, "commit ") ||
+		strings.Contains(lower, "changed ") ||
+		strings.Contains(lower, "recovery")
+}
+
+func ensureTerminalPunctuation(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	last := value[len(value)-1]
+	if last == '.' || last == '!' || last == '?' || last == ':' || last == ';' {
+		return value
+	}
+	return value + "."
 }
 
 func summarizeFanout(sections []AnswerSection, language string) string {

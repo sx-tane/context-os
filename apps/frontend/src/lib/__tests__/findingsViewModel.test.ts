@@ -47,6 +47,21 @@ describe("finding display helpers", () => {
     expect(findingRecommendedAction(finding)).toBe("Update the contract");
     expect(findingSummary({})).toBe("Finding");
   });
+
+  it("replaces raw graph IDs in dependency titles with evidence labels", () => {
+    const finding = {
+      summary:
+        "Service event:5afef31ce24f91d7815af82c4e3567d97d7fb620a8ac9ed6fc1cba6889e4aee4:service:wbcveritranscreditapiservice depends on event:5afef31ce24f91d7815af82c4e3567d97d7fb620a8ac9ed6fc1cba6889e4aee4:dependency:orderidrepository; confirm the dependency is healthy and owned",
+      evidence: [
+        "event:5afef31ce24f91d7815af82c4e3567d97d7fb620a8ac9ed6fc1cba6889e4aee4#WbcVeritransCreditApiService",
+        "event:5afef31ce24f91d7815af82c4e3567d97d7fb620a8ac9ed6fc1cba6889e4aee4#OrderIdRepository",
+      ],
+    };
+
+    expect(findingSummary(finding)).toBe(
+      "Service WbcVeritransCreditApiService depends on OrderIdRepository; confirm the dependency is healthy and owned",
+    );
+  });
 });
 
 describe("latestFindingsRunFromMessages", () => {

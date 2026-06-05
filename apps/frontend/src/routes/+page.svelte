@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
+    import { browser } from "$app/environment";
     import type {
         Artifact,
         ChatQueryResult,
@@ -116,6 +117,7 @@
     let resizingPanes = false;
     let workspaceRefreshRunID = 0;
     let analysisAbortController: AbortController | null = null;
+    let chatAbortController: AbortController | null = null;
     let workflowStateRunID = 0;
 
     $: readySources = $project.connectors.filter(
@@ -180,6 +182,12 @@
         void hydrateWorkspaces();
         void refreshWorkspace();
         void refreshWorkflowState();
+    });
+
+    onDestroy(() => {
+        analysisAbortController?.abort();
+        chatAbortController?.abort();
+        stopPaneResize();
     });
 
     async function refreshSystemStatus() {
@@ -401,7 +409,7 @@
     }
 
     function startPaneResize(event: PointerEvent) {
-        if (!mainGrid) return;
+        if (!browser || !mainGrid) return;
         resizingPanes = true;
         updatePaneSplit(event.clientX);
         window.addEventListener("pointermove", handlePaneResize);
@@ -417,6 +425,7 @@
 
     function stopPaneResize() {
         resizingPanes = false;
+        if (!browser) return;
         window.removeEventListener("pointermove", handlePaneResize);
         window.removeEventListener("pointerup", stopPaneResize);
         window.removeEventListener("pointercancel", stopPaneResize);
@@ -510,20 +519,33 @@
             await runFindings();
             return;
         }
-        await runChatQuery({
-            text,
-            workspacePath,
-            readySources: getProject().connectors.filter(
-                (source) => source.status === "ready",
-            ),
-            addMessage,
-            replaceMessage,
-            setBusy: (value) => (busy = value),
-            setLastChatResult: (result) => (lastChatResult = result),
-            setActivityArtifacts: (artifacts) =>
-                (activityArtifacts = artifacts),
-            refreshWorkspace,
-        });
+        const controller = new AbortController();
+        chatAbortController = controller;
+        try {
+            await runChatQuery({
+                text,
+                workspacePath,
+                readySources: getProject().connectors.filter(
+                    (source) => source.status === "ready",
+                ),
+                addMessage,
+                replaceMessage,
+                setBusy: (value) => (busy = value),
+                setLastChatResult: (result) => (lastChatResult = result),
+                setActivityArtifacts: (artifacts) =>
+                    (activityArtifacts = artifacts),
+                refreshWorkspace,
+                signal: controller.signal,
+            });
+        } finally {
+            if (chatAbortController === controller) {
+                chatAbortController = null;
+            }
+        }
+    }
+
+    function stopChatQuery() {
+        chatAbortController?.abort();
     }
 
     async function saveAnalysisBasket(nextItems: EvidenceBasketItem[]) {
@@ -862,10 +884,12 @@
                 messages={$chatMessages}
                 {hasSources}
                 {busy}
+                canStop={chatAbortController !== null}
                 bind:command
                 basketItems={analysisBasket}
                 onClear={clearChat}
                 onSubmit={submitCommand}
+                onStop={stopChatQuery}
                 onAskEvidence={prefillChatWithEvidence}
                 onPinEvidence={pinEvidenceForAnalysis}
             />

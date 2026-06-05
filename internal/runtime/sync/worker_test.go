@@ -203,3 +203,23 @@ func TestRunPassSkipsEmptyWorkspaceLists(t *testing.T) {
 		t.Fatalf("len(upserted) = %d, want %d", len(syncs.upserted), 0)
 	}
 }
+
+// TestRunStopsWhenContextIsCanceled verifies the ticker loop exits when its caller cancels the context.
+func TestRunStopsWhenContextIsCanceled(t *testing.T) {
+	t.Parallel()
+
+	worker := NewWorker(fakeWorkspaceRepo{}, &fakeSyncRepo{syncs: map[string][]repository.ConnectorSync{}}, fakeEventRepo{})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		worker.Run(ctx, time.Hour)
+		close(done)
+	}()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not stop after context cancellation")
+	}
+}

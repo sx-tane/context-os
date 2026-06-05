@@ -30,6 +30,7 @@ func DetectMismatches(g GraphReader) []types.Mismatch {
 	outgoing := outgoingByEntity(rels) // index edges by source entity for gap and drift checks
 	incoming := incomingByEntity(rels) // index edges by target entity for drift context checks
 	deliveryScopes := deliveryScopesBySource(all)
+	entityNames := entityNamesByID(all)
 
 	mismatches := []types.Mismatch{}
 	for _, entity := range all {
@@ -47,7 +48,7 @@ func DetectMismatches(g GraphReader) []types.Mismatch {
 	sortedRels := append([]types.Relationship(nil), rels...)
 	sort.Slice(sortedRels, func(i, j int) bool { return sortedRels[i].ID < sortedRels[j].ID })
 	for _, rel := range sortedRels {
-		if m, ok := dependencyRisk(rel); ok {
+		if m, ok := dependencyRisk(rel, entityNames); ok {
 			mismatches = append(mismatches, m)
 		}
 	}
@@ -147,7 +148,7 @@ func hasContractExposure(entityID string, outgoing, incoming map[string][]types.
 }
 
 // dependencyRisk surfaces service-to-dependency edges as delivery risk that needs an owner.
-func dependencyRisk(rel types.Relationship) (types.Mismatch, bool) {
+func dependencyRisk(rel types.Relationship, entityNames map[string]string) (types.Mismatch, bool) {
 	if rel.Kind != types.ServiceDependsOn {
 		return types.Mismatch{}, false
 	}
@@ -155,10 +156,12 @@ func dependencyRisk(rel types.Relationship) (types.Mismatch, bool) {
 	if len(evidence) == 0 {
 		evidence = []string{rel.ID}
 	}
+	fromName := entityDisplayName(rel.FromID, entityNames)
+	toName := entityDisplayName(rel.ToID, entityNames)
 	return types.Mismatch{
 		ID:            fmt.Sprintf("dependency_risk:%s", rel.ID),
 		Type:          "dependency_risk",
-		Summary:       fmt.Sprintf("Service %s depends on %s; confirm the dependency is healthy and owned", rel.FromID, rel.ToID),
+		Summary:       fmt.Sprintf("Service %s depends on %s; confirm the dependency is healthy and owned", fromName, toName),
 		EntityIDs:     []string{rel.FromID, rel.ToID},
 		Severity:      "medium",
 		Confidence:    0.75,
@@ -167,6 +170,39 @@ func dependencyRisk(rel types.Relationship) (types.Mismatch, bool) {
 		AffectedRoles: []string{"service", "pmo"},
 		Recommended:   "Verify the dependency owner, version, and availability before committing to delivery dates.",
 	}, true
+}
+
+// entityNamesByID returns readable entity labels keyed by graph entity ID.
+func entityNamesByID(all []entities.CanonicalEntity) map[string]string {
+	names := map[string]string{}
+	for _, entity := range all {
+		id := strings.TrimSpace(entity.Entity.ID)
+		name := strings.TrimSpace(entity.Entity.Name)
+		if id == "" || name == "" {
+			continue
+		}
+		names[id] = name
+	}
+	return names
+}
+
+func entityDisplayName(id string, names map[string]string) string {
+	id = strings.TrimSpace(id)
+	if name := strings.TrimSpace(names[id]); name != "" {
+		return name
+	}
+	return compactGraphID(id)
+}
+
+func compactGraphID(id string) string {
+	parts := strings.Split(strings.TrimSpace(id), ":")
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := strings.TrimSpace(parts[i])
+		if part != "" {
+			return part
+		}
+	}
+	return strings.TrimSpace(id)
 }
 
 // outgoingByEntity groups relationships by their source entity ID for O(1) edge lookups.

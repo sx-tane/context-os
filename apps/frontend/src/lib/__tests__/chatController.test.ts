@@ -239,9 +239,11 @@ describe("runChatQuery", () => {
         onResult: expect.any(Function),
         onError: expect.any(Function),
       }),
+      expect.objectContaining({ signal: undefined }),
     );
     expect(mockPostChatQuery).toHaveBeenCalledWith(
       expect.objectContaining({ workspace_id: "workspace", message: "status" }),
+      expect.objectContaining({ signal: undefined }),
     );
     expect(state.busyCalls).toEqual([true, false]);
     expect(state.addMessage.mock.calls[0][0].text).toBe("");
@@ -381,6 +383,39 @@ describe("runChatQuery", () => {
     expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
     expect(state.replacements.at(-1)?.stream?.summary).toBe("Local DB: saved 2 artifacts; graph updated");
     expect(state.refreshWorkspace).toHaveBeenCalled();
+  });
+
+  it("stops streamed Codex chat without falling back to standard query", async () => {
+    const controller = new AbortController();
+    mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
+      handlers.onLog("› Live Codex: GitHub plugin lookup");
+      controller.abort();
+      throw new DOMException("aborted", "AbortError");
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "help me check sx-tane/context-os",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+      signal: controller.signal,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][2]).toMatchObject({
+      signal: controller.signal,
+    });
+    expect(mockPostChatQuery).not.toHaveBeenCalled();
+    expect(state.replacements.at(-1)?.text).toBe("");
+    expect(state.replacements.at(-1)?.loading).toBe(false);
+    expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
+    expect(state.replacements.at(-1)?.stream?.summary).toBe("Stopped by user.");
+    expect(state.replacements.at(-1)?.stream?.latestLine).toBe("• Codex chat stopped.");
+    expect(state.busyCalls).toEqual([true, false]);
   });
 
   it("sends inferred Jira issue route fields for streamed and fallback queries", async () => {

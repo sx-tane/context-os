@@ -69,7 +69,7 @@ export function severityLabel(value?: string) {
 
 export function findingSummary(mismatch: FindingsMismatch | unknown) {
   const record = mismatch as Record<string, unknown>;
-  return String(record.summary ?? record.mismatch_type ?? record.id ?? "Finding");
+  return readableFindingSummary(record);
 }
 
 export function findingDescription(mismatch: FindingsMismatch | unknown) {
@@ -91,6 +91,36 @@ export function findingRecommendedAction(
 export function findingImpact(mismatch: FindingsMismatch | unknown) {
   const record = mismatch as Record<string, unknown>;
   return String(record.impact ?? "");
+}
+
+function readableFindingSummary(record: Record<string, unknown>) {
+  const summary = String(record.summary ?? record.mismatch_type ?? record.id ?? "Finding");
+  if (!summary.includes("event:")) {
+    return summary;
+  }
+  const evidenceNames = evidenceAnchorNames(record.evidence);
+  const dependencyMatch = summary.match(/^Service\s+(.+?)\s+depends on\s+(.+?);(.*)$/);
+  if (dependencyMatch) {
+    const service = evidenceNames[0] ?? compactGraphID(dependencyMatch[1]);
+    const dependency = evidenceNames[1] ?? compactGraphID(dependencyMatch[2]);
+    return `Service ${service} depends on ${dependency};${dependencyMatch[3]}`;
+  }
+  return summary.replace(/\bevent:[^\s;]+/g, (value) => compactGraphID(value));
+}
+
+function evidenceAnchorNames(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => String(item ?? ""))
+    .map((item) => item.split("#").at(-1)?.trim() ?? "")
+    .filter(Boolean);
+}
+
+function compactGraphID(value: string) {
+  const parts = value.trim().split(":").filter(Boolean);
+  return parts.at(-1) ?? value;
 }
 
 export function latestFindingsRunFromMessages(

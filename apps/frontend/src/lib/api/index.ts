@@ -865,20 +865,24 @@ async function readEventStream(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
-    for (const block of blocks) {
-      const message = parseSSEBlock(block);
-      if (message) onMessage(message);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() ?? "";
+      for (const block of blocks) {
+        const message = parseSSEBlock(block);
+        if (message) onMessage(message);
+      }
     }
-  }
 
-  const tail = parseSSEBlock(buffer);
-  if (tail) onMessage(tail);
+    const tail = parseSSEBlock(buffer);
+    if (tail) onMessage(tail);
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function parseSSEBlock(block: string): SSEMessage | null {
