@@ -8,6 +8,7 @@ The graph domain materializes canonical entities and relationships into an in-me
 - Store relationships by relationship ID.
 - Preserve entity and relationship version history for replay and audit.
 - Answer impact queries across connected entities.
+- Answer deterministic shortest-path queries over directed relationships.
 - Persist replay-safe local snapshots of graph state.
 - Provide the graph structure consumed by reasoning.
 
@@ -32,6 +33,7 @@ func (g *ContextGraph) AllEntities() []entities.CanonicalEntity
 func (g *ContextGraph) AllRelationships() []types.Relationship
 func (g *ContextGraph) Neighbors(entityID string) []types.Relationship
 func (g *ContextGraph) ImpactOf(entityID string) []string
+func (g *ContextGraph) ShortestPath(fromID, toID string) ShortestPath
 func (g *ContextGraph) SaveSnapshot(dir, name string) (string, error)
 func LoadSnapshot(path string) (*ContextGraph, error)
 ```
@@ -41,6 +43,13 @@ func LoadSnapshot(path string) (*ContextGraph, error)
 - `Neighbors` returns every relationship incident to an entity (incoming or outgoing).
 - `ImpactOf` returns every entity reachable by following directed edges outward, supporting
   impact analysis across requirement, API, DB, service, and dependency artifacts.
+- `ShortestPath` returns the cheapest directed path from one entity to another. It only follows
+  relationships where `FromID` is the current entity, derives each edge cost from relationship
+  confidence as `1 / Confidence`, and uses cost `1` when confidence is missing or zero so older
+  graph data remains traversable. Equal-cost paths are resolved deterministically by sorted
+  outgoing edges and lexicographically smaller entity paths.
+- `/graph` API and frontend exposure for shortest paths are intentionally deferred until a caller
+  needs the query.
 
 ## Persistence
 

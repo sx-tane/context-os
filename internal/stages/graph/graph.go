@@ -1,9 +1,29 @@
 package graph
 
 import (
+	"container/heap"
+	"sort"
+	"strings"
+
 	"context-os/domain/entities" // CanonicalEntity stored in the graph
 	"context-os/domain/types"    // Relationship stored in the graph
 )
+
+// PathStep describes one entity reached while traversing a shortest path.
+// RelationshipID and Cost identify the edge used to arrive at EntityID; the
+// starting entity has an empty RelationshipID and zero cost.
+type PathStep struct {
+	EntityID       string  `json:"entity_id"`
+	RelationshipID string  `json:"relationship_id"`
+	Cost           float64 `json:"cost"`
+}
+
+// ShortestPath describes the cheapest directed path between two entities.
+type ShortestPath struct {
+	Found     bool       `json:"found"`
+	TotalCost float64    `json:"total_cost"`
+	Steps     []PathStep `json:"steps"`
+}
 
 // ContextGraph is the in-memory store for all resolved entities and relationships.
 // It preserves prior versions of every entity and relationship so graph history can be
@@ -95,4 +115,142 @@ func (g *ContextGraph) ImpactOf(entityID string) []string {
 		}
 	}
 	return reached
+}
+
+// ShortestPath returns the cheapest directed path from fromID to toID using
+// relationship confidence as edge cost. Higher confidence edges are cheaper.
+func (g *ContextGraph) ShortestPath(fromID, toID string) ShortestPath {
+	if fromID == "" || toID == "" {
+		return ShortestPath{}
+	}
+	if fromID == toID {
+		return ShortestPath{
+			Found: true,
+			Steps: []PathStep{{EntityID: fromID}},
+		}
+	}
+
+	outgoing := g.outgoingRelationships()
+	queue := &pathQueue{}
+	heap.Push(queue, &pathItem{
+		entityID: fromID,
+		pathKey:  fromID,
+		steps:    []PathStep{{EntityID: fromID}},
+	})
+
+	best := map[string]pathBest{
+		fromID: {cost: 0, pathKey: fromID},
+	}
+
+	for queue.Len() > 0 {
+		current := heap.Pop(queue).(*pathItem)
+		known := best[current.entityID]
+		if current.cost > known.cost || (current.cost == known.cost && current.pathKey != known.pathKey) {
+			continue
+		}
+		if current.entityID == toID {
+			return ShortestPath{
+				Found:     true,
+				TotalCost: current.cost,
+				Steps:     current.steps,
+			}
+		}
+
+		for _, relationship := range outgoing[current.entityID] {
+			nextCost := current.cost + relationshipCost(relationship)
+			nextPathKey := current.pathKey + "\x00" + relationship.ToID + "\x00" + relationship.ID
+			previous, seen := best[relationship.ToID]
+			if seen && (nextCost > previous.cost || (nextCost == previous.cost && nextPathKey >= previous.pathKey)) {
+				continue
+			}
+
+			nextSteps := append([]PathStep{}, current.steps...)
+			nextSteps = append(nextSteps, PathStep{
+				EntityID:       relationship.ToID,
+				RelationshipID: relationship.ID,
+				Cost:           relationshipCost(relationship),
+			})
+			best[relationship.ToID] = pathBest{cost: nextCost, pathKey: nextPathKey}
+			heap.Push(queue, &pathItem{
+				entityID: relationship.ToID,
+				cost:     nextCost,
+				pathKey:  nextPathKey,
+				steps:    nextSteps,
+			})
+		}
+	}
+
+	return ShortestPath{}
+}
+
+// outgoingRelationships indexes directed edges by source entity with stable edge order.
+func (g *ContextGraph) outgoingRelationships() map[string][]types.Relationship {
+	outgoing := map[string][]types.Relationship{}
+	for _, relationship := range g.Relationships {
+		outgoing[relationship.FromID] = append(outgoing[relationship.FromID], relationship)
+	}
+	for fromID := range outgoing {
+		sort.Slice(outgoing[fromID], func(i, j int) bool {
+			if outgoing[fromID][i].ToID != outgoing[fromID][j].ToID {
+				return outgoing[fromID][i].ToID < outgoing[fromID][j].ToID
+			}
+			return outgoing[fromID][i].ID < outgoing[fromID][j].ID
+		})
+	}
+	return outgoing
+}
+
+// relationshipCost returns the traversal cost for a relationship.
+func relationshipCost(relationship types.Relationship) float64 {
+	if relationship.Confidence > 0 {
+		return 1 / relationship.Confidence
+	}
+	return 1
+}
+
+type pathBest struct {
+	cost    float64
+	pathKey string
+}
+
+type pathItem struct {
+	entityID string
+	cost     float64
+	pathKey  string
+	steps    []PathStep
+	index    int
+}
+
+type pathQueue []*pathItem
+
+func (q pathQueue) Len() int {
+	return len(q)
+}
+
+func (q pathQueue) Less(i, j int) bool {
+	if q[i].cost != q[j].cost {
+		return q[i].cost < q[j].cost
+	}
+	return strings.Compare(q[i].pathKey, q[j].pathKey) < 0
+}
+
+func (q pathQueue) Swap(i, j int) {
+	q[i], q[j] = q[j], q[i]
+	q[i].index = i
+	q[j].index = j
+}
+
+func (q *pathQueue) Push(x any) {
+	item := x.(*pathItem)
+	item.index = len(*q)
+	*q = append(*q, item)
+}
+
+func (q *pathQueue) Pop() any {
+	old := *q
+	item := old[len(old)-1]
+	old[len(old)-1] = nil
+	item.index = -1
+	*q = old[:len(old)-1]
+	return item
 }
