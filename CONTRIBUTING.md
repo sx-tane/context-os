@@ -38,8 +38,11 @@ For local startup:
 
 ```bash
 ./scripts/setup-local.sh
+./scripts/start-infra.sh
 ./scripts/start-local.sh
 ```
+
+`start-infra.sh` starts PostgreSQL/pgvector and NATS. `start-local.sh` starts the API, worker, and frontend.
 
 ## Architecture Expectations
 

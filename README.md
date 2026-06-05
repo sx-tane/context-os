@@ -1,6 +1,6 @@
 # ContextOS
 
-[中文 README](README.zh-CN.md) | [Contributing](CONTRIBUTING.md) | [License](LICENSE)
+[中文 README](README.zh-CN.md) | [Wiki](docs/WIKI.md) | [Contributing](CONTRIBUTING.md) | [License](LICENSE)
 
 Local-first workspace intelligence for detecting delivery context drift across engineering and business sources.
 
@@ -98,8 +98,11 @@ The local setup script currently targets Linux:
 
 ```bash
 ./scripts/setup-local.sh
+./scripts/start-infra.sh
 ./scripts/start-local.sh
 ```
+
+`start-infra.sh` starts the local PostgreSQL/pgvector database and NATS. `start-local.sh` then starts the Go API, Python worker, and SvelteKit frontend.
 
 Open:
 
@@ -119,6 +122,8 @@ cd apps/frontend && bun run test && bun run check
 `bun` is supported by the scripts when installed; `npm` works with the checked-in frontend scripts in this workspace.
 
 ## Docker Compose
+
+As an alternative to the local scripts, run the full stack in Docker:
 
 ```bash
 docker compose up --build
@@ -143,6 +148,7 @@ The compose stack starts PostgreSQL with pgvector, NATS, the Go API, the Python 
 
 ## Documentation
 
+- [Wiki](docs/WIKI.md): fast user guide, screen meanings, startup, troubleshooting, and contribution flow.
 - [Architecture](docs/ARCHITECTURE.md): pipeline stages, package boundaries, and data flow.
 - [Production Readiness](docs/PRODUCTION_READINESS.md): current readiness gates and remaining gaps.
 - [MCP Connectors](docs/mcp-connectors.md): connector behavior and integration notes.

@@ -1,6 +1,6 @@
 # ContextOS
 
-[English README](README.md) | [贡献指南](CONTRIBUTING.md) | [许可证](LICENSE)
+[English README](README.md) | [Wiki](docs/WIKI.md) | [贡献指南](CONTRIBUTING.md) | [许可证](LICENSE)
 
 ContextOS 是一个本地优先的工作区智能系统，用来发现工程和业务上下文之间的交付偏差。
 
@@ -98,8 +98,11 @@ flowchart LR
 
 ```bash
 ./scripts/setup-local.sh
+./scripts/start-infra.sh
 ./scripts/start-local.sh
 ```
+
+`start-infra.sh` 会启动本地 PostgreSQL/pgvector 数据库和 NATS。`start-local.sh` 会启动 Go API、Python worker 和 SvelteKit 前端。
 
 打开：
 
@@ -119,6 +122,8 @@ cd apps/frontend && bun run test && bun run check
 脚本支持 `bun`；在本工作区中，已提交的前端脚本也可以配合 `npm` 使用。
 
 ## Docker Compose
+
+如果想直接用 Docker 跑完整栈，也可以使用：
 
 ```bash
 docker compose up --build
@@ -143,6 +148,7 @@ Compose 会启动 PostgreSQL/pgvector、NATS、Go API、Python worker 和 Svelte
 
 ## 文档
 
+- [Wiki](docs/WIKI.md)：快速用户指南、界面说明、启动流程、故障排查和贡献流程。
 - [Architecture](docs/ARCHITECTURE.md)：流水线阶段、包边界和数据流。
 - [Production Readiness](docs/PRODUCTION_READINESS.md)：当前 readiness gate 和剩余差距。
 - [MCP Connectors](docs/mcp-connectors.md)：连接器行为和集成说明。
