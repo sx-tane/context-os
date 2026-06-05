@@ -536,6 +536,7 @@
                     (activityArtifacts = artifacts),
                 refreshWorkspace,
                 signal: controller.signal,
+                isCurrent: () => chatAbortController === controller,
             });
         } finally {
             if (chatAbortController === controller) {

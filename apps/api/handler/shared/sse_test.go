@@ -56,3 +56,22 @@ func TestSSEWriterErrorAndResult(t *testing.T) {
 		}
 	}
 }
+
+// TestSSEWriterIgnoresWritesAfterClose verifies late progress after a client disconnect is dropped.
+func TestSSEWriterIgnoresWritesAfterClose(t *testing.T) {
+	rec := httptest.NewRecorder()
+	sw := NewSSEWriter(rec, rec)
+
+	sw.Event("status", `{"status":"running"}`)
+	sw.Close()
+	sw.Log("late codex progress")
+	sw.Error("query_error", "late error")
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: status") {
+		t.Fatalf("body = %q, want initial status event", body)
+	}
+	if strings.Contains(body, "late codex progress") || strings.Contains(body, "late error") {
+		t.Fatalf("body = %q, want late events ignored after close", body)
+	}
+}

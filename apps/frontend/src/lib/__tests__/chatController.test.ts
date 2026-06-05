@@ -317,6 +317,42 @@ describe("runChatQuery", () => {
     });
   });
 
+  it("uses connector fanout when all source connectors is requested with a Jira key", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({ connector: "multiple", provider: "codex" }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "BKGDEV-8551 check all source connector",
+      workspacePath: "workspace",
+      readySources: [
+        { connector: "jira", uri: "jira", status: "ready" },
+        { connector: "github", uri: "github", status: "ready" },
+        { connector: "slack", uri: "slack", status: "ready" },
+      ],
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["jira", "github", "slack"],
+    });
+    expect(mockStreamChatQuery.mock.calls[0][0].connector).toBeUndefined();
+    expect(mockStreamChatQuery.mock.calls[0][0].source_uri).toBeUndefined();
+    expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["jira", "github", "slack"],
+    });
+    expect(mockPostChatQuery.mock.calls[0][0].connector).toBeUndefined();
+    expect(mockPostChatQuery.mock.calls[0][0].source_uri).toBeUndefined();
+  });
+
   it("streams Codex progress and uses the streamed result", async () => {
     mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
       handlers.onLog("› Live Codex: GitHub plugin lookup");
@@ -416,6 +452,101 @@ describe("runChatQuery", () => {
     expect(state.replacements.at(-1)?.stream?.summary).toBe("Stopped by user.");
     expect(state.replacements.at(-1)?.stream?.latestLine).toBe("• Codex chat stopped.");
     expect(state.busyCalls).toEqual([true, false]);
+  });
+
+  it("treats server-side stream cancellation as stop when the user aborts", async () => {
+    const controller = new AbortController();
+    mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
+      handlers.onLog("› Live Codex: Jira plugin lookup");
+      controller.abort();
+      handlers.onError("context canceled");
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "BKGDEV-8551 check all source connector",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+      signal: controller.signal,
+    });
+
+    expect(mockPostChatQuery).not.toHaveBeenCalled();
+    expect(state.replacements.at(-1)?.text).toBe("");
+    expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
+    expect(state.replacements.at(-1)?.stream?.summary).toBe("Stopped by user.");
+    expect(state.replacements.at(-1)?.stream?.latestLine).toBe("• Codex chat stopped.");
+  });
+
+  it("keeps a clean stopped row when fallback returns after abort", async () => {
+    const controller = new AbortController();
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockImplementation(async () => {
+      controller.abort();
+      return {
+        ok: false,
+        status: 0,
+        body: {},
+      };
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "BKGDEV-8551 check all source connector",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+      signal: controller.signal,
+    });
+
+    expect(state.replacements.at(-1)?.text).toBe("");
+    expect(state.replacements.at(-1)?.stream?.status).toBe("complete");
+    expect(state.replacements.at(-1)?.stream?.summary).toBe("Stopped by user.");
+    expect(state.replacements.at(-1)?.stream?.latestLine).toBe("• Codex chat stopped.");
+    expect(state.replacements.map((item) => item.text).join("\n")).not.toContain(
+      "Source query failed",
+    );
+  });
+
+  it("does not let a stale run replace the active chat message with fallback failure", async () => {
+    let current = true;
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockImplementation(async () => {
+      current = false;
+      return {
+        ok: false,
+        status: 0,
+        body: {},
+      };
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "status",
+      workspacePath: "workspace",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+      isCurrent: () => current,
+    });
+
+    expect(state.replacements.map((item) => item.text).join("\n")).not.toContain(
+      "Source query failed",
+    );
+    expect(state.replacements.at(-1)?.stream?.latestLine).toBe(
+      "• Falling back to standard chat query.",
+    );
   });
 
   it("sends inferred Jira issue route fields for streamed and fallback queries", async () => {

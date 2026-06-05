@@ -276,6 +276,18 @@ describe("postFindings", () => {
       abortError,
     );
   });
+
+  it("throws AbortError when the request is aborted after a response arrives", async () => {
+    const controller = new AbortController();
+    fetchMock.mockResolvedValue(makeResponse({ message: "late" }, false, 500));
+    const pending = postChatQuery(
+      { workspace_id: "ws1", message: "status" },
+      { signal: controller.signal },
+    );
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
 });
 
 // ---- postFilesystemUpload ----
@@ -795,6 +807,32 @@ describe("streamChatQuery", () => {
     );
 
     expect(releaseLock).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns query_canceled stream errors into AbortError", async () => {
+    fetchMock.mockResolvedValue(
+      makeStreamResponse([
+        "event: error\ndata: {\"error\":\"query_canceled\",\"message\":\"context canceled\"}\n\n",
+      ]),
+    );
+
+    await expect(streamChatQuery(
+      { workspace_id: "ws1", message: "status" },
+      {},
+    )).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("throws AbortError when the stream is aborted after reading finishes", async () => {
+    const controller = new AbortController();
+    fetchMock.mockResolvedValue(makeStreamResponse([]));
+    const pending = streamChatQuery(
+      { workspace_id: "ws1", message: "status" },
+      {},
+      { signal: controller.signal },
+    );
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });
 

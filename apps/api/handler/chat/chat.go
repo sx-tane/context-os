@@ -113,6 +113,7 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sw := shared.NewSSEWriter(w, f)
+	defer sw.Close()
 
 	var req request.ChatQuery
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil {
@@ -164,6 +165,7 @@ func (h *Handler) StreamQuery(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ctx.Done():
 			sw.Error("query_canceled", ctx.Err().Error())
+			sw.Close()
 			return
 		case <-ticker.C:
 			elapsed := int(time.Since(started).Seconds())

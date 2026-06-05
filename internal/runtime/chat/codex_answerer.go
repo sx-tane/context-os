@@ -224,9 +224,12 @@ func summarizeCodexJSONEvent(line string) string {
 	}
 	detail := codexEventDetail(event)
 	if detail == "" {
-		return "• Codex event: " + eventType
+		if isNoisyCodexLifecycleEvent(eventType) {
+			return ""
+		}
+		return "• Codex: " + readableCodexEventType(eventType)
 	}
-	return "• Codex event: " + eventType + " — " + detail
+	return "• Codex: " + readableCodexEventType(eventType) + " — " + detail
 }
 
 func codexEventDetail(event map[string]any) string {
@@ -247,6 +250,28 @@ func codexEventDetail(event map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func isNoisyCodexLifecycleEvent(eventType string) bool {
+	switch eventType {
+	case "thread.started", "turn.started", "turn.completed", "item.started", "item.completed":
+		return true
+	default:
+		return false
+	}
+}
+
+func readableCodexEventType(eventType string) string {
+	switch eventType {
+	case "tool_call":
+		return "tool call"
+	case "agent_message":
+		return "message"
+	case "reasoning":
+		return "reasoning"
+	default:
+		return strings.ReplaceAll(eventType, "_", " ")
+	}
 }
 
 func stringField(values map[string]any, key string) string {

@@ -20,9 +20,10 @@ import (
 // heartbeat, error, and result events may be emitted from another goroutine;
 // the embedded mutex guarantees those writes never interleave on the wire.
 type SSEWriter struct {
-	mu sync.Mutex
-	w  http.ResponseWriter
-	f  http.Flusher
+	mu     sync.Mutex
+	w      http.ResponseWriter
+	f      http.Flusher
+	closed bool
 }
 
 // NewSSEWriter creates an SSEWriter backed by w and f.
@@ -32,9 +33,13 @@ func NewSSEWriter(w http.ResponseWriter, f http.Flusher) *SSEWriter {
 
 // Write satisfies io.Writer.  Each call emits a "log" SSE event per non-empty
 // line and flushes immediately so the browser receives it without buffering.
-func (s *SSEWriter) Write(p []byte) (int, error) {
+func (s *SSEWriter) Write(p []byte) (n int, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.recoverClosed()
+	if s.closed {
+		return len(p), nil
+	}
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -53,8 +58,28 @@ func (s *SSEWriter) Write(p []byte) (int, error) {
 func (s *SSEWriter) Event(name, data string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, _ = fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", name, data)
+	defer s.recoverClosed()
+	if s.closed {
+		return
+	}
+	if _, err := fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", name, data); err != nil {
+		s.closed = true
+		return
+	}
 	s.f.Flush()
+}
+
+// Close marks the stream closed so late progress from worker goroutines is ignored.
+func (s *SSEWriter) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+}
+
+func (s *SSEWriter) recoverClosed() {
+	if recover() != nil {
+		s.closed = true
+	}
 }
 
 // Log writes a single "log" SSE event with the given message.

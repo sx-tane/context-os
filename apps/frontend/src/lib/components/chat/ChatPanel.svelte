@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { tick } from "svelte";
+    import { composerHeight } from "$lib/chat/composer";
     import { isNearBottom, localDBStatusLine } from "$lib/chat/controller";
     import type { AnswerSection, ChatMessage, ChatQueryResult } from "$lib/types";
     import type { EvidenceBasketItem } from "$lib/workflow/types";
@@ -59,6 +61,8 @@
             requestAnimationFrame(scrollMessagesToBottom);
         }
     }
+
+    $: command, scheduleComposerResize();
 
     function queryProviderLabel(provider?: string) {
         return provider === "codex" ? "Live Codex" : "Local DB";
@@ -192,19 +196,35 @@
         stickToBottom = true;
     }
 
+    function scheduleComposerResize() {
+        void tick().then(resizeComposer);
+    }
+
+    function resizeComposer() {
+        if (!composerTextarea) return;
+        const styles = window.getComputedStyle(composerTextarea);
+        const maxHeight = parseFloat(styles.maxHeight) || composerTextarea.scrollHeight;
+        const minHeight = parseFloat(styles.minHeight) || 0;
+        composerTextarea.style.height = "auto";
+        const nextHeight = composerHeight(
+            composerTextarea.scrollHeight,
+            maxHeight,
+            minHeight,
+        );
+        composerTextarea.style.height = `${nextHeight}px`;
+        composerTextarea.style.overflowY =
+            composerTextarea.scrollHeight > nextHeight ? "auto" : "hidden";
+    }
+
     function handleComposerKeydown(event: KeyboardEvent) {
         if (event.key !== "Enter") {
             return;
         }
+        if (event.shiftKey) {
+            return;
+        }
         event.preventDefault();
         composerForm?.requestSubmit();
-    }
-
-    function normalizeComposerInput() {
-        const singleLineCommand = command.replace(/\s*\r?\n\s*/g, " ");
-        if (singleLineCommand !== command) {
-            command = singleLineCommand;
-        }
     }
 </script>
 
@@ -466,9 +486,9 @@
             bind:value={command}
             disabled={busy || !hasSources}
             placeholder={hasSources ? "Ask about PRs, Slack threads, findings, or recent activity..." : "Connect sources first..."}
-            rows="1"
+            rows="2"
+            on:input={resizeComposer}
             on:keydown={handleComposerKeydown}
-            on:input={normalizeComposerInput}
         ></textarea>
         {#if canStop}
             <button
@@ -966,29 +986,29 @@
 
     .composer {
         display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 10px;
-        padding: 12px;
+        grid-template-columns: minmax(0, 1fr) 34px;
+        align-items: end;
+        gap: 8px;
+        padding: 10px 0 0;
         border-top: 1px solid #d7d2c8;
     }
 
     .composer textarea {
         resize: none;
         min-width: 0;
-        height: 44px;
-        min-height: 44px;
-        max-height: 44px;
+        min-height: 42px;
+        max-height: max(120px, min(50vh, calc(100dvh - 260px)));
         border: 0;
         border-bottom: 1px solid #bdb7a8;
         border-radius: 0;
         background: transparent;
-        padding: 11px 12px 10px;
+        padding: 8px 0 6px;
         outline: none;
-        line-height: 22px;
-        overflow: hidden;
+        line-height: 18px;
+        overflow-y: hidden;
         scrollbar-width: none;
-        white-space: nowrap;
-        overflow-wrap: normal;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
     }
 
     .composer textarea::-webkit-scrollbar {
@@ -1000,13 +1020,33 @@
     }
 
     .composer button {
-        width: 44px;
-        min-width: 44px;
+        width: 34px;
+        min-width: 34px;
+        height: 34px;
+        border: 0;
+        border-bottom: 1px solid #1c1b18;
+        border-radius: 0;
+        background: transparent;
         padding: 0;
         color: #1c1b18;
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 700;
         line-height: 1;
+    }
+
+    .composer button:hover:not(:disabled) {
+        background: rgba(28, 27, 24, 0.06);
+    }
+
+    .composer button:disabled {
+        border-bottom-color: #d7d2c8;
+        color: #aaa395;
+        cursor: not-allowed;
+    }
+
+    .composer button.stop-icon {
+        color: #9c3f2d;
+        border-bottom-color: #9c3f2d;
     }
 
     small {

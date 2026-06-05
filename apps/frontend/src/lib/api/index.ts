@@ -258,7 +258,10 @@ export async function streamCodexIngest(
       const result = parseJSON<IngestResult>(message.data);
       if (result) handlers.onResult?.(result);
     } else if (message.event === "error") {
-      const parsed = parseJSON<{ message?: string }>(message.data);
+      const parsed = parseJSON<{ error?: string; message?: string }>(message.data);
+      if (options.signal?.aborted || parsed?.error === "query_canceled") {
+        throw new DOMException(parsed?.message ?? "aborted", "AbortError");
+      }
       handlers.onError?.(parsed?.message ?? message.data);
     }
   });
@@ -765,7 +768,13 @@ export async function postChatQuery(
       },
     };
   }
+  if (options.signal?.aborted) {
+    throw new DOMException("aborted", "AbortError");
+  }
   const responseBody = await readJSON(res);
+  if (options.signal?.aborted) {
+    throw new DOMException("aborted", "AbortError");
+  }
   if (res.ok) {
     return {
       ok: true,
@@ -805,10 +814,16 @@ export async function streamChatQuery(
       const result = parseJSON<ChatQueryResult>(message.data);
       if (result) handlers.onResult?.(result);
     } else if (message.event === "error") {
-      const parsed = parseJSON<{ message?: string }>(message.data);
+      const parsed = parseJSON<{ error?: string; message?: string }>(message.data);
+      if (options.signal?.aborted || parsed?.error === "query_canceled") {
+        throw new DOMException(parsed?.message ?? "aborted", "AbortError");
+      }
       handlers.onError?.(parsed?.message ?? message.data);
     }
   });
+  if (options.signal?.aborted) {
+    throw new DOMException("aborted", "AbortError");
+  }
 }
 
 export async function resetChatSession(

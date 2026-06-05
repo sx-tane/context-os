@@ -276,7 +276,7 @@ func TestProgressBufferSummarizesCodexJSONEvents(t *testing.T) {
 		lines = append(lines, line)
 	}}
 
-	if _, err := progress.Write([]byte("{\"type\":\"tool_call\",\"payload\":{\"tool_name\":\"github.search_issues\"}}\n{\"type\":\"session_meta\",\"payload\":{\"id\":\"abc\"}}\n")); err != nil {
+	if _, err := progress.Write([]byte("{\"type\":\"thread.started\"}\n{\"type\":\"item.started\"}\n{\"type\":\"tool_call\",\"payload\":{\"tool_name\":\"github.search_issues\"}}\n{\"type\":\"session_meta\",\"payload\":{\"id\":\"abc\"}}\n")); err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
 	progress.Flush()
@@ -284,7 +284,7 @@ func TestProgressBufferSummarizesCodexJSONEvents(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("progress lines = %#v, want 2 lines", lines)
 	}
-	if lines[0] != "• Codex event: tool_call — github.search_issues" {
+	if lines[0] != "• Codex: tool call — github.search_issues" {
 		t.Fatalf("first progress line = %q, want tool call summary", lines[0])
 	}
 	if lines[1] != "• Codex session metadata received." {
