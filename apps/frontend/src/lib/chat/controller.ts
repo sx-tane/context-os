@@ -186,7 +186,10 @@ export async function runChatQuery(options: ChatQueryOptions) {
   const mode = options.mode ?? "auto";
   const loadText = buildChatLoadingText(options.text, mode);
   const route = inferLiveRoute(options.text);
-  const initialStream = initialStreamState(loadText);
+  const initialStream = initialStreamState(
+    loadText,
+    buildChatStreamContext(options.text, mode, route, options.readySources),
+  );
   const load = streamMsg(makeId(), initialStream);
   options.addMessage(load);
   options.setBusy(true);
@@ -462,14 +465,15 @@ export function detectResponseLanguage(text: string) {
   return "zh";
 }
 
-function initialStreamState(text: string): ChatStreamState {
+function initialStreamState(text: string, contextLines: string[] = []): ChatStreamState {
   const lines = text
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+  const allLines = [...contextLines, ...lines];
   return {
-    lines,
-    latestLine: lines.at(-1) ?? "Starting source query.",
+    lines: allLines,
+    latestLine: lines.at(-1) ?? contextLines.at(-1) ?? "Starting source query.",
     status: "running",
     expanded: false,
   };
@@ -510,6 +514,57 @@ function normalizeText(text: string) {
 
 function finalStreamSummary(result: ChatQueryResult) {
   return localDBStatusLine(result) || buildStreamSummary(result);
+}
+
+function buildChatStreamContext(
+  text: string,
+  mode: ChatQueryMode,
+  route: PendingLiveRoute,
+  readySources: Pick<ConnectorKnowledge, "connector" | "uri" | "status">[] | undefined,
+) {
+  const lines = [
+    "Request",
+    `Question: ${compactOneLine(text)}`,
+    `Mode: ${modeLabel(mode)}`,
+  ];
+  if (mode === "local") {
+    lines.push("Route: Local DB only");
+    return lines;
+  }
+  if (mode === "codex") {
+    lines.push(`Route: ${liveRouteLabel(route, readySources)}`);
+    return lines;
+  }
+  const routeLabel = liveRouteLabel(route, readySources);
+  lines.push(`Route: ${routeLabel === "Local DB" ? routeLabel : `${routeLabel} with Local DB fallback`}`);
+  return lines;
+}
+
+function liveRouteLabel(
+  route: PendingLiveRoute,
+  readySources: Pick<ConnectorKnowledge, "connector" | "uri" | "status">[] | undefined,
+) {
+  if (route.connector) {
+    const scope = route.sourceURI || "connector scope";
+    return `${connectorDisplayName(route.connector)} live lookup (${scope})`;
+  }
+  const connectors = readyLiveConnectors(readySources);
+  if (connectors.length) {
+    return `selected live connectors (${connectors.map(connectorDisplayName).join(", ")})`;
+  }
+  return "Local DB";
+}
+
+function modeLabel(mode: ChatQueryMode) {
+  if (mode === "codex") return "Codex";
+  if (mode === "local") return "Local";
+  return "Auto";
+}
+
+function compactOneLine(text: string) {
+  const clean = text.trim().replace(/\s+/g, " ");
+  if (clean.length <= 220) return clean;
+  return `${clean.slice(0, 217)}...`;
 }
 
 function artifactCountLabel(count: number) {

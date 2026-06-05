@@ -7,23 +7,22 @@
 
     const expandedStreamLineLimit = 80;
 
+    $: visibleStreamLines = stream.lines.slice(-expandedStreamLineLimit);
+    $: hiddenStreamLineCount = Math.max(
+        0,
+        stream.lines.length - expandedStreamLineLimit,
+    );
+
     function streamStatusLabel(status: ChatStreamStatus) {
         if (status === "complete") return "Complete";
         if (status === "error") return "Error";
         return "Running";
     }
-
-    function visibleStreamLines() {
-        return stream.lines.slice(-expandedStreamLineLimit);
-    }
-
-    function hiddenStreamLineCount() {
-        return Math.max(0, stream.lines.length - expandedStreamLineLimit);
-    }
 </script>
 
 <section
     class="stream-panel"
+    class:expanded
     class:running={stream.status === "running"}
     class:error={stream.status === "error"}
     aria-label="Live stream progress"
@@ -43,11 +42,17 @@
             <p class="stream-summary">{stream.summary}</p>
         {/if}
     {:else}
+        {#if stream.summary}
+            <p class="stream-summary expanded-summary">{stream.summary}</p>
+        {/if}
         <div class="stream-lines">
-            {#if hiddenStreamLineCount() > 0}
-                <small>{hiddenStreamLineCount()} earlier stream lines hidden</small>
+            {#if hiddenStreamLineCount > 0}
+                <small>{hiddenStreamLineCount} earlier stream lines hidden</small>
             {/if}
-            {#each visibleStreamLines() as line, index (`stream-line-${index}`)}
+            {#if visibleStreamLines.length === 0}
+                <p>No stream lines yet.</p>
+            {/if}
+            {#each visibleStreamLines as line, index (`${index}-${line}`)}
                 <p>{line}</p>
             {/each}
         </div>
@@ -62,6 +67,10 @@
         padding: 8px 0 10px;
         color: #625f55;
         font-size: 12px;
+    }
+
+    .stream-panel.expanded {
+        padding-bottom: 12px;
     }
 
     .stream-panel.running .stream-toggle span {
@@ -96,12 +105,25 @@
     .stream-toggle strong {
         flex: 0 0 auto;
         border-bottom: 1px solid #bdb7a8;
+        background-image: linear-gradient(
+            90deg,
+            #1c1b18 0 50%,
+            transparent 50% 100%
+        );
+        background-position: 100% 0;
+        background-size: 200% 100%;
         color: #1c1b18;
         font-size: 11px;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s;
     }
 
     .stream-toggle:hover strong {
         border-bottom-color: #1c1b18;
+        background-position: 0 0;
+        color: #f8f6ef;
     }
 
     .stream-latest,
@@ -115,15 +137,22 @@
         font-weight: 700;
     }
 
+    .expanded-summary {
+        margin-top: 9px;
+    }
+
     .stream-lines {
         display: grid;
         gap: 5px;
         margin-top: 8px;
+        padding-left: 10px;
+        border-left: 1px solid #d7d2c8;
     }
 
     .stream-lines p {
         margin: 0;
         color: #625f55;
         overflow-wrap: anywhere;
+        white-space: pre-wrap;
     }
 </style>

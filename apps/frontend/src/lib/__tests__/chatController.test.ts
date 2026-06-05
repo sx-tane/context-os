@@ -247,6 +247,14 @@ describe("runChatQuery", () => {
     );
     expect(state.busyCalls).toEqual([true, false]);
     expect(state.addMessage.mock.calls[0][0].text).toBe("");
+    expect(state.addMessage.mock.calls[0][0].stream.lines).toEqual(
+      expect.arrayContaining([
+        "Request",
+        "Question: status",
+        "Mode: Auto",
+        "Route: Local DB",
+      ]),
+    );
     expect(state.addMessage.mock.calls[0][0].stream.latestLine).toContain("source registry");
     expect(state.replacements[0].stream?.latestLine).toContain("standard chat query");
     expect(state.replacements[0].stream?.lines.join("\n")).toContain("Streaming unavailable");
@@ -284,7 +292,10 @@ describe("runChatQuery", () => {
       mode: "local",
     });
     expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({ mode: "local" });
-    expect(state.addMessage.mock.calls[0][0].stream.lines.join("\n")).toContain("Live Codex connectors are off");
+    const streamLines = state.addMessage.mock.calls[0][0].stream.lines.join("\n");
+    expect(streamLines).toContain("Mode: Local");
+    expect(streamLines).toContain("Route: Local DB only");
+    expect(streamLines).toContain("Live Codex connectors are off");
   });
 
   it("sends codex mode and shows Codex only loading text", async () => {
@@ -314,7 +325,11 @@ describe("runChatQuery", () => {
       connectors: ["github", "jira"],
     });
     expect(mockPostChatQuery).not.toHaveBeenCalled();
-    expect(state.addMessage.mock.calls[0][0].stream.lines.join("\n")).toContain("Local DB fallback is off");
+    const streamLines = state.addMessage.mock.calls[0][0].stream.lines.join("\n");
+    expect(streamLines).toContain("Question: check all source connectors");
+    expect(streamLines).toContain("Mode: Codex");
+    expect(streamLines).toContain("Route: selected live connectors (GitHub, Jira/Rovo)");
+    expect(streamLines).toContain("Local DB fallback is off");
   });
 
   it("sends the detected response language with streamed and fallback queries", async () => {
@@ -560,7 +575,10 @@ describe("runChatQuery", () => {
       source_uri: "sx-tane/context-os",
     });
     expect(state.addMessage.mock.calls[0][0].text).toBe("");
-    expect(state.addMessage.mock.calls[0][0].stream.lines.join("\n")).toContain("GitHub plugin lookup");
+    const streamLines = state.addMessage.mock.calls[0][0].stream.lines.join("\n");
+    expect(streamLines).toContain("Question: help me check sx-tane/context-os");
+    expect(streamLines).toContain("Route: GitHub live lookup (sx-tane/context-os) with Local DB fallback");
+    expect(streamLines).toContain("GitHub plugin lookup");
     expect(state.replacements[0].stream?.latestLine).toContain("› Live Codex");
     expect(state.replacements.at(-2)?.stream?.latestLine).toContain("• Saving live answer evidence to Local DB...");
     expect(state.replacements.at(-2)?.text).toContain("Live answer");
