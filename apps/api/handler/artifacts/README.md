@@ -7,8 +7,8 @@ HTTP handler for querying persisted source artifacts in a workspace.
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/artifacts` | Returns workspace-scoped artifacts from persisted ingest events. |
-| POST | `/artifacts/delete` | Explicitly removes user-selected workspace-scoped Activity artifacts by ID. |
-| POST | `/artifacts/live-evidence/cleanup` | Explicitly removes old noisy `live_chat_answer` artifacts created from duplicate full answers, URL path fragments, or generic terms. |
+| POST | `/artifacts/delete` | Explicitly removes user-selected workspace-scoped Activity artifacts by ID and prunes graph rows tied to those same event IDs when graph persistence is available. |
+| POST | `/artifacts/live-evidence/cleanup` | Explicitly removes old noisy `live_chat_answer` artifacts created from duplicate full answers, URL path fragments, or generic terms, with matching graph evidence pruned when available. |
 
 ## Query Parameters
 
@@ -24,11 +24,11 @@ HTTP handler for querying persisted source artifacts in a workspace.
 
 ## Files
 
-- `artifacts.go` contains `Handler.Query`, `Handler.Delete`, `Handler.CleanupLiveEvidence`, workspace resolution, event query construction, query parameter parsing, explicit selected-ID deletion, and the conservative noisy-live-evidence selector.
+- `artifacts.go` contains `Handler.Query`, `Handler.Delete`, `Handler.CleanupLiveEvidence`, workspace resolution, event query construction, query parameter parsing, explicit selected-ID deletion, optional selected-ID graph evidence pruning, and the conservative noisy-live-evidence selector.
 
 ## Maintenance Notes
 
 - Keep artifact responses backed by `repository.EventRepository`; do not re-query live connectors from this handler.
-- Keep live evidence cleanup and selected Activity deletion explicit; they must not auto-run during artifact queries.
+- Keep live evidence cleanup and selected Activity deletion explicit; they must not auto-run during artifact queries. Graph pruning must stay scoped to the same selected Activity event IDs.
 - Preserve the 10 second request timeout unless repository query behavior changes.
 - Update `apps/api/README.md` when route registration, request parameters, or response shape changes.

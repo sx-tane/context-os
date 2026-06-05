@@ -19,6 +19,7 @@
     export let cleanupRunning = false;
     export let cleanupMessage = "";
     export let onRequestCleanupGraph: () => void = () => {};
+    export let onRequestDeleteEntity: (entity: GraphEntity) => void = () => {};
 
     let entityQuery = "";
 
@@ -199,6 +200,13 @@
             <p><b>Links:</b> {graphDegree.get(selectedEntity.id) ?? 0}</p>
             <p><b>Confidence:</b> {Math.round((selectedEntity.confidence ?? 0) * 100)}%</p>
             <p><b>Source:</b> {selectedEntity.source || "unknown"}</p>
+            <button
+                type="button"
+                class="delete-entity"
+                on:click={() => selectedEntity && onRequestDeleteEntity(selectedEntity)}
+            >
+                Delete entity
+            </button>
             <hr />
             {#if relationshipGroups.length}
                 <div class="node-links">
@@ -376,19 +384,59 @@
         border: 0;
         border-bottom: 1px solid #8a3b27;
         border-radius: 0;
-        background: transparent;
+        background-color: transparent;
+        background-image: linear-gradient(90deg, #8a3b27 0 50%, transparent 50% 100%);
+        background-position: 100% 0;
+        background-size: 200% 100%;
         color: #8a3b27;
         cursor: pointer;
         font: inherit;
         font-size: 11px;
         font-weight: 700;
-        padding: 6px 0;
+        padding: 6px 12px;
         white-space: nowrap;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s,
+            opacity 0.15s;
+    }
+
+    .cleanup-graph:hover:not(:disabled) {
+        background-position: 0 0;
+        color: #f8f6ef;
     }
 
     .cleanup-graph:disabled {
+        background-image: none;
         cursor: not-allowed;
         opacity: 0.45;
+    }
+
+    .delete-entity {
+        width: fit-content;
+        border: 0;
+        border-bottom: 1px solid #8a3b27;
+        border-radius: 0;
+        background-color: transparent;
+        background-image: linear-gradient(90deg, #8a3b27 0 50%, transparent 50% 100%);
+        background-position: 100% 0;
+        background-size: 200% 100%;
+        color: #8a3b27;
+        cursor: pointer;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 6px 12px;
+        transition:
+            background-position 0.18s ease,
+            color 0.15s,
+            border-color 0.15s;
+    }
+
+    .delete-entity:hover {
+        background-position: 0 0;
+        color: #f8f6ef;
     }
 
     .graph-cleanup-message {

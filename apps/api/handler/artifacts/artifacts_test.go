@@ -87,6 +87,20 @@ func (c *cleanupEventRepo) DeleteByIDs(_ context.Context, _ string, ids []string
 	return len(ids), nil
 }
 
+type fakeGraphEvidenceDeleter struct {
+	deleted []string
+	result  repository.GraphCleanupResult
+	err     error
+}
+
+func (f *fakeGraphEvidenceDeleter) DeleteGraphEvidenceByEventIDs(_ context.Context, _ string, ids []string) (repository.GraphCleanupResult, error) {
+	f.deleted = append([]string(nil), ids...)
+	if f.err != nil {
+		return repository.GraphCleanupResult{}, f.err
+	}
+	return f.result, nil
+}
+
 // TestParseLimit verifies query limits default, clamp, and validate as expected.
 func TestParseLimit(t *testing.T) {
 	t.Parallel()
@@ -327,9 +341,10 @@ func TestCleanupLiveEvidenceDeletesSelectedRows(t *testing.T) {
 		SourceURI: "enum/value",
 		Metadata:  map[string]string{"evidence_kind": "live_chat_answer"},
 	}}}
+	graph := &fakeGraphEvidenceDeleter{}
 	handler := NewHandler(fakeWorkspaceRepo{
 		getByPath: map[string]*repository.Workspace{"/workspace": &ws},
-	}, events)
+	}, events).WithGraphEvidenceDeleter(graph)
 	req := httptest.NewRequest("POST", "/artifacts/live-evidence/cleanup?workspace_id=/workspace", nil)
 	res := httptest.NewRecorder()
 
@@ -341,6 +356,9 @@ func TestCleanupLiveEvidenceDeletesSelectedRows(t *testing.T) {
 	if !reflect.DeepEqual(events.deleted, []string{"enum"}) {
 		t.Fatalf("deleted = %#v, want enum row", events.deleted)
 	}
+	if !reflect.DeepEqual(graph.deleted, []string{"enum"}) {
+		t.Fatalf("graph deleted = %#v, want enum row", graph.deleted)
+	}
 }
 
 // TestDeleteDeletesExplicitArtifactIDs verifies the delete endpoint removes user-selected workspace artifacts by ID.
@@ -349,9 +367,13 @@ func TestDeleteDeletesExplicitArtifactIDs(t *testing.T) {
 
 	ws := repository.Workspace{ID: "ws-1", Path: "/workspace"}
 	events := &cleanupEventRepo{}
+	graph := &fakeGraphEvidenceDeleter{result: repository.GraphCleanupResult{
+		DeletedEntityCount:       1,
+		DeletedRelationshipCount: 2,
+	}}
 	handler := NewHandler(fakeWorkspaceRepo{
 		getByPath: map[string]*repository.Workspace{"/workspace": &ws},
-	}, events)
+	}, events).WithGraphEvidenceDeleter(graph)
 	req := httptest.NewRequest("POST", "/artifacts/delete", strings.NewReader(`{"workspace_id":"/workspace","ids":[" evt-a ","evt-b","evt-a",""]}`))
 	res := httptest.NewRecorder()
 
@@ -363,11 +385,17 @@ func TestDeleteDeletesExplicitArtifactIDs(t *testing.T) {
 	if !reflect.DeepEqual(events.deleted, []string{"evt-a", "evt-b"}) {
 		t.Fatalf("deleted = %#v, want cleaned selected IDs", events.deleted)
 	}
+	if !reflect.DeepEqual(graph.deleted, []string{"evt-a", "evt-b"}) {
+		t.Fatalf("graph deleted = %#v, want cleaned selected IDs", graph.deleted)
+	}
 	var body CleanupResult
 	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 	if body.DeletedCount != 2 || body.MatchedCount != 2 {
 		t.Fatalf("body = %#v, want two matched and deleted IDs", body)
+	}
+	if body.DeletedGraphEntityCount != 1 || body.DeletedGraphRelationCount != 2 {
+		t.Fatalf("body graph counts = %#v, want deleted graph counts", body)
 	}
 }

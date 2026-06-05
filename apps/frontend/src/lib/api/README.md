@@ -19,8 +19,8 @@ Frontend API client helpers for the Go API and SSE streams.
 ## Maintenance Notes
 
 - Update `apps/frontend/src/lib/README.md` when exported helper contracts change.
-- Keep generated OpenAPI types in `../generated/`; do not hand-edit generated declarations.
-- `cleanupLiveEvidence` posts to `/artifacts/live-evidence/cleanup` and removes noisy Activity source-event rows only.
+- Keep generated OpenAPI types in `../generated/`; update them from the API schema when response contracts change.
+- `cleanupLiveEvidence` posts to `/artifacts/live-evidence/cleanup` and removes noisy Activity source-event rows plus graph rows tied to those same event IDs.
 - `cleanupGraphNoise` posts to `/graph/cleanup` and permanently removes backend-classified noisy graph entity/relationship rows; source artifacts, chat history, findings, and connected sources remain intact.
 - Workspace sync normalization preserves `status`, `event_count`, and `last_error` so source setup can distinguish saved live references, pending sync work, and backend-reported connector errors.
 - `getAnalysisBasket`/`putAnalysisBasket` call `/workspace/analysis-basket` for durable selected-evidence state; failed reads return `null` so the route can keep local fallback behavior.

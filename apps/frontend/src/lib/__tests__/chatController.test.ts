@@ -258,6 +258,65 @@ describe("runChatQuery", () => {
     expect(state.refreshWorkspace).toHaveBeenCalled();
   });
 
+  it("sends local mode and shows Local DB only loading text", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({ provider: "local", answer: "Local answer", summary: "Local answer" }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "summarize github",
+      workspacePath: "workspace",
+      mode: "local",
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      workspace_id: "workspace",
+      message: "summarize github",
+      mode: "local",
+    });
+    expect(mockPostChatQuery.mock.calls[0][0]).toMatchObject({ mode: "local" });
+    expect(state.addMessage.mock.calls[0][0].stream.lines.join("\n")).toContain("Live Codex connectors are off");
+  });
+
+  it("sends codex mode and shows Codex only loading text", async () => {
+    mockStreamChatQuery.mockImplementation(async (_body, handlers) => {
+      handlers.onResult?.(makeChatResult({ provider: "codex", answer: "Live answer", summary: "Live answer" }));
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "check all source connectors",
+      workspacePath: "workspace",
+      mode: "codex",
+      readySources: [
+        { connector: "github", uri: "github", status: "ready" },
+        { connector: "jira", uri: "jira", status: "ready" },
+      ],
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      mode: "codex",
+      connectors: ["github", "jira"],
+    });
+    expect(mockPostChatQuery).not.toHaveBeenCalled();
+    expect(state.addMessage.mock.calls[0][0].stream.lines.join("\n")).toContain("Local DB fallback is off");
+  });
+
   it("sends the detected response language with streamed and fallback queries", async () => {
     mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
     mockPostChatQuery.mockResolvedValue({
@@ -415,6 +474,36 @@ describe("runChatQuery", () => {
       connectors: ["jira", "github"],
     });
     expect(mockStreamChatQuery.mock.calls[0][0].connector).toBeUndefined();
+  });
+
+  it("uses connector fanout for all my source connector wording", async () => {
+    mockStreamChatQuery.mockRejectedValue(new Error("stream route unavailable"));
+    mockPostChatQuery.mockResolvedValue({
+      ok: true,
+      body: makeChatResult({ connector: "multiple", provider: "codex" }),
+    });
+    const state = makeState();
+
+    await runChatQuery({
+      text: "find receipt issue api in my github kkg booking record repo and use all my source connector",
+      workspacePath: "workspace",
+      readySources: [
+        { connector: "github", uri: "github", status: "ready" },
+        { connector: "jira", uri: "jira", status: "ready" },
+      ],
+      addMessage: state.addMessage,
+      replaceMessage: state.replaceMessage,
+      setBusy: state.setBusy,
+      setLastChatResult: state.setLastChatResult,
+      setActivityArtifacts: state.setActivityArtifacts,
+      refreshWorkspace: state.refreshWorkspace,
+    });
+
+    expect(mockStreamChatQuery.mock.calls[0][0]).toMatchObject({
+      connectors: ["github", "jira"],
+    });
+    expect(mockStreamChatQuery.mock.calls[0][0].connector).toBeUndefined();
+    expect(mockStreamChatQuery.mock.calls[0][0].source_uri).toBeUndefined();
   });
 
   it("streams Codex progress and uses the streamed result", async () => {

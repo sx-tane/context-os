@@ -779,6 +779,44 @@ export async function cleanupGraphNoise(
   }
 }
 
+/** Permanently delete one graph entity and relationships touching it. */
+export async function deleteGraphEntity(
+  workspaceID: string,
+  entityID: string,
+): Promise<
+  | { ok: true; status: number; body: GraphCleanupResult }
+  | { ok: false; status: number; body: ApiErrorBody }
+> {
+  try {
+    const res = await apiFetch(
+      `${API_URL}/graph/entity?workspace_id=${encodeURIComponent(workspaceID)}&entity_id=${encodeURIComponent(entityID)}`,
+      { method: "DELETE" },
+    );
+    const responseBody = await readJSON(res);
+    if (res.ok) {
+      return {
+        ok: true,
+        status: res.status,
+        body: responseBody as unknown as GraphCleanupResult,
+      };
+    }
+    return {
+      ok: false,
+      status: res.status,
+      body: responseBody,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: "api_unreachable",
+        message: "API is unreachable. Graph entity delete did not run.",
+      },
+    };
+  }
+}
+
 /** Ask a deterministic local chat question over workspace source artifacts. */
 export async function postChatQuery(
   body: ChatQueryRequest,

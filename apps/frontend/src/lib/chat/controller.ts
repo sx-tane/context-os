@@ -4,6 +4,7 @@ import { DEMO_WORKSPACE_PATH } from "$lib/workspace/projectStore";
 import type {
   Artifact,
   ChatMessage,
+  ChatQueryMode,
   ChatQueryResult,
   ChatStreamState,
   ConnectorKnowledge,
@@ -25,6 +26,7 @@ export type ChatQueryOptions = {
   setActivityArtifacts: (artifacts: Artifact[]) => void;
   refreshWorkspace: () => Promise<void>;
   readySources?: Pick<ConnectorKnowledge, "connector" | "uri" | "status">[];
+  mode?: ChatQueryMode;
   signal?: AbortSignal;
   isCurrent?: () => boolean;
 };
@@ -120,7 +122,13 @@ export function classifyChatCommand(text: string): ChatCommandAction {
   return "query";
 }
 
-export function buildChatLoadingText(text: string) {
+export function buildChatLoadingText(text: string, mode: ChatQueryMode = "auto") {
+  if (mode === "local") {
+    return "**Local DB**\n1. Using persisted artifacts, graph, findings, and evidence history only.\n2. Live Codex connectors are off for this question.";
+  }
+  if (mode === "codex") {
+    return "**Live Codex**\n1. Using connected Codex plugins only for this question.\n2. Local DB fallback is off so the answer does not get mixed with saved artifacts.";
+  }
   if (requestsAllSourceConnectors(text)) {
     return "**Live Codex**\n1. Starting connected-source lookups across selected live connectors.\n2. Collecting Jira, GitHub, Slack, Google Drive, Notion, and SharePoint answers as available.\n\n**Local DB**\n1. Fallback only if no live connector answers.\n2. Uses persisted artifacts, graph, findings, and evidence history.";
   }
@@ -175,7 +183,8 @@ export function isNearBottom(
 }
 
 export async function runChatQuery(options: ChatQueryOptions) {
-  const loadText = buildChatLoadingText(options.text);
+  const mode = options.mode ?? "auto";
+  const loadText = buildChatLoadingText(options.text, mode);
   const route = inferLiveRoute(options.text);
   const initialStream = initialStreamState(loadText);
   const load = streamMsg(makeId(), initialStream);
@@ -216,6 +225,7 @@ export async function runChatQuery(options: ChatQueryOptions) {
     const body = {
       workspace_id: options.workspacePath,
       message: options.text,
+      mode,
       ...(!useConnectorFanout && route.connector ? { connector: route.connector } : {}),
       ...((useConnectorFanout || (!route.connector && !route.sourceURI))
         ? liveConnectorHint(options.readySources)

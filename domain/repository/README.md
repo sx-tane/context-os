@@ -13,6 +13,7 @@ Implementations live in `internal/persistence/store`. Nothing in `domain/` depen
 | `EventRepository` | Upsert and query raw ingested source events (idempotent by `id+workspace_id`). Duplicate upserts update the stored row and return the written row count. Query supports connector, source URI, date range, text, and limit filters. |
 | `EventDeleter` | Optional delete capability for explicit workspace-scoped cleanup flows such as noisy live-chat evidence removal. |
 | `EntityRepository` | Upsert and list canonical entities and typed relationship edges. |
+| `GraphEvidenceDeleter` | Optional delete capability for graph rows tied to selected source event IDs. |
 | `GraphNoiseCleaner` | Optional explicit delete capability for backend-classified low-signal graph rows. |
 | `MismatchRepository` | Upsert and query reasoning findings with evidence and confidence. |
 | `SyncRepository` | Read and write connector sync cursors and status. |
@@ -30,6 +31,11 @@ Implementations live in `internal/persistence/store`. Nothing in `domain/` depen
 `EntityRepository.ListRelationships` returns persisted relationship edges for a
 workspace and can optionally scope the result to a set of entity IDs. The graph
 API uses this to render source-backed entity links without re-running analysis.
+
+`GraphEvidenceDeleter.DeleteGraphEvidenceByEventIDs` is for explicit Activity
+delete flows. It prunes graph rows whose provenance points at the same selected
+event IDs, keeping Activity cleanup scoped instead of running broad graph noise
+cleanup.
 
 `GraphNoiseCleaner.CleanupGraphNoise` is separate from graph reads. It is only
 for user-confirmed cleanup flows and permanently deletes low-signal graph rows;

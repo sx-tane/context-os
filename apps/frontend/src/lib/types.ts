@@ -323,6 +323,8 @@ export interface ActivityCleanupResult {
   matched_count: number;
   deleted_count: number;
   deleted_ids: string[];
+  deleted_graph_entity_count?: number;
+  deleted_graph_relationship_count?: number;
 }
 
 export interface GraphCleanupResult {
@@ -370,6 +372,8 @@ export interface ChatQueryResult {
   evidence_graph_entity_count?: number;
   evidence_graph_relationship_count?: number;
 }
+
+export type ChatQueryMode = "auto" | "codex" | "local";
 
 // ---- Graph types ----
 

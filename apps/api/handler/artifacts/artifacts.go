@@ -26,11 +26,13 @@ var (
 
 // CleanupResult is the JSON payload returned by POST /artifacts/live-evidence/cleanup.
 type CleanupResult struct {
-	WorkspaceID   string   `json:"workspace_id"`
-	WorkspacePath string   `json:"workspace_path"`
-	MatchedCount  int      `json:"matched_count"`
-	DeletedCount  int      `json:"deleted_count"`
-	DeletedIDs    []string `json:"deleted_ids"`
+	WorkspaceID               string   `json:"workspace_id"`
+	WorkspacePath             string   `json:"workspace_path"`
+	MatchedCount              int      `json:"matched_count"`
+	DeletedCount              int      `json:"deleted_count"`
+	DeletedIDs                []string `json:"deleted_ids"`
+	DeletedGraphEntityCount   int      `json:"deleted_graph_entity_count,omitempty"`
+	DeletedGraphRelationCount int      `json:"deleted_graph_relationship_count,omitempty"`
 }
 
 // DeleteRequest is the JSON body accepted by POST /artifacts/delete.
@@ -44,11 +46,18 @@ type DeleteRequest struct {
 type Handler struct {
 	workspaces repository.WorkspaceRepository
 	events     repository.EventRepository
+	graph      repository.GraphEvidenceDeleter
 }
 
 // NewHandler returns a Handler wired to the provided repositories.
 func NewHandler(workspaces repository.WorkspaceRepository, events repository.EventRepository) *Handler {
 	return &Handler{workspaces: workspaces, events: events}
+}
+
+// WithGraphEvidenceDeleter enables graph pruning for explicitly deleted artifact evidence.
+func (h *Handler) WithGraphEvidenceDeleter(graph repository.GraphEvidenceDeleter) *Handler {
+	h.graph = graph
+	return h
 }
 
 // Query handles GET /artifacts.
@@ -185,13 +194,20 @@ func (h *Handler) CleanupLiveEvidence(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
 	}
+	graphResult, err := h.deleteGraphEvidence(ctx, workspace.ID, ids)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
 
 	response.WriteJSON(w, http.StatusOK, CleanupResult{
-		WorkspaceID:   workspace.ID,
-		WorkspacePath: workspace.Path,
-		MatchedCount:  len(ids),
-		DeletedCount:  deleted,
-		DeletedIDs:    ids,
+		WorkspaceID:               workspace.ID,
+		WorkspacePath:             workspace.Path,
+		MatchedCount:              len(ids),
+		DeletedCount:              deleted,
+		DeletedIDs:                ids,
+		DeletedGraphEntityCount:   graphResult.DeletedEntityCount,
+		DeletedGraphRelationCount: graphResult.DeletedRelationshipCount,
 	})
 }
 
@@ -258,13 +274,31 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
 	}
+	graphResult, err := h.deleteGraphEvidence(ctx, workspace.ID, ids)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "store_error", err.Error())
+		return
+	}
 	response.WriteJSON(w, http.StatusOK, CleanupResult{
-		WorkspaceID:   workspace.ID,
-		WorkspacePath: workspace.Path,
-		MatchedCount:  len(ids),
-		DeletedCount:  deleted,
-		DeletedIDs:    ids,
+		WorkspaceID:               workspace.ID,
+		WorkspacePath:             workspace.Path,
+		MatchedCount:              len(ids),
+		DeletedCount:              deleted,
+		DeletedIDs:                ids,
+		DeletedGraphEntityCount:   graphResult.DeletedEntityCount,
+		DeletedGraphRelationCount: graphResult.DeletedRelationshipCount,
 	})
+}
+
+func (h *Handler) deleteGraphEvidence(ctx context.Context, workspaceID string, ids []string) (repository.GraphCleanupResult, error) {
+	if h.graph == nil || len(ids) == 0 {
+		return repository.GraphCleanupResult{}, nil
+	}
+	result, err := h.graph.DeleteGraphEvidenceByEventIDs(ctx, workspaceID, ids)
+	if err != nil {
+		return repository.GraphCleanupResult{}, fmt.Errorf("artifacts: delete graph evidence: %w", err)
+	}
+	return result, nil
 }
 
 func (h *Handler) resolveWorkspace(ctx context.Context, ref string) (repository.Workspace, error) {

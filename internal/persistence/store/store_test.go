@@ -3,6 +3,8 @@ package store
 import (
 	"reflect"
 	"testing"
+
+	"context-os/domain/repository"
 )
 
 // TestWorkspaceIDFromPath verifies absolute paths are converted into stable workspace IDs.
@@ -106,4 +108,11 @@ func TestWorkspaceScopedMemoryTablesIncludesUIState(t *testing.T) {
 		}
 	}
 	t.Fatal("workspaceScopedMemoryTables missing workspace_ui_state")
+}
+
+// TestEntityStoreImplementsGraphEvidenceDeleter verifies Activity deletes can prune matching graph evidence.
+func TestEntityStoreImplementsGraphEvidenceDeleter(t *testing.T) {
+	t.Parallel()
+
+	var _ repository.GraphEvidenceDeleter = (*EntityStore)(nil)
 }

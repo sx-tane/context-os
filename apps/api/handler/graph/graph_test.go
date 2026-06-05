@@ -336,6 +336,83 @@ func TestCleanupDeletesOnlyBackendClassifiedNoise(t *testing.T) {
 	}
 }
 
+// TestDeleteEntityRejectsInvalidRequests verifies manual graph entity deletion validates method, workspace, and entity ID.
+func TestDeleteEntityRejectsInvalidRequests(t *testing.T) {
+	handler := graphhandler.NewHandler(
+		workspaceRepo{workspace: repository.Workspace{ID: "workspace-1", Path: "/workspace"}},
+		&cleanupEntityRepo{},
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/graph/entity?workspace_id=/workspace&entity_id=entity-1", nil)
+	rec := httptest.NewRecorder()
+	handler.DeleteEntity(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("DeleteEntity(POST) status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/graph/entity?entity_id=entity-1", nil)
+	rec = httptest.NewRecorder()
+	handler.DeleteEntity(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("DeleteEntity(missing workspace) status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/graph/entity?workspace_id=/workspace", nil)
+	rec = httptest.NewRecorder()
+	handler.DeleteEntity(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("DeleteEntity(missing entity) status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+// TestDeleteEntityRemovesSelectedEntityAndRelationships verifies manual graph entity deletion keeps the graph consistent.
+func TestDeleteEntityRemovesSelectedEntityAndRelationships(t *testing.T) {
+	repo := &cleanupEntityRepo{
+		entities: []entities.CanonicalEntity{{
+			Entity: types.Entity{ID: "service-1", Type: types.Service, Name: "PaymentService"},
+		}, {
+			Entity: types.Entity{ID: "dependency-1", Type: types.Dependency, Name: "OrderIdRepository"},
+		}, {
+			Entity: types.Entity{ID: "dependency-2", Type: types.Dependency, Name: "TransactionHistoryRepository"},
+		}},
+		relationships: []types.Relationship{{
+			ID:     "service-1->dependency-1",
+			FromID: "service-1",
+			ToID:   "dependency-1",
+			Kind:   types.ServiceDependsOn,
+		}, {
+			ID:     "dependency-2->service-1",
+			FromID: "dependency-2",
+			ToID:   "service-1",
+			Kind:   types.ServiceDependsOn,
+		}},
+	}
+	handler := graphhandler.NewHandler(
+		workspaceRepo{workspace: repository.Workspace{ID: "workspace-1", Path: "/workspace"}},
+		repo,
+	)
+
+	req := httptest.NewRequest(http.MethodDelete, "/graph/entity?workspace_id=/workspace&entity_id=service-1", nil)
+	rec := httptest.NewRecorder()
+	handler.DeleteEntity(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("DeleteEntity() status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := decodeObject(t, rec.Body.Bytes())
+	if body["deleted_entity_count"] != float64(1) {
+		t.Fatalf("deleted_entity_count = %v, want 1", body["deleted_entity_count"])
+	}
+	if body["deleted_relationship_count"] != float64(2) {
+		t.Fatalf("deleted_relationship_count = %v, want 2", body["deleted_relationship_count"])
+	}
+	if len(repo.entities) != 2 {
+		t.Fatalf("entities length = %d, want 2", len(repo.entities))
+	}
+	if len(repo.relationships) != 0 {
+		t.Fatalf("relationships length = %d, want 0", len(repo.relationships))
+	}
+}
+
 type workspaceRepo struct {
 	workspace repository.Workspace
 }
@@ -435,6 +512,32 @@ func (r *cleanupEntityRepo) CleanupGraphNoise(_ context.Context, _ string) (repo
 		keptRelationships = append(keptRelationships, relationship)
 	}
 	r.relationships = keptRelationships
+	return result, nil
+}
+
+func (r *cleanupEntityRepo) DeleteGraphEntity(_ context.Context, _ string, entityID string) (repository.GraphCleanupResult, error) {
+	result := repository.GraphCleanupResult{}
+	keptRelationships := make([]types.Relationship, 0, len(r.relationships))
+	for _, relationship := range r.relationships {
+		if relationship.FromID == entityID || relationship.ToID == entityID {
+			result.MatchedRelationshipCount++
+			result.DeletedRelationshipCount++
+			continue
+		}
+		keptRelationships = append(keptRelationships, relationship)
+	}
+	r.relationships = keptRelationships
+
+	keptEntities := make([]entities.CanonicalEntity, 0, len(r.entities))
+	for _, entity := range r.entities {
+		if entity.Entity.ID == entityID {
+			result.MatchedEntityCount++
+			result.DeletedEntityCount++
+			continue
+		}
+		keptEntities = append(keptEntities, entity)
+	}
+	r.entities = keptEntities
 	return result, nil
 }
 

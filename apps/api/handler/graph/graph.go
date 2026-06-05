@@ -231,6 +231,80 @@ func (h *Handler) Cleanup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DeleteEntity handles DELETE /graph/entity.
+//
+// @Summary      Delete one graph entity
+// @Description  Permanently removes one workspace-scoped graph entity and every relationship touching it without deleting source artifacts, findings, chat history, or connected sources.
+// @Tags         graph
+// @Produce      json
+// @Param        workspace_id  query     string  true  "Workspace path or ID"
+// @Param        entity_id     query     string  true  "Graph entity ID"
+// @Success      200           {object}  cleanupResponse
+// @Failure      400           {object}  map[string]string
+// @Failure      404           {object}  map[string]string
+// @Failure      405           {object}  map[string]string
+// @Failure      503           {object}  map[string]string
+// @Router       /graph/entity [delete]
+func (h *Handler) DeleteEntity(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "DELETE required")
+		return
+	}
+
+	if h.workspaces == nil || h.entities == nil {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "graph store is unavailable")
+		return
+	}
+	deleter, ok := h.entities.(repository.GraphEntityDeleter)
+	if !ok {
+		response.WriteError(w, http.StatusServiceUnavailable, "store_unavailable", "graph entity delete is unavailable")
+		return
+	}
+
+	workspaceRef := workspaceRefFromRequest(r)
+	if workspaceRef == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "workspace_id is required")
+		return
+	}
+	entityID := strings.TrimSpace(r.URL.Query().Get("entity_id"))
+	if entityID == "" {
+		response.WriteError(w, http.StatusBadRequest, "invalid_request", "entity_id is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), graphRequestTimeout)
+	defer cancel()
+
+	workspace, err := h.resolveWorkspace(ctx, workspaceRef)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.WriteError(w, http.StatusNotFound, "not_found", "workspace not found")
+			return
+		}
+		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	result, err := deleter.DeleteGraphEntity(ctx, workspace.ID, entityID)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if result.DeletedEntityCount == 0 {
+		response.WriteError(w, http.StatusNotFound, "not_found", "graph entity not found")
+		return
+	}
+
+	response.WriteJSON(w, http.StatusOK, cleanupResponse{
+		WorkspaceID:              workspace.ID,
+		WorkspacePath:            workspace.Path,
+		MatchedEntityCount:       result.MatchedEntityCount,
+		DeletedEntityCount:       result.DeletedEntityCount,
+		MatchedRelationshipCount: result.MatchedRelationshipCount,
+		DeletedRelationshipCount: result.DeletedRelationshipCount,
+	})
+}
+
 func (h *Handler) resolveWorkspace(ctx context.Context, ref string) (repository.Workspace, error) {
 	workspace, err := h.workspaces.GetByPath(ctx, ref)
 	if err != nil {

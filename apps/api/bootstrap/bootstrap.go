@@ -112,6 +112,7 @@ func Routes(ctx context.Context, sqlDB *sql.DB) []Route {
 		routes = append(routes,
 			Route{Pattern: "/graph", Handler: http.HandlerFunc(handlers.graph.Query), CORS: true},
 			Route{Pattern: "/graph/cleanup", Handler: http.HandlerFunc(handlers.graph.Cleanup), CORS: true},
+			Route{Pattern: "/graph/entity", Handler: http.HandlerFunc(handlers.graph.DeleteEntity), CORS: true},
 		)
 	}
 	if handlers.artifacts != nil {
@@ -196,9 +197,10 @@ func newHandlers(ctx context.Context, sqlDB *sql.DB) handlers {
 			presentation.WithExecutor(tplExec),
 			presentation.WithAuditRepository(auditStore),
 		),
-		graph:     handlergraph.NewHandler(wsStore, entityStore),
-		artifacts: handlerartifacts.NewHandler(wsStore, evStore),
-		chat:      handlerchat.NewHandler(internalchat.NewServiceWithLiveAnswerer(wsStore, evStore, syncStore, internalchat.NewCodexAnswerer())),
+		graph: handlergraph.NewHandler(wsStore, entityStore),
+		artifacts: handlerartifacts.NewHandler(wsStore, evStore).
+			WithGraphEvidenceDeleter(entityStore),
+		chat: handlerchat.NewHandler(internalchat.NewServiceWithLiveAnswerer(wsStore, evStore, syncStore, internalchat.NewCodexAnswerer())),
 	}
 }
 

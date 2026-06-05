@@ -19,6 +19,9 @@ const (
 	intentFindings    = "findings"
 	intentStatus      = "status"
 	intentUnsupported = "unsupported"
+	modeAuto          = "auto"
+	modeCodex         = "codex"
+	modeLocal         = "local"
 	defaultLimit      = 20
 	maxLimit          = 100
 )
@@ -33,6 +36,7 @@ var (
 
 	sourcePattern      = regexp.MustCompile(`(?i)(#[A-Za-z0-9_.-]+|[a-z]+://[^\s,]+|https?://[^\s,]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)`)
 	sourceTokenPattern = regexp.MustCompile(`[^a-z0-9_.-]+`)
+	sourceSubTokenPat  = regexp.MustCompile(`[-_.]+`)
 	githubRepoPattern  = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 	jiraKeyPattern     = regexp.MustCompile(`\b[A-Z][A-Z0-9]+-\d+\b`)
 )
@@ -45,6 +49,7 @@ type Query struct {
 	Connector        string
 	Connectors       []string
 	SourceURI        string
+	Mode             string
 	Timezone         string
 	LocalDate        string
 	ResponseLanguage string
@@ -138,6 +143,7 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 		return Result{}, ErrMessageRequired
 	}
 	query.ResponseLanguage = responseLanguageForMessage(query.ResponseLanguage, message)
+	query.Mode = normalizeChatMode(query.Mode)
 
 	workspace, err := s.resolveWorkspace(ctx, query)
 	if err != nil {
@@ -164,7 +170,7 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 	since, until := inferTimeRange(query, message)
 	intent := classifyIntent(message, connector, sourceURI)
 	var liveScopes []repository.ConnectorSync
-	if s.live != nil {
+	if s.live != nil && query.Mode != modeLocal {
 		liveScopes = liveFanoutScopes(message, query.Connectors, explicitConnector, explicitSourceURI, connector, syncs)
 	}
 	if len(liveScopes) > 0 {
@@ -183,6 +189,14 @@ func (s *Service) Query(ctx context.Context, query Query) (Result, error) {
 		Since:         since,
 		Until:         until,
 		Syncs:         syncs,
+	}
+
+	if s.live != nil && query.Mode != modeLocal && len(liveScopes) == 0 && sourceURI == "" && requestsLiveFanout(message, query.Connectors, explicitConnector, explicitSourceURI) {
+		emitProgress(query.Progress, "• No concrete connected live source was selected; broad connector scopes are setup-only.")
+		result.Intent = intentArtifacts
+		result.Answer = buildNoConcreteLiveScopeAnswer(syncs, query.Connectors, query.ResponseLanguage)
+		result.Summary = result.Answer
+		return result, nil
 	}
 
 	switch intent {
@@ -227,7 +241,7 @@ func (s *Service) ResetSession(ctx context.Context, query Query) error {
 
 func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query Query, result Result, message string) (Result, error) {
 	liveFailure := ""
-	if s.shouldAskLiveFirst(result) {
+	if s.shouldAskLiveFirst(result, query.Mode) {
 		answer, err := s.live.Answer(ctx, LiveQuery{
 			WorkspaceID:      result.WorkspaceID,
 			WorkspacePath:    result.WorkspacePath,
@@ -248,6 +262,12 @@ func (s *Service) answerArtifacts(ctx context.Context, workspaceID string, query
 			liveFailure = compactLiveError(err)
 		} else {
 			liveFailure = "Codex returned no live answer."
+		}
+		if query.Mode == modeCodex {
+			result.Provider = "codex"
+			result.Answer = buildCodexOnlyFailureAnswer(result, liveFailure, query.ResponseLanguage)
+			result.Summary = result.Answer
+			return result, nil
 		}
 		emitProgress(query.Progress, "• Live Codex did not complete; checking Local DB fallback.")
 	}
@@ -393,6 +413,12 @@ func (s *Service) answerLiveFanout(ctx context.Context, workspaceID string, quer
 		result.Summary = summarizeFanout(result.AnswerSections, query.ResponseLanguage)
 		return result, nil
 	}
+	if query.Mode == modeCodex {
+		result.Provider = "codex"
+		result.Answer = buildCodexOnlyFailureAnswer(result, strings.Join(failures, "; "), query.ResponseLanguage)
+		result.Summary = result.Answer
+		return result, nil
+	}
 
 	fallback := result
 	fallback.Connector = ""
@@ -450,12 +476,23 @@ func emitProgress(progress func(string), line string) {
 	}
 }
 
-func (s *Service) shouldAskLiveFirst(result Result) bool {
+func (s *Service) shouldAskLiveFirst(result Result, mode string) bool {
 	return s.live != nil &&
+		mode != modeLocal &&
 		result.SourceURI != "" &&
 		result.Connector != "filesystem" &&
-		!isConnectorScopeURI(result.Connector, result.SourceURI) &&
 		supportsLiveConnector(result.Connector)
+}
+
+func normalizeChatMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case modeCodex:
+		return modeCodex
+	case modeLocal:
+		return modeLocal
+	default:
+		return modeAuto
+	}
 }
 
 func isConnectorScopeURI(connector, sourceURI string) bool {
@@ -528,6 +565,13 @@ func liveFanoutScopes(message string, requested []string, explicitConnector, exp
 	return connectedLiveScopes(syncs, connectors)
 }
 
+func requestsLiveFanout(message string, requested []string, explicitConnector, explicitSourceURI string) bool {
+	if explicitConnector != "" || explicitSourceURI != "" {
+		return false
+	}
+	return len(normalizedConnectorSet(requested)) > 0
+}
+
 func normalizedConnectorSet(values []string) map[string]bool {
 	out := map[string]bool{}
 	for _, value := range values {
@@ -542,6 +586,7 @@ func normalizedConnectorSet(values []string) map[string]bool {
 
 func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bool) []repository.ConnectorSync {
 	concrete := map[string][]repository.ConnectorSync{}
+	broad := map[string]repository.ConnectorSync{}
 	seen := map[string]bool{}
 	for _, sync := range syncs {
 		connector := normalizeConnector(sync.Connector)
@@ -563,6 +608,9 @@ func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bo
 		sync.Connector = connector
 		sync.SourceURI = sourceURI
 		if isConnectorScopeURI(connector, sourceURI) {
+			if _, ok := broad[connector]; !ok {
+				broad[connector] = sync
+			}
 			continue
 		}
 		concrete[connector] = append(concrete[connector], sync)
@@ -572,6 +620,10 @@ func connectedLiveScopes(syncs []repository.ConnectorSync, allowed map[string]bo
 	for _, connector := range order {
 		if len(concrete[connector]) > 0 {
 			out = append(out, concrete[connector]...)
+			continue
+		}
+		if scope, ok := broad[connector]; ok {
+			out = append(out, scope)
 		}
 	}
 	return out
@@ -811,9 +863,53 @@ func describeScope(result Result) string {
 	return strings.Join(parts, " ")
 }
 
+func buildNoConcreteLiveScopeAnswer(syncs []repository.ConnectorSync, requested []string, language string) string {
+	connectors := normalizedConnectorSet(requested)
+	if len(connectors) == 0 {
+		for _, sync := range syncs {
+			connector := normalizeConnector(sync.Connector)
+			if connector == "" || connector == "filesystem" || !supportsLiveConnector(connector) {
+				continue
+			}
+			connectors[connector] = true
+		}
+	}
+	names := make([]string, 0, len(connectors))
+	for _, connector := range []string{"jira", "github", "slack", "googledrive", "notion", "sharepoint"} {
+		if connectors[connector] {
+			names = append(names, connectorDisplayName(connector))
+		}
+	}
+	if len(names) == 0 {
+		names = append(names, "live connector")
+	}
+	return fmt.Sprintf(localized(
+		language,
+		"I did not start Codex because no connected live scope was available for %s. Connect or select a repo, issue, channel, document, folder, or connector scope in Source setup, then ask again.",
+		"我没有启动 Codex，因为 %s 没有可用的已连接 live scope。请先在 Source setup 连接或选择 repo、issue、channel、document、folder 或 connector scope，然后再问一次。",
+		"Codex は開始しませんでした。%s に利用可能な接続済み live scope がありません。Source setup で repo、issue、channel、document、folder、または connector scope を接続/選択してから再度質問してください。",
+		"%s에 사용할 수 있는 연결된 live scope가 없어 Codex를 시작하지 않았습니다. Source setup에서 repo, issue, channel, document, folder 또는 connector scope를 연결하거나 선택한 뒤 다시 질문해 주세요.",
+	), strings.Join(names, ", "))
+}
+
+func buildCodexOnlyFailureAnswer(result Result, failure, language string) string {
+	scope := describeScope(result)
+	if strings.TrimSpace(failure) == "" {
+		failure = "Codex returned no usable live answer."
+	}
+	return fmt.Sprintf(localized(
+		language,
+		"Codex mode is on, but the live lookup for %s did not return a usable answer: %s",
+		"Codex 模式已开启，但 %s 的 live 查询没有返回可用答案：%s",
+		"Codex mode はオンですが、%s の live lookup から利用できる回答は返りませんでした: %s",
+		"Codex mode가 켜져 있지만 %s live 조회에서 사용할 수 있는 답변이 반환되지 않았습니다: %s",
+	), scope, failure)
+}
+
 func inferSyncSource(message, connector string, syncs []repository.ConnectorSync) repository.ConnectorSync {
 	messageTokens := sourceMatchTokens(message)
 	normalizedConnector := normalizeConnector(connector)
+	var broad repository.ConnectorSync
 	for _, sync := range syncs {
 		if normalizedConnector != "" && normalizeConnector(sync.Connector) != normalizedConnector {
 			continue
@@ -822,22 +918,17 @@ func inferSyncSource(message, connector string, syncs []repository.ConnectorSync
 		if sourceURI == "" {
 			continue
 		}
+		if isConnectorScopeURI(normalizeConnector(sync.Connector), sourceURI) && broad.SourceURI == "" {
+			broad = sync
+		}
 		for token := range sourceMatchTokens(sourceURI) {
 			if messageTokens[token] {
 				return sync
 			}
 		}
 	}
-	if normalizedConnector == "" {
-		return repository.ConnectorSync{}
-	}
-	for _, sync := range syncs {
-		if normalizeConnector(sync.Connector) != normalizedConnector {
-			continue
-		}
-		if isConnectorScopeURI(normalizedConnector, sync.SourceURI) {
-			return sync
-		}
+	if normalizedConnector != "" {
+		return broad
 	}
 	return repository.ConnectorSync{}
 }
@@ -861,6 +952,11 @@ func sourceMatchTokens(value string) map[string]bool {
 			continue
 		}
 		tokens[part] = true
+		for _, subpart := range sourceSubTokenPat.Split(part, -1) {
+			if len(subpart) >= 3 {
+				tokens[subpart] = true
+			}
+		}
 	}
 	if len(parts) >= 2 {
 		owner := strings.Trim(parts[0], "-_.")

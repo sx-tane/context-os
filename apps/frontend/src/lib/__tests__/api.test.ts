@@ -10,6 +10,7 @@ import {
   getArtifacts,
   cleanupGraphNoise,
   cleanupLiveEvidence,
+  deleteGraphEntity,
   deleteArtifacts,
   getAnalysisBasket,
   putAnalysisBasket,
@@ -612,6 +613,30 @@ describe("cleanupGraphNoise", () => {
       expect(result.body.error).toBe("api_unreachable");
       expect(result.body.message).toContain("Graph cleanup did not run");
     }
+  });
+});
+
+// ---- deleteGraphEntity ----
+
+describe("deleteGraphEntity", () => {
+  it("deletes one graph entity through the graph entity endpoint", async () => {
+    const body = {
+      workspace_id: "ws1",
+      workspace_path: "/workspace",
+      matched_entity_count: 1,
+      deleted_entity_count: 1,
+      matched_relationship_count: 2,
+      deleted_relationship_count: 2,
+    };
+    fetchMock.mockResolvedValue(makeResponse(body, true, 200));
+
+    const result = await deleteGraphEntity("/workspace", "event:abc#Entity One");
+
+    expect(result).toEqual({ ok: true, status: 200, body });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/graph/entity?workspace_id=%2Fworkspace&entity_id=event%3Aabc%23Entity%20One",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 });
 

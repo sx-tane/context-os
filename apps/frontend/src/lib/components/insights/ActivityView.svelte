@@ -137,14 +137,6 @@
     cleanupMessage = "";
   }
 
-  function requestDeleteVisible() {
-    deleteIDs = visibleArtifacts.map((artifact) => artifact.id);
-    deleteTitle = `Delete ${deleteIDs.length} visible Activity event${deleteIDs.length === 1 ? "" : "s"}?`;
-    deleteDescription = "This permanently removes the currently visible local Activity artifacts after your filters. It does not delete upstream sources.";
-    deleteConfirmOpen = true;
-    cleanupMessage = "";
-  }
-
   async function confirmDelete() {
     deleteRunning = true;
     cleanupMessage = "";
@@ -237,15 +229,7 @@
           cleanupMessage = "";
         }}
       >
-        Clean Noise
-      </button>
-      <button
-        type="button"
-        class="danger-action"
-        disabled={visibleArtifacts.length === 0}
-        on:click={requestDeleteVisible}
-      >
-        Delete Visible
+        Clean Activity Noise
       </button>
       <button type="button" on:click={clearActivityFilters}>Clear</button>
     </div>
@@ -520,41 +504,53 @@
     border: 0;
     border-bottom: 1px solid #bdb7a8;
     border-radius: 0;
-    background: transparent;
+    background-color: transparent;
+    background-image: linear-gradient(90deg, #1c1b18 0 50%, transparent 50% 100%);
+    background-position: 100% 0;
+    background-size: 200% 100%;
     color: #1c1b18;
     cursor: pointer;
     font-weight: 700;
-    padding: 6px 0;
+    padding: 6px 12px;
+    transition:
+      background-position 0.18s ease,
+      color 0.15s,
+      border-color 0.15s,
+      opacity 0.15s;
   }
 
   .activity-filters button:hover,
   .detail-actions button:hover:not(:disabled) {
     border-bottom-color: #1c1b18;
+    background-position: 0 0;
+    color: #f8f6ef;
   }
 
   .activity-filters button:disabled,
   .detail-actions button:disabled {
+    background-image: none;
     cursor: default;
     opacity: 0.45;
   }
 
   .cleanup-action {
-    border: 0;
-    border-bottom: 1px solid #bdb7a8;
-    border-radius: 0;
-    background: transparent;
-    color: #1c1b18;
-    cursor: pointer;
-    font-weight: 700;
-    padding: 6px 0;
-  }
-
-  .cleanup-action {
+    background-image: linear-gradient(90deg, #8a3b27 0 50%, transparent 50% 100%);
     color: #8a3b27;
   }
 
+  .cleanup-action:hover:not(:disabled) {
+    border-bottom-color: #8a3b27;
+    background-position: 0 0;
+    color: #f8f6ef;
+  }
+
   .danger-action {
+    background-image: linear-gradient(90deg, #b4422a 0 50%, transparent 50% 100%);
     color: #b4422a;
+  }
+
+  .danger-action:hover:not(:disabled) {
+    border-bottom-color: #b4422a;
   }
 
   .cleanup-message {

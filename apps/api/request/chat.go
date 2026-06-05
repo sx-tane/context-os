@@ -14,6 +14,8 @@ type ChatQuery struct {
 	Connectors []string `json:"connectors,omitempty" example:"jira,github,slack"`
 	// SourceURI optionally pins the query to a channel, repository, folder, or document URI.
 	SourceURI string `json:"source_uri" example:"#delivery-team"`
+	// Mode controls whether chat uses auto, codex, or local source lookup.
+	Mode string `json:"mode" example:"auto"`
 	// Timezone is the user's IANA timezone, used for local date words such as today.
 	Timezone string `json:"timezone" example:"Asia/Kuala_Lumpur"`
 	// LocalDate is the user's current local date in YYYY-MM-DD form.

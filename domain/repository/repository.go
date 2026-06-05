@@ -143,6 +143,12 @@ type EventDeleter interface {
 	DeleteByIDs(ctx context.Context, workspaceID string, ids []string) (int, error)
 }
 
+// GraphEvidenceDeleter removes graph rows tied to selected source event evidence.
+type GraphEvidenceDeleter interface {
+	// DeleteGraphEvidenceByEventIDs removes graph rows supported by the provided workspace event IDs.
+	DeleteGraphEvidenceByEventIDs(ctx context.Context, workspaceID string, eventIDs []string) (GraphCleanupResult, error)
+}
+
 // EntityRepository manages canonical entities and their relationships.
 type EntityRepository interface {
 	// UpsertEntities persists canonical entities, updating confidence and aliases
@@ -174,6 +180,12 @@ type GraphCleanupResult struct {
 type GraphNoiseCleaner interface {
 	// CleanupGraphNoise removes only workspace-scoped rows classified as graph noise.
 	CleanupGraphNoise(ctx context.Context, workspaceID string) (GraphCleanupResult, error)
+}
+
+// GraphEntityDeleter permanently removes one graph entity and its relationships.
+type GraphEntityDeleter interface {
+	// DeleteGraphEntity removes one workspace-scoped entity and relationships touching it.
+	DeleteGraphEntity(ctx context.Context, workspaceID, entityID string) (GraphCleanupResult, error)
 }
 
 // RelationshipCounter reports relationship density for a workspace.

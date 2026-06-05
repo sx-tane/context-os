@@ -1271,6 +1271,8 @@ export interface paths {
 export interface definitions {
   "artifacts.CleanupResult": {
     deleted_count?: number;
+    deleted_graph_entity_count?: number;
+    deleted_graph_relationship_count?: number;
     deleted_ids?: string[];
     matched_count?: number;
     workspace_id?: string;
@@ -1402,6 +1404,11 @@ export interface definitions {
      * @example give me today's Slack messages
      */
     message?: string;
+    /**
+     * @description Mode controls whether chat uses auto, codex, or local source lookup.
+     * @example auto
+     */
+    mode?: string;
     /**
      * @description ResponseLanguage is a short language hint used to match the user's current prompt language.
      * @example zh

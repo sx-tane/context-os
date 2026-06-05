@@ -8,6 +8,7 @@ HTTP handler for querying persisted workspace entity graph data.
 | --- | --- | --- |
 | GET | `/graph` | Returns canonical entities for a workspace, optionally filtered by entity type. |
 | POST | `/graph/cleanup` | Permanently removes backend-classified low-signal graph rows for a workspace. |
+| DELETE | `/graph/entity` | Permanently removes one graph entity and relationships touching it. |
 
 ## Query Parameters
 
@@ -62,9 +63,23 @@ HTTP handler for querying persisted workspace entity graph data.
 }
 ```
 
+`/graph/entity` is a manual, confirmation-gated local database delete for one selected graph node. It deletes relationships where the selected entity is either endpoint before deleting the entity. It does not delete source artifacts, chat history, findings, connected sources, workspace rows, or connector sync rows. The route uses the same cleanup response shape:
+
+```json
+{
+  "workspace_id": "workspace-id",
+  "workspace_path": "/workspace",
+  "matched_entity_count": 1,
+  "deleted_entity_count": 1,
+  "matched_relationship_count": 2,
+  "deleted_relationship_count": 2
+}
+```
+
 ## Maintenance Notes
 
 - Keep graph reads backed by `repository.EntityRepository`.
 - Keep graph cleanup behind `repository.GraphNoiseCleaner`; never run it during normal graph query, analysis, or activity refresh.
+- Keep manual entity delete behind `repository.GraphEntityDeleter` and delete touching relationships first.
 - Preserve deterministic response fields: `workspace_id`, `entity_type`, `entity_count`, `relationship_count`, filtered counts, and `entities`.
 - Update `internal/stages/graph/README.md` if graph persistence or entity contracts change.

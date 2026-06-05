@@ -20,6 +20,7 @@ export interface ChatQueryRequest {
   connector?: string;
   connectors?: string[];
   source_uri?: string;
+  mode?: "auto" | "codex" | "local";
   timezone?: string;
   local_date?: string;
   response_language?: string;

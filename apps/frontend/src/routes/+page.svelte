@@ -3,6 +3,7 @@
     import { browser } from "$app/environment";
     import type {
         Artifact,
+        ChatQueryMode,
         ChatQueryResult,
         CodexPlugin,
         FindingsResult,
@@ -22,6 +23,7 @@
         cleanupGraphNoise,
         cleanupLiveEvidence,
         deleteArtifacts,
+        deleteGraphEntity,
         deleteWorkspace,
         getArtifacts,
         getAnalysisBasket,
@@ -92,6 +94,7 @@
     let workspacePath = DEFAULT_WORKSPACE_PATH;
     let newWorkspacePath = "";
     let command = "";
+    let chatMode: ChatQueryMode = "auto";
     let busy = false;
     let sourcePanelOpen = false;
     let activeInsightTab: "findings" | "graph" | "activity" = "findings";
@@ -112,6 +115,9 @@
     let graphCleanupConfirmOpen = false;
     let graphCleanupRunning = false;
     let graphCleanupMessage = "";
+    let graphEntityDeleteConfirmOpen = false;
+    let graphEntityDeleteRunning = false;
+    let graphEntityPendingDelete: GraphEntity | null = null;
     let walkthroughOpen = false;
     let paneSplit = 32;
     let mainGrid: HTMLElement | null = null;
@@ -311,7 +317,21 @@
             );
         }
         await refreshWorkspace();
-        return `Removed ${result.body.deleted_count} noisy live evidence event${result.body.deleted_count === 1 ? "" : "s"}.`;
+        return activityDeleteMessage("Removed", result.body);
+    }
+
+    function activityDeleteMessage(verb: string, result: {
+        deleted_count: number;
+        deleted_graph_entity_count?: number;
+        deleted_graph_relationship_count?: number;
+    }) {
+        const graphEntities = result.deleted_graph_entity_count ?? 0;
+        const graphRelationships = result.deleted_graph_relationship_count ?? 0;
+        const activity = `${verb} ${result.deleted_count} Activity event${result.deleted_count === 1 ? "" : "s"}`;
+        if (graphEntities === 0 && graphRelationships === 0) {
+            return `${activity}.`;
+        }
+        return `${activity} and matching Graph evidence (${graphEntities} node${graphEntities === 1 ? "" : "s"}, ${graphRelationships} link${graphRelationships === 1 ? "" : "s"}).`;
     }
 
     async function deleteActivityArtifacts(ids: string[]) {
@@ -330,7 +350,7 @@
             );
         }
         await refreshWorkspace();
-        return `Deleted ${result.body.deleted_count} Activity event${result.body.deleted_count === 1 ? "" : "s"}.`;
+        return activityDeleteMessage("Deleted", result.body);
     }
 
     function requestGraphCleanup() {
@@ -341,6 +361,18 @@
     function cancelGraphCleanup() {
         if (graphCleanupRunning) return;
         graphCleanupConfirmOpen = false;
+    }
+
+    function requestGraphEntityDelete(entity: GraphEntity) {
+        graphEntityPendingDelete = entity;
+        graphEntityDeleteConfirmOpen = true;
+        graphCleanupMessage = "";
+    }
+
+    function cancelGraphEntityDelete() {
+        if (graphEntityDeleteRunning) return;
+        graphEntityDeleteConfirmOpen = false;
+        graphEntityPendingDelete = null;
     }
 
     async function confirmGraphCleanup() {
@@ -371,6 +403,37 @@
         }
     }
 
+    async function confirmGraphEntityDelete() {
+        if (graphEntityDeleteRunning || !graphEntityPendingDelete) return;
+        const entity = graphEntityPendingDelete;
+        graphEntityDeleteRunning = true;
+        graphCleanupMessage = "";
+        try {
+            if (workspacePath === DEMO_WORKSPACE_PATH) {
+                graphCleanupMessage = "Demo Graph is read-only.";
+                graphEntityDeleteConfirmOpen = false;
+                graphEntityPendingDelete = null;
+                return;
+            }
+            const result = await deleteGraphEntity(workspacePath, entity.id);
+            if (!result.ok) {
+                graphCleanupMessage =
+                    result.body.message ??
+                    result.body.error ??
+                    "Graph entity delete failed.";
+                return;
+            }
+            const relationships = result.body.deleted_relationship_count;
+            graphCleanupMessage = `Removed ${entity.name} and ${relationships} linked relationship${relationships === 1 ? "" : "s"}.`;
+            graphEntityDeleteConfirmOpen = false;
+            graphEntityPendingDelete = null;
+            selectedEntity = null;
+            await refreshWorkspace();
+        } finally {
+            graphEntityDeleteRunning = false;
+        }
+    }
+
     async function switchWorkspace(path: string) {
         if (!path) return;
         workspacePath = path;
@@ -382,6 +445,8 @@
         analysisPreviewOpen = false;
         workflowMessage = "";
         graphCleanupConfirmOpen = false;
+        graphEntityDeleteConfirmOpen = false;
+        graphEntityPendingDelete = null;
         graphCleanupMessage = "";
         await Promise.all([refreshWorkspace(), refreshWorkflowState()]);
     }
@@ -548,6 +613,7 @@
                 readySources: getProject().connectors.filter(
                     (source) => source.status === "ready",
                 ),
+                mode: chatMode,
                 addMessage,
                 replaceMessage,
                 setBusy: (value) => (busy = value),
@@ -719,6 +785,8 @@
         graphData = null;
         selectedEntity = null;
         graphCleanupConfirmOpen = false;
+        graphEntityDeleteConfirmOpen = false;
+        graphEntityPendingDelete = null;
         graphCleanupMessage = "";
         activityArtifacts = [];
         workspaceStatus = null;
@@ -906,11 +974,15 @@
                 {hasSources}
                 {busy}
                 canStop={chatAbortController !== null}
+                mode={chatMode}
                 bind:command
                 basketItems={analysisBasket}
                 onClear={clearChat}
                 onSubmit={submitCommand}
                 onStop={stopChatQuery}
+                onModeChange={(mode) => {
+                    chatMode = mode;
+                }}
                 onAskEvidence={prefillChatWithEvidence}
                 onPinEvidence={pinEvidenceForAnalysis}
             />
@@ -1047,6 +1119,7 @@
                                 cleanupRunning={graphCleanupRunning}
                                 cleanupMessage={graphCleanupMessage}
                                 onRequestCleanupGraph={requestGraphCleanup}
+                                onRequestDeleteEntity={requestGraphEntityDelete}
                             />
                         {:else}
                             <ActivityView
@@ -1105,6 +1178,20 @@
             busy={graphCleanupRunning}
             on:cancel={cancelGraphCleanup}
             on:confirm={confirmGraphCleanup}
+        />
+    {/if}
+
+    {#if graphEntityDeleteConfirmOpen && graphEntityPendingDelete}
+        <ConfirmModal
+            eyebrow="DELETE GRAPH ENTITY"
+            title="Delete this graph entity?"
+            description="This permanently removes the selected graph entity and every graph relationship touching it. It does not delete source artifacts, chat history, findings, or connected sources."
+            detail={graphEntityPendingDelete.name}
+            confirmLabel="Delete"
+            busyLabel="Deleting"
+            busy={graphEntityDeleteRunning}
+            on:cancel={cancelGraphEntityDelete}
+            on:confirm={confirmGraphEntityDelete}
         />
     {/if}
 

@@ -384,8 +384,32 @@ func TestQueryUsesLiveAnswererForSavedSourceName(t *testing.T) {
 	}
 }
 
-// TestQuerySkipsConnectorLevelLiveAnswerer verifies broad connector rows do not trigger open-ended live lookup.
-func TestQuerySkipsConnectorLevelLiveAnswerer(t *testing.T) {
+// TestQueryUsesLiveAnswererForNaturalSavedRepoName verifies spaced repo words can resolve a concrete saved GitHub source.
+func TestQueryUsesLiveAnswererForNaturalSavedRepoName(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "forcia/kkg_booking_record", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "Receipt API context is in kkg booking record."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "find receipt issue api in my github kkg booking record repo",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if live.query.SourceURI != "forcia/kkg_booking_record" {
+		t.Fatalf("live SourceURI = %q, want concrete saved repo", live.query.SourceURI)
+	}
+}
+
+// TestQueryUsesConnectorLevelLiveAnswerer verifies broad connector rows can trigger connected-account live lookup.
+func TestQueryUsesConnectorLevelLiveAnswerer(t *testing.T) {
 	events := &fakeEventRepository{}
 	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
 		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
@@ -400,11 +424,39 @@ func TestQuerySkipsConnectorLevelLiveAnswerer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
-	if result.Provider != "local" {
-		t.Fatalf("Provider = %q, want local", result.Provider)
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
 	}
-	if live.calls != 0 {
-		t.Fatalf("live calls = %d, want no connector-level lookup", live.calls)
+	if live.calls != 1 {
+		t.Fatalf("live calls = %d, want connector-level lookup", live.calls)
+	}
+}
+
+// TestQueryRunsBroadOnlyConnectorFanout verifies explicit fanout starts broad connected scopes when no concrete scope is saved.
+func TestQueryRunsBroadOnlyConnectorFanout(t *testing.T) {
+	events := &fakeEventRepository{}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "Receipt API context is in the connected GitHub account."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "find receipt issue api in my github kkg booking record repo and use all my source connector",
+		Connectors:  []string{"github"},
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if live.calls != 1 {
+		t.Fatalf("live calls = %d, want broad connector lookup", live.calls)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if !strings.Contains(result.Answer, "Receipt API context") {
+		t.Fatalf("Answer = %q, want live answer", result.Answer)
 	}
 }
 
@@ -492,13 +544,13 @@ func TestQueryFanoutUsesEveryConcreteConnectedSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
-	if live.calls != 2 {
-		t.Fatalf("live calls = %d, want 2 concrete calls", live.calls)
+	if live.calls != 3 {
+		t.Fatalf("live calls = %d, want 2 concrete calls plus broad github fallback", live.calls)
 	}
-	if len(result.AnswerSections) != 2 {
-		t.Fatalf("answer sections = %d, want 2", len(result.AnswerSections))
+	if len(result.AnswerSections) != 3 {
+		t.Fatalf("answer sections = %d, want 3", len(result.AnswerSections))
 	}
-	for index, want := range []string{"BKGDEV-8457", "BKGDEV-8466"} {
+	for index, want := range []string{"BKGDEV-8457", "BKGDEV-8466", "github"} {
 		if result.AnswerSections[index].SourceURI != want {
 			t.Fatalf("answer section %d source URI = %q, want %q", index, result.AnswerSections[index].SourceURI, want)
 		}
@@ -757,14 +809,89 @@ func TestQueryConnectorLevelLiveFallbackUsesConnectorArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
-	if live.calls != 0 {
-		t.Fatalf("live calls = %d, want no connector-level live lookup", live.calls)
+	if live.calls != 1 {
+		t.Fatalf("live calls = %d, want connector-level live lookup before fallback", live.calls)
 	}
 	if events.lastQuery.SourceURI != "" {
 		t.Fatalf("local query SourceURI = %q, want connector-wide fallback", events.lastQuery.SourceURI)
 	}
 	if !strings.Contains(result.Answer, "Repository fallback summary") {
 		t.Fatalf("Answer = %q, want local fallback artifact", result.Answer)
+	}
+}
+
+// TestQueryLocalModeSkipsLiveLookup verifies the chat mode toggle can force Local DB only answers.
+func TestQueryLocalModeSkipsLiveLookup(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-github",
+		WorkspaceID: "ws1",
+		Connector:   "github",
+		SourceURI:   "sx-tane/tourii-backend",
+		Title:       "Local repository fallback",
+		Body:        "Local repository evidence is available.",
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{answer: "Live answer should not be used."}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "summarize github",
+		Mode:        "local",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if live.calls != 0 {
+		t.Fatalf("live calls = %d, want no live lookup", live.calls)
+	}
+	if result.Provider != "local" {
+		t.Fatalf("Provider = %q, want local", result.Provider)
+	}
+	if !strings.Contains(result.Answer, "Local repository fallback") {
+		t.Fatalf("Answer = %q, want local artifact", result.Answer)
+	}
+}
+
+// TestQueryCodexModeSuppressesLocalFallback verifies Codex mode does not mix a failed live answer with Local DB results.
+func TestQueryCodexModeSuppressesLocalFallback(t *testing.T) {
+	events := &fakeEventRepository{events: []repository.IngestEvent{{
+		ID:          "evt-github",
+		WorkspaceID: "ws1",
+		Connector:   "github",
+		SourceURI:   "sx-tane/tourii-backend",
+		Title:       "Local repository fallback",
+		Body:        "Local repository evidence is available.",
+		IngestedAt:  time.Date(2026, 6, 2, 9, 0, 0, 0, time.UTC),
+	}}}
+	syncs := &fakeSyncRepository{syncs: []repository.ConnectorSync{
+		{WorkspaceID: "ws1", Connector: "github", SourceURI: "github", Status: "connected"},
+	}}
+	live := &fakeLiveAnswerer{err: errors.New("plugin unavailable")}
+	service := internalchat.NewServiceWithLiveAnswerer(fakeWorkspaces(), events, syncs, live)
+
+	result, err := service.Query(context.Background(), internalchat.Query{
+		WorkspaceID: "/workspace",
+		Message:     "summarize github",
+		Mode:        "codex",
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if live.calls != 1 {
+		t.Fatalf("live calls = %d, want live lookup", live.calls)
+	}
+	if result.Provider != "codex" {
+		t.Fatalf("Provider = %q, want codex", result.Provider)
+	}
+	if strings.Contains(result.Answer, "Local repository fallback") {
+		t.Fatalf("Answer = %q, want no local fallback content", result.Answer)
+	}
+	if !strings.Contains(result.Answer, "plugin unavailable") {
+		t.Fatalf("Answer = %q, want live failure", result.Answer)
 	}
 }
 
