@@ -291,6 +291,29 @@ func TestEvidenceSaveInputAcceptsMultipleConnectorSections(t *testing.T) {
 	}
 }
 
+// TestEvidenceSaveInputSkipsBlockedLiveSections verifies failed live lookups do not become local evidence.
+func TestEvidenceSaveInputSkipsBlockedLiveSections(t *testing.T) {
+	_, ok := evidenceSaveInput(mapChatResult(internalchat.Result{
+		WorkspaceID:   "ws1",
+		WorkspacePath: "/workspace",
+		Connector:     "jira",
+		SourceURI:     "BKGDEV-8097",
+		Provider:      "codex",
+		Answer:        "BKGDEV-8097 could not be accessed.",
+		AnswerSections: []internalchat.AnswerSection{{
+			SourceLabel: "Jira issue BKGDEV-8097",
+			Connector:   "jira",
+			SourceURI:   "BKGDEV-8097",
+			Summary:     "Jira lookup was blocked.",
+			Status:      "access_blocked",
+			Facts:       []string{"Rovo search returned 403."},
+		}},
+	}))
+	if ok {
+		t.Fatalf("evidenceSaveInput() ok = true, want false for blocked live section")
+	}
+}
+
 // TestLiveAnswerEventUsesSectionBody verifies structured source sections save a focused Activity body.
 func TestLiveAnswerEventUsesSectionBody(t *testing.T) {
 	input := EvidenceSaveInput{

@@ -201,6 +201,7 @@ func extractEvidenceSources(result response.ChatQuery) []EvidenceSource {
 	sourceURI := trimEvidenceSource(result.SourceURI)
 	answer := strings.TrimSpace(result.Answer)
 	builder := evidenceSourceBuilder{}
+	hadSections := len(result.AnswerSections) > 0
 	for _, section := range result.AnswerSections {
 		sectionConnector := strings.ToLower(strings.TrimSpace(firstNonEmpty(section.Connector, connector)))
 		sectionSourceURI := trimEvidenceSource(firstNonEmpty(section.SourceURI, sourceURI))
@@ -208,6 +209,9 @@ func extractEvidenceSources(result response.ChatQuery) []EvidenceSource {
 	}
 	if len(builder.items) > 0 {
 		return builder.sources()
+	}
+	if hadSections {
+		return nil
 	}
 	if sourceURI != "" && !isBroadConnectorScope(connector, sourceURI) {
 		builder.add(connector, sourceURI)
@@ -268,6 +272,9 @@ func (b *evidenceSourceBuilder) addSection(connector, sourceURI string, section 
 	if b.seen == nil {
 		b.seen = map[string]struct{}{}
 	}
+	if isUnusableEvidenceSection(section) {
+		return
+	}
 	connector = strings.ToLower(strings.TrimSpace(connector))
 	sourceURI = trimEvidenceSource(sourceURI)
 	if connector == "" || sourceURI == "" || isBroadConnectorScope(connector, sourceURI) {
@@ -293,6 +300,19 @@ func (b *evidenceSourceBuilder) sources() []EvidenceSource {
 	out := make([]EvidenceSource, len(b.items))
 	copy(out, b.items)
 	return out
+}
+
+func isUnusableEvidenceSection(section response.AnswerSection) bool {
+	status := strings.ToLower(strings.TrimSpace(section.Status))
+	if status == "" {
+		return false
+	}
+	for _, marker := range []string{"access_blocked", "access_denied", "unauthorized", "forbidden", "unavailable", "not_found", "error"} {
+		if strings.Contains(status, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizedEvidenceSources(input EvidenceSaveInput) []EvidenceSource {

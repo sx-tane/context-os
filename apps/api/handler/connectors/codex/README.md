@@ -36,7 +36,7 @@ device-auth login, and plugin re-authentication flows.
 
 `codex plugin add` has no `--device-auth` flag. `PluginReauth` sets `BROWSER=echo` in the subprocess environment so the CLI prints the OAuth URL to stdout instead of opening a browser on the server. The URL appears in the SSE log.
 
-Codex source discovery uses the longer `sourceDiscoveryTimeout` because plugin-backed source listing can take longer than normal status checks. Timeout errors include the configured duration. GitHub discovery asks the plugin first and may use read-only `gh repo list` as fallback when `gh` is already authenticated; setup still saves only a connected source reference and does not ingest repository content. Jira discovery asks Atlassian Rovo for Jira projects through Jira JQL issue search first, since generic Rovo workspace search can be blocked by a site-install 403 even when JQL search succeeds.
+Codex source discovery uses the longer `sourceDiscoveryTimeout` because plugin-backed source listing can take longer than normal status checks. Timeout errors include the configured duration. GitHub discovery asks the plugin first and may use read-only `gh repo list` as fallback when `gh` is already authenticated; setup still saves only a connected source reference and does not ingest repository content. Jira discovery asks Atlassian Rovo for accessible resources first, then lists Jira projects through Jira JQL issue search with returned `cloudId` values, since generic Rovo workspace search can be blocked by a site-install 403 even when JQL search succeeds.
 
 > **Frontend reauth UI is not currently wired.** The `/codex/plugin-reauth` endpoint is fully functional but the frontend button has been removed. To reconnect a plugin to a different account, run in your terminal:
 >

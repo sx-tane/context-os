@@ -39,8 +39,12 @@ func TestLivePromptRequestsJiraJQLFirst(t *testing.T) {
 	prompt := livePrompt("Atlassian Rovo", "jira", "what tickets changed today?", "en")
 
 	for _, want := range []string{
+		"accessible Atlassian resources tool",
+		"Do not infer or guess a Jira site",
+		"cloudId",
 		"Jira JQL issue search tool first",
 		"not generic Rovo workspace search",
+		"query key = BKGDEV-8097",
 		"currentUser()",
 		"ORDER BY updated DESC",
 		"app is not installed on this instance",
@@ -48,6 +52,15 @@ func TestLivePromptRequestsJiraJQLFirst(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("livePrompt() missing %q in %q", want, prompt)
 		}
+	}
+}
+
+// TestCodexSessionKeyVersionsJiraSessions verifies Jira sessions start fresh after JQL routing changes.
+func TestCodexSessionKeyVersionsJiraSessions(t *testing.T) {
+	key := codexSessionKey("workspace-1", "jira")
+
+	if key != "workspace-1::jira-jql-v2" {
+		t.Fatalf("codexSessionKey() = %q, want Jira JQL versioned key", key)
 	}
 }
 

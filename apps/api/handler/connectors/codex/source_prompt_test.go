@@ -10,6 +10,9 @@ func TestSourceDiscoveryPromptRequestsJiraJQLFirst(t *testing.T) {
 	prompt := sourceDiscoveryPrompt("jira")
 
 	for _, want := range []string{
+		"accessible Atlassian resources tool",
+		"use only returned cloudId/url values",
+		"do not infer or guess a Jira site",
 		"Jira JQL issue search tool first",
 		"not generic Rovo workspace search",
 		"ORDER BY updated DESC",

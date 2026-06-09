@@ -485,6 +485,9 @@ func codexSessionKey(workspaceID, connector string) string {
 	if connector == "" {
 		return workspaceID
 	}
+	if connector == "jira" {
+		return workspaceID + "::jira-jql-v2"
+	}
 	return workspaceID + "::" + connector
 }
 
@@ -547,8 +550,9 @@ func livePrompt(plugin, sourceURI, message, responseLanguage string) string {
 	jiraRules := ""
 	if plugin == "Atlassian Rovo" {
 		jiraRules = `
+- Before any Jira issue lookup, call Atlassian Rovo's accessible Atlassian resources tool and use the returned cloudId/url. Do not infer or guess a Jira site, Cloud ID, or tenant from prior conversation, project names, or examples.
 - For Jira questions, use Atlassian Rovo's Jira JQL issue search tool first, not generic Rovo workspace search. Generic Rovo search can be blocked even when Jira JQL works.
-- Build a focused JQL query from the question and source. For connector-wide Jira questions, prefer currentUser(), project keys, issue keys, updated/created/due dates, and ORDER BY updated DESC.
+- Build a focused JQL query from the question and source. For issue keys such as BKGDEV-8097, query key = BKGDEV-8097 against each accessible Jira cloudId until found. For connector-wide Jira questions, prefer currentUser(), project keys, issue keys, updated/created/due dates, and ORDER BY updated DESC.
 - If generic Rovo search returns "app is not installed on this instance", retry through Jira JQL before declaring Jira unavailable.`
 	}
 	return fmt.Sprintf(`Use the %s Codex plugin to answer this user question from the live connected account.

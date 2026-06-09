@@ -149,6 +149,9 @@ func TestConnectorSupportsAtlassianRovoPlugin(t *testing.T) {
 	if !strings.Contains(events[0].Metadata[MetadataPrompt], "Jira JQL issue search tool first") {
 		t.Fatalf("expected Jira JQL-first prompt, got %q", events[0].Metadata[MetadataPrompt])
 	}
+	if !strings.Contains(events[0].Metadata[MetadataPrompt], "accessible Atlassian resources tool") {
+		t.Fatalf("expected accessible resources prompt, got %q", events[0].Metadata[MetadataPrompt])
+	}
 }
 
 // TestConnectorPassesEphemeralAndColorFlags verifies the required runtime flags are forwarded to the Codex CLI invocation.
