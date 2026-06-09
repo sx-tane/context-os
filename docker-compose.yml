@@ -2,7 +2,7 @@ services:
   db:
     image: pgvector/pgvector:pg16
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-55432}:5432"
     environment:
       POSTGRES_DB: "contextos"
       POSTGRES_USER: "contextos"

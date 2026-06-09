@@ -7,6 +7,7 @@ import {
   postFilesystemUpload,
   getCodexSources,
   getWorkspaces,
+  probeWorkspaceService,
   getArtifacts,
   cleanupGraphNoise,
   cleanupLiveEvidence,
@@ -184,6 +185,37 @@ describe("getJSON", () => {
   it("returns null when fetch throws", async () => {
     fetchMock.mockRejectedValue(new Error("network"));
     expect(await getJSON("/path")).toBeNull();
+  });
+});
+
+// ---- probeWorkspaceService ----
+
+describe("probeWorkspaceService", () => {
+  it("returns ok when workspace status route is mounted", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ workspace: {} }, true, 200));
+
+    expect(await probeWorkspaceService("contextos-default")).toBe("ok");
+  });
+
+  it("returns unreachable when DB-backed workspace routes are missing", async () => {
+    fetchMock.mockResolvedValue(makeResponse("404 page not found", false, 404));
+
+    expect(await probeWorkspaceService("contextos-default")).toBe("unreachable");
+  });
+
+  it("returns ok when the workspace route exists but the workspace is not created yet", async () => {
+    fetchMock.mockResolvedValue({
+      ...makeResponse({ error: "not_found", message: "workspace not found" }, false, 404),
+      headers: new Headers({ "content-type": "application/json" }),
+    });
+
+    expect(await probeWorkspaceService("contextos-default")).toBe("ok");
+  });
+
+  it("returns unreachable when workspace routes return a DB error", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ message: "store error" }, false, 500));
+
+    expect(await probeWorkspaceService("contextos-default")).toBe("unreachable");
   });
 });
 
@@ -848,6 +880,24 @@ describe("streamChatQuery", () => {
     expect(statuses).toEqual([2]);
     expect(answers).toEqual([{ ...result, evidence_save_status: "saving" }]);
     expect(results).toEqual([result]);
+  });
+
+  it("emits complete stream events without waiting for a blank-line delimiter", async () => {
+    fetchMock.mockResolvedValue(
+      makeStreamResponse([
+        "event: log\n",
+        "data: › Live Codex started\n",
+        "\n",
+      ]),
+    );
+    const logs: string[] = [];
+
+    await streamChatQuery(
+      { workspace_id: "ws1", message: "status" },
+      { onLog: (line) => logs.push(line) },
+    );
+
+    expect(logs).toEqual(["› Live Codex started"]);
   });
 
   it("releases the stream reader after reading finishes", async () => {

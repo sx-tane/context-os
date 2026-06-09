@@ -1,174 +1,103 @@
 # Scripts
 
-Local developer and maintenance scripts for ContextOS.
+Local developer scripts for ContextOS.
 
----
+## Start Everything
 
-## setup-local.sh
-
-Installs all required tools on Ubuntu/Linux and validates the repository. Run this once when setting up a new machine.
-
-What it does:
-
-1. Installs system packages (`curl`, `wget`, `build-essential`, `nodejs`, etc.)
-2. Installs Go 1.24.13 and goimports
-3. Installs Bun (UI runtime)
-4. Installs Python tooling for the worker environment
-5. Installs `uv` (Python environment manager)
-6. Installs Codex CLI and GitHub, Atlassian Rovo, and Slack plugins
-7. Performs Codex CLI authentication (with device auth support)
-8. Verifies all tool versions
-9. Runs `go mod tidy`, `go test ./...`, SvelteKit UI check, and `uv sync`
+Use one command from the repository root:
 
 ```bash
-chmod +x scripts/setup-local.sh
-./scripts/setup-local.sh
-```
-
-After it finishes, restart your shell or run `source ~/.bashrc` to reload the updated PATH.
-
----
-
-## start-local.sh
-
-Starts all local services in a single terminal session. Run this after setup is complete.
-
-What it does:
-
-- Runs `uv sync` in `apps/ai-worker` if `uv` is available
-- Reuses committed OpenAPI docs and frontend TypeScript types during normal startup
-- Regenerates OpenAPI docs only when `apps/api/docs/swagger.json` is missing or `UPDATE_API_DOCS=1` is set
-- Regenerates frontend TypeScript types only when missing, older than `swagger.json`, or `UPDATE_API_TYPES=1` is set
-- Reuses an already-running healthy ContextOS stack on API `8080`, worker `8081`, and frontend `5173` by printing the existing URLs and log location instead of starting a second stack
-- Fails fast when a required port is occupied by something that does not pass the expected ContextOS health check and prints the owning process
-- Checks all required Codex plugins. Missing plugins are reported without prompting; to install them during startup, run `INSTALL_CODEX_PLUGINS=1 ./scripts/start-local.sh`:
-  - `github@openai-curated`
-  - `atlassian-rovo@openai-curated`
-  - `slack@openai-curated`
-  - `google-drive@openai-curated`
-  - `notion@openai-curated`
-  - `sharepoint@openai-curated`
-- Prints the Codex home being checked and reads `codex plugin list` once so plugin status is consistent for the whole startup run.
-- Starts the Go API (`go run ./apps/api`) in the background with `[api]` log prefixes
-- Starts the SvelteKit context UI dev server (`bun run dev` or `npm run dev`) on a strict `5173` port with `[frontend]` log prefixes
-- Shuts down API, worker, and frontend process groups cleanly when you press `Ctrl+C`
-
-```bash
-chmod +x scripts/start-local.sh
 ./scripts/start-local.sh
 ```
 
-Expected output when running:
+This is the supported entrypoint for first-time and repeat local runs.
 
-```
-Codex CLI: codex-cli 0.136.0
-Codex home: /home/user/.codex
-uv not found; skipping AI worker environment sync
-[missing] Slack plugin. To install: codex plugin add slack@openai-curated
-[warn] GITHUB_TOKEN is not set — the GitHub connector will only reach public repos.
-       To authenticate: export GITHUB_TOKEN=ghp_... then re-run this script.
-Starting API. Backend logs will be prefixed with [api].
-Starting frontend dev server. Frontend logs will be prefixed with [frontend].
-API PID:      <pid>
-Worker PID:   skipped
-Frontend PID: <pid>
-Press Ctrl+C to stop all processes.
-[api] <backend log line>
-[frontend] <frontend log line>
+On a first run, `start-local.sh` detects missing tools and runs the bootstrap path internally. On repeat runs, it skips setup and starts the stack directly.
+
+What it manages:
+
+- required local tooling bootstrap on Linux
+- Docker-backed Postgres with pgvector and NATS
+- Local DB login verification before API startup
+- Go API on `http://localhost:8080`
+- AI worker on `http://localhost:8081`
+- SvelteKit frontend on `http://localhost:5173`
+- Codex CLI/plugin readiness checks
+- OpenAPI/frontend type reuse or regeneration when needed
+- clean shutdown of API, worker, and frontend with `Ctrl+C`
+
+Expected successful startup includes:
+
+```text
+[api] ... db: connected and migrations applied
+[worker] context-os ai-worker health listening on :8081
+[frontend] VITE ... ready
 ```
 
-If the stack is already running, startup prints the existing frontend/API/worker URLs and exits successfully. To inspect current local service health at any time:
+Open:
+
+- Frontend: `http://localhost:5173`
+- API health: `http://localhost:8080/health`
+- Swagger: `http://localhost:8080/swagger/`
+
+## First-Time Behavior
+
+If tools are missing, `start-local.sh` calls the internal setup helper with repository validation skipped so the stack can start quickly. It may ask for `sudo` to install system packages.
+
+The bootstrap installs:
+
+- base build utilities
+- Docker / Docker Compose support
+- Go and goimports
+- Bun
+- Python tooling and `uv`
+- Postgres client tools
+- Codex CLI and required plugins
+
+If Docker was installed during that same run and your user is not yet in the Docker group, the infra helper falls back to `sudo docker` for the current run.
+
+## Repeat Runs
+
+Run the same command:
 
 ```bash
-./scripts/status-local.sh
+./scripts/start-local.sh
 ```
 
-`start-local.sh` writes service logs to `.tmp/contextos/logs/` for the current run. When an existing healthy stack is reused, tail those files from another terminal:
+If a fully healthy ContextOS stack is already running, the script prints the existing URLs and exits. The reuse check requires both `/health` and DB-backed workspace routes, so an API that started without Local DB is not treated as healthy.
+
+## Common Options
 
 ```bash
-tail -F .tmp/contextos/logs/api.log .tmp/contextos/logs/worker.log .tmp/contextos/logs/frontend.log
+INSTALL_CODEX_PLUGINS=1 ./scripts/start-local.sh
+UPDATE_API_DOCS=1 UPDATE_API_TYPES=1 ./scripts/start-local.sh
+CONTEXTOS_API_REQUEST_LOGS=1 ./scripts/start-local.sh
+CONTEXTOS_PROXY_LOGS=1 ./scripts/start-local.sh
+VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-local.sh
+POSTGRES_PORT=55433 ./scripts/start-local.sh
 ```
 
-If startup reports that a port is occupied but the stack is not healthy, stop or move the owning process first. To inspect owners:
-
-```bash
-ss -ltnp | grep -E ':(8080|8081|5173)\b'
-```
-
-Set `GITHUB_TOKEN` before running to authenticate against private repositories:
+Set `GITHUB_TOKEN` before startup if you need private repository access:
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
 ./scripts/start-local.sh
 ```
 
-Optional local debug logging is quiet by default. Enable only the layer you are investigating:
+## Internal Helpers
 
-```bash
-CONTEXTOS_API_REQUEST_LOGS=1 ./scripts/start-local.sh   # Go API request start/done lines
-CONTEXTOS_PROXY_LOGS=1 ./scripts/start-local.sh         # Vite proxy request/response lines
-VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-local.sh    # Browser API request logs in dev console
-```
+These scripts exist for debugging and maintenance. Normal users should not need them.
 
-To correlate a browser action to backend logs, enable both frontend and API request logs:
+| Helper | Purpose |
+| --- | --- |
+| `scripts/lib/setup-local.sh` | Installs Linux local tooling. Called automatically by `start-local.sh` when tools are missing. |
+| `scripts/lib/start-infra.sh` | Starts only Postgres/pgvector and NATS. Called automatically by `start-local.sh`. |
+| `scripts/lib/status-local.sh` | Prints API, worker, and frontend port status without starting or stopping services. |
 
-```bash
-CONTEXTOS_API_REQUEST_LOGS=1 VITE_CONTEXTOS_DEBUG_LOGS=1 ./scripts/start-local.sh
-```
+Local infra endpoints:
 
-The browser console prints lines such as `[api] -> POST /api/chat/query/stream id=web-...`, and the API terminal prints matching `http request start/done: id=web-...` lines. Without restarting, open the browser console and run `contextosAPITrace(true)` to enable browser-side request logs in localStorage, or `contextosAPITrace(false)` to disable them.
+- Postgres: `localhost:55432` (`contextos/contextos/contextos`)
+- NATS: `localhost:4222`
+- NATS UI: `http://localhost:8222`
 
-Once running:
-
-- **http://localhost:5173** — ContextOS chat-first UI (homepage is now the chat interface)
-- **http://localhost:5173/connectors** — Connector debug surface (individual ingest + reauth)
-- **http://localhost:5173/findings** — Role-based findings and PMO summary UI
-- **http://localhost:8080/health** — API health endpoint
-- **http://localhost:8080/swagger/** — Interactive Swagger UI
-- **http://localhost:8080/swagger/doc.json** — Raw OpenAPI spec (Postman/Insomnia)
-- **apps/api/docs/api.html** — Standalone Redoc HTML (open directly in browser after docs are generated)
-
-Generated docs under `apps/api/docs/` are committed OpenAPI artifacts and the source for frontend type generation. Frontend types at `apps/frontend/src/lib/generated/api.d.ts` are committed to the repository. Normal startup reuses both to keep launch fast; run `UPDATE_API_DOCS=1 UPDATE_API_TYPES=1 ./scripts/start-local.sh` after API shape changes. The rendered docs page is `apps/api/docs/api.html`. The AI worker uses `uv run python`, so it does not depend on a system `python3.12` binary being installed.
-
----
-
-## start-infra.sh
-
-Starts local infrastructure only (Postgres + pgvector and NATS). Uses Docker Compose when available and falls back to plain `docker run` containers otherwise.
-
-```bash
-chmod +x scripts/start-infra.sh
-./scripts/start-infra.sh
-```
-
-Infra endpoints:
-
-- **localhost:5432** — PostgreSQL (`contextos/contextos/contextos`)
-- **localhost:4222** — NATS client port
-- **http://localhost:8222** — NATS monitoring endpoint
-
----
-
-## status-local.sh
-
-Prints local API, worker, and frontend port status without starting or stopping anything. Use it when the browser says `API Offline`, `Worker Ready`, or `Codex Unavailable` and you need to separate a real backend failure from a stale or already-running terminal session.
-
-```bash
-./scripts/status-local.sh
-```
-
-Statuses:
-
-- `[ok]` — the expected ContextOS health check or frontend page responded.
-- `[free]` — no process is listening on that service port.
-- `[blocked]` — a process owns the port, but it did not respond like ContextOS.
-
----
-
-## Order of use
-
-```
-1. ./scripts/setup-local.sh   # first time only
-2. ./scripts/start-local.sh    # every time you want to run locally; reuses a healthy existing stack
-3. ./scripts/status-local.sh   # optional status check when a page or terminal looks stale
-```
+Logs for the current run are written to `.tmp/contextos/logs/`.

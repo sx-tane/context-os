@@ -34,6 +34,23 @@ func TestLivePromptRequestsSourceSeparatedProvenance(t *testing.T) {
 	}
 }
 
+// TestLivePromptRequestsJiraJQLFirst verifies Jira live answers prefer Atlassian's JQL issue search over generic Rovo search.
+func TestLivePromptRequestsJiraJQLFirst(t *testing.T) {
+	prompt := livePrompt("Atlassian Rovo", "jira", "what tickets changed today?", "en")
+
+	for _, want := range []string{
+		"Jira JQL issue search tool first",
+		"not generic Rovo workspace search",
+		"currentUser()",
+		"ORDER BY updated DESC",
+		"app is not installed on this instance",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("livePrompt() missing %q in %q", want, prompt)
+		}
+	}
+}
+
 // TestCodexAnswererStartsAndResumesConnectorSession verifies live chat stores a connector-scoped session and resumes it on the second turn.
 func TestCodexAnswererStartsAndResumesConnectorSession(t *testing.T) {
 	command, logPath, counterPath := fakeCodexCommand(t)

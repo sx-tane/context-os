@@ -371,6 +371,23 @@ export async function resetWorkspace(
   }
 }
 
+export async function probeWorkspaceService(
+  workspaceID: string,
+): Promise<ServiceStatus> {
+  try {
+    const res = await apiFetch(
+      `${API_URL}/workspace/status?path=${encodeURIComponent(workspaceID)}`,
+    );
+    const contentType = res.headers?.get("content-type") ?? "";
+    if (res.ok || (res.status === 404 && contentType.includes("application/json"))) {
+      return "ok";
+    }
+    return "unreachable";
+  } catch {
+    return "unreachable";
+  }
+}
+
 export async function postWorkspaceSource(
   body: SourceRegistrationRequest,
   options: RequestOptions = {},
@@ -967,6 +984,11 @@ async function readEventStream(
       for (const block of blocks) {
         const message = parseSSEBlock(block);
         if (message) onMessage(message);
+      }
+      const partial = parseSSEBlock(buffer);
+      if (partial && buffer.endsWith("\n")) {
+        onMessage(partial);
+        buffer = "";
       }
     }
 

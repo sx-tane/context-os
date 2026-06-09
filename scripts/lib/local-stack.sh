@@ -23,6 +23,11 @@ contextos_api_health_url() {
   printf 'http://127.0.0.1:%s/health\n' "$port"
 }
 
+contextos_api_workspace_url() {
+  local port="$1"
+  printf 'http://127.0.0.1:%s/workspace/status?path=contextos-default\n' "$port"
+}
+
 contextos_worker_health_url() {
   local port="$1"
   printf 'http://127.0.0.1:%s/health\n' "$port"
@@ -67,12 +72,16 @@ contextos_print_stack_status() {
 }
 
 contextos_stack_reusable() {
-  local statuses line status
+  local statuses line status api_addr api_port
 
   statuses="$(contextos_print_stack_status)"
   while IFS='|' read -r _name status _url _owner; do
     [[ "$status" == "healthy" ]] || return 1
   done <<<"$statuses"
+
+  api_addr="${API_ADDR:-:8080}"
+  api_port="${API_PORT:-$(contextos_port_from_addr "$api_addr")}"
+  contextos_probe_url "$(contextos_api_workspace_url "$api_port")" || return 1
   return 0
 }
 

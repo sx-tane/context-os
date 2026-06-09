@@ -16,6 +16,10 @@ Prompts ask Codex to keep the readable source summary and append one auditable
 line deterministically as assistive metadata with source evidence; generic prose labels are not
 accepted without provenance.
 
+Jira prompts route through Atlassian Rovo but explicitly ask for Jira JQL issue search first.
+Generic Rovo workspace search can return `app is not installed on this instance` even when the
+Jira JQL tool is usable for the connected Atlassian account.
+
 ## Metadata keys
 
 | Key             | Direction | Description                                                          |

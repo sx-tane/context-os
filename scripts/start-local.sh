@@ -15,7 +15,45 @@ WORKER_LOG_PID=""
 API_ADDR="${API_ADDR:-:8080}"
 WORKER_PORT="${WORKER_PORT:-8081}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+POSTGRES_PORT="${POSTGRES_PORT:-55432}"
+DATABASE_URL="${DATABASE_URL:-postgres://contextos:contextos@127.0.0.1:${POSTGRES_PORT}/contextos?sslmode=disable}"
 CONTEXTOS_LOG_DIR="${CONTEXTOS_LOG_DIR:-$ROOT_DIR/.tmp/contextos/logs}"
+
+refresh_tool_path() {
+  [[ -d /usr/local/go/bin ]] && export PATH="/usr/local/go/bin:$PATH"
+  [[ -d "$HOME/go/bin" ]] && export PATH="$HOME/go/bin:$PATH"
+  [[ -d "$HOME/.bun/bin" ]] && export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+  [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
+}
+
+missing_startup_tools() {
+  local missing=()
+  command -v docker >/dev/null 2>&1 || missing+=("docker")
+  command -v go >/dev/null 2>&1 || missing+=("go")
+  command -v uv >/dev/null 2>&1 || missing+=("uv")
+  command -v psql >/dev/null 2>&1 || missing+=("psql")
+  if ! command -v bun >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1; then
+    missing+=("bun-or-npm")
+  fi
+  printf '%s\n' "${missing[@]}"
+}
+
+bootstrap_local_tools_if_needed() {
+  local missing
+
+  refresh_tool_path
+  missing="$(missing_startup_tools)"
+  if [[ -z "$missing" ]]; then
+    return 0
+  fi
+
+  echo "Missing local tools detected:"
+  printf '%s\n' "$missing" | sed 's/^/  - /'
+  echo "Running one-time local bootstrap through scripts/lib/setup-local.sh..."
+  SKIP_SETUP_VALIDATION=1 "$ROOT_DIR/scripts/lib/setup-local.sh"
+  refresh_tool_path
+}
+
 cleanup() {
   local exit_code=$?
 
@@ -39,13 +77,25 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+bootstrap_local_tools_if_needed
+
 if ! command -v go >/dev/null 2>&1; then
-  echo "go is required to start the API" >&2
+  echo "go is required to start the API. Re-run ./scripts/start-local.sh after setup finishes." >&2
+  exit 1
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker is required to start local Postgres and NATS." >&2
   exit 1
 fi
 
 if ! command -v bun >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1; then
-  echo "bun or npm is required to start the frontend" >&2
+  echo "bun or npm is required to start the frontend." >&2
+  exit 1
+fi
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required to start the AI worker." >&2
   exit 1
 fi
 
@@ -82,7 +132,7 @@ check_required_ports() {
   if [[ "$failed" == "1" ]]; then
     echo
     echo "One or more required ports are occupied, but the full ContextOS stack is not healthy."
-    echo "Run scripts/status-local.sh for service health and owner details."
+    echo "Run scripts/lib/status-local.sh for service health and owner details."
     echo "Useful check: ss -ltnp | grep -E ':($(contextos_port_from_addr "$API_ADDR")|${WORKER_PORT}|${FRONTEND_PORT})\\b'"
     exit 1
   fi
@@ -128,6 +178,22 @@ ensure_swag() {
 }
 
 check_required_ports
+
+echo "Starting local infra..."
+POSTGRES_PORT="$POSTGRES_PORT" "$ROOT_DIR/scripts/lib/start-infra.sh"
+
+if command -v psql >/dev/null 2>&1; then
+  echo "Checking Postgres login on localhost:${POSTGRES_PORT}..."
+  if ! PGPASSFILE=/dev/null psql "$DATABASE_URL" -c "select 1;" >/dev/null 2>&1; then
+    echo "[error] Cannot log in to Postgres at localhost:${POSTGRES_PORT} with the ContextOS local credentials." >&2
+    echo "        DATABASE_URL=${DATABASE_URL}" >&2
+    echo "        Check for a stale container or a port conflict, then retry:" >&2
+    echo "        POSTGRES_PORT=${POSTGRES_PORT} ./scripts/lib/start-infra.sh" >&2
+    exit 1
+  fi
+else
+  echo "[warn] psql not found; skipping local Postgres login check."
+fi
 
 if ! command -v codex >/dev/null 2>&1; then
   if command -v npm >/dev/null 2>&1; then
@@ -289,7 +355,7 @@ else
 fi
 
 echo "Starting API. Backend logs will be prefixed with [api]."
-start_logged_service API_PID API_LOG_PID "api" "$ROOT_DIR" env API_ADDR="$API_ADDR" go run ./apps/api
+start_logged_service API_PID API_LOG_PID "api" "$ROOT_DIR" env API_ADDR="$API_ADDR" DATABASE_URL="$DATABASE_URL" go run ./apps/api
 
 echo "Starting frontend dev server. Frontend logs will be prefixed with [frontend]."
 if command -v bun >/dev/null 2>&1; then

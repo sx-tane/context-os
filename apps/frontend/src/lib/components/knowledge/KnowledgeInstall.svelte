@@ -31,6 +31,7 @@
 
     export let codexLoggedIn: boolean;
     export let codexPlugins: CodexPlugin[];
+    export let workspaceAvailable = true;
     export let embedded = false;
     /** Called when user dismisses the panel. */
     export let onClose: () => void = () => {};
@@ -204,6 +205,13 @@
 
     async function uploadFilesystemSelection() {
         if (filesystemFiles.length === 0 || filesystemUploadLoading) return;
+        if (!workspaceAvailable) {
+            logs.filesystem = "Local DB is unavailable. Restart the API with a working database before uploading files.\n";
+            statuses.filesystem = "error";
+            logs = { ...logs };
+            statuses = { ...statuses };
+            return;
+        }
 
         filesystemUploadLoading = true;
         statuses.filesystem = "running";
@@ -283,6 +291,17 @@
     }
 
     async function installAll() {
+        if (!workspaceAvailable) {
+            for (const target of selectedTargets()) {
+                logs[target.connector] =
+                    (logs[target.connector] || "") +
+                    "Local DB is unavailable. Restart the API with a working database before saving sources.\n";
+                statuses[target.connector] = "error";
+            }
+            logs = { ...logs };
+            statuses = { ...statuses };
+            return;
+        }
         installing = true;
         allDone = false;
         let completed = 0;
@@ -481,6 +500,7 @@
     function saveButtonLabel(count: number) {
         if (filesystemUploadLoading) return "Uploading...";
         if (installing) return "Saving...";
+        if (!workspaceAvailable) return "Local DB unavailable";
         if (count > 0) {
             return `Save ${count} live connector${count === 1 ? "" : "s"}`;
         }
@@ -500,6 +520,11 @@
                 Codex CLI is not logged in. Run <code
                     >codex login --device-auth</code
                 > in your terminal, then reload this page to unlock live connectors.
+            </div>
+        {/if}
+        {#if !workspaceAvailable}
+            <div class="warn-banner">
+                Local DB routes are unavailable. Restart the API with a working Postgres connection before saving sources.
             </div>
         {/if}
 
@@ -529,7 +554,7 @@
             {#each REQUIRED as r}
                 {@const pluginReady = isPluginReady(r.codexPlugin)}
                 {@const st = statuses[r.connector]}
-                {@const isDisabled = !pluginReady && r.codexPlugin !== ""}
+                {@const isDisabled = !workspaceAvailable || (!pluginReady && r.codexPlugin !== "")}
                 <div
                     class="connector-card"
                     class:disabled={isDisabled}
@@ -553,7 +578,9 @@
                         <div class="card-top">
                             <div class="card-title">
                                 <span class="conn-name">{r.label}</span>
-                                {#if r.codexPlugin && !pluginReady}
+                                {#if !workspaceAvailable}
+                                    <span class="pill error">Local DB unavailable</span>
+                                {:else if r.codexPlugin && !pluginReady}
                                     <span class="pill error"
                                         >plugin not ready</span
                                     >
@@ -597,7 +624,7 @@
                                         <button
                                             class="mini-btn"
                                             type="button"
-                                            disabled={filesystemUploadLoading || filesystemFiles.length === 0}
+                                            disabled={!workspaceAvailable || filesystemUploadLoading || filesystemFiles.length === 0}
                                             on:click|stopPropagation={uploadFilesystemSelection}
                                         >
                                             {filesystemUploadLoading ? "Uploading..." : "Upload and ingest"}
@@ -664,7 +691,7 @@
                 <button
                     class="btn primary"
                     on:click={selectedCount === 0 && hasPendingFilesystemUpload ? uploadFilesystemSelection : installAll}
-                    disabled={installing || filesystemUploadLoading || !anyEnabled}
+                    disabled={!workspaceAvailable || installing || filesystemUploadLoading || !anyEnabled}
                 >
                     {saveButtonLabel(selectedCount)}
                 </button>
@@ -677,7 +704,7 @@
                 <button
                     class="btn danger"
                     on:click={requestResetAllData}
-                    disabled={installing || resettingAll}
+                    disabled={!workspaceAvailable || installing || resettingAll}
                 >
                     {resettingAll ? "Resetting..." : "Reset all data"}
                 </button>

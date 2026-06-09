@@ -94,15 +94,13 @@ Examples of concrete live sources include `BKGDEV-8466`, a Jira browse URL, `own
 
 ## Quick Start
 
-The local setup script currently targets Linux:
+Run one command from the repository root:
 
 ```bash
-./scripts/setup-local.sh
-./scripts/start-infra.sh
 ./scripts/start-local.sh
 ```
 
-`start-infra.sh` starts the local PostgreSQL/pgvector database and NATS. `start-local.sh` then starts the Go API, Python worker, and SvelteKit frontend.
+`start-local.sh` is the supported entrypoint for both first-time and repeat local runs. On first run it bootstraps missing Linux tools, starts PostgreSQL/pgvector and NATS, verifies Local DB login, then starts the Go API, Python worker, and SvelteKit frontend. On repeat runs it skips setup and starts the stack directly.
 
 Open:
 

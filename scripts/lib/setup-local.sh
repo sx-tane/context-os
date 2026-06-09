@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GO_VERSION="1.24.13"
 GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
 GO_URL="https://go.dev/dl/${GO_TARBALL}"
@@ -42,7 +42,23 @@ install_base_packages() {
     info "Removing conflicting Ubuntu node development headers"
     sudo apt remove -y libnode-dev
   fi
-  sudo apt install -y curl wget tar xz-utils unzip git build-essential ca-certificates nodejs
+  sudo apt install -y curl wget tar xz-utils unzip git build-essential ca-certificates nodejs npm postgresql-client
+}
+
+install_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    info "Docker already installed"
+    return
+  fi
+
+  info "Installing Docker"
+  if ! sudo apt install -y docker.io docker-compose-plugin; then
+    sudo apt install -y docker.io docker-compose
+  fi
+  sudo systemctl enable --now docker >/dev/null 2>&1 || true
+  if [[ -n "${USER:-}" ]]; then
+    sudo usermod -aG docker "$USER" >/dev/null 2>&1 || true
+  fi
 }
 
 install_go() {
@@ -111,7 +127,7 @@ install_codex() {
     sudo npm install -g @openai/codex
   fi
 
-  info "Installing Codex GitHub, Atlassian Rovo, Slack, and Google Drive plugins"
+  info "Installing Codex GitHub, Atlassian Rovo, Slack, Google Drive, Notion, and SharePoint plugins"
   codex plugin add github@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install GitHub Codex plugin." >&2
   codex plugin add atlassian-rovo@openai-curated >/dev/null 2>&1 || \
@@ -120,6 +136,10 @@ install_codex() {
     echo "[warn] Could not install Slack Codex plugin." >&2
   codex plugin add google-drive@openai-curated >/dev/null 2>&1 || \
     echo "[warn] Could not install Google Drive Codex plugin." >&2
+  codex plugin add notion@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install Notion Codex plugin." >&2
+  codex plugin add sharepoint@openai-curated >/dev/null 2>&1 || \
+    echo "[warn] Could not install SharePoint Codex plugin." >&2
 
   if ! codex login status >/dev/null 2>&1; then
     if is_headless; then
@@ -172,13 +192,18 @@ main() {
   require_sudo
 
   install_base_packages
+  install_docker
   install_go
   install_bun
   install_python
   install_uv
   install_codex
   verify_tools
-  validate_repo
+  if [[ "${SKIP_SETUP_VALIDATION:-0}" == "1" ]]; then
+    info "Skipping repository validation because SKIP_SETUP_VALIDATION=1"
+  else
+    validate_repo
+  fi
 
   info "Setup complete. Restart your shell to reload PATH from ~/.bashrc."
 }

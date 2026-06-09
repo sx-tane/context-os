@@ -31,6 +31,7 @@
         type="button"
         class="stream-toggle"
         aria-expanded={expanded}
+        title={expanded ? "Hide live stream transcript" : "Show live stream transcript"}
         on:click={onToggle}
     >
         <span>{streamStatusLabel(stream.status)}</span>
@@ -92,7 +93,13 @@
         background: transparent;
         padding: 0;
         color: inherit;
+        cursor: pointer;
         text-align: left;
+    }
+
+    .stream-toggle:focus-visible {
+        outline: 2px solid #1f5f8b;
+        outline-offset: 4px;
     }
 
     .stream-toggle span {
@@ -122,6 +129,12 @@
     }
 
     .stream-toggle:hover strong {
+        border-bottom-color: #1c1b18;
+        background-position: 0 0;
+        color: #f8f6ef;
+    }
+
+    .stream-toggle:active strong {
         border-bottom-color: #1c1b18;
         background-position: 0 0;
         color: #f8f6ef;

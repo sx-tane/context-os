@@ -3,6 +3,7 @@
     import type {
         CodexPlugin,
         ConnectorKnowledge,
+        ServiceStatus,
     } from "$lib/types";
 
     export let codexLabel = "";
@@ -10,6 +11,7 @@
     export let readySources: ConnectorKnowledge[] = [];
     export let codexLoggedIn = false;
     export let codexPlugins: CodexPlugin[] = [];
+    export let workspaceServiceStatus: ServiceStatus = "checking";
     export let sourcePanelOpen = false;
     export let onClose: () => void = () => {};
     export let onDone: () => void = () => {};
@@ -40,7 +42,15 @@
     <div>
         <span>SOURCES</span>
         <strong>{readySources.length}</strong>
-        <small>{codexLoggedIn ? "Codex connected" : "Codex login needed"}</small>
+        <small>
+            {workspaceServiceStatus === "ok"
+                ? codexLoggedIn
+                    ? "Codex connected"
+                    : "Codex login needed"
+                : workspaceServiceStatus === "checking"
+                  ? "Local DB checking"
+                  : "Local DB unavailable"}
+        </small>
     </div>
 </section>
 
@@ -50,6 +60,7 @@
             embedded
             {codexLoggedIn}
             {codexPlugins}
+            workspaceAvailable={workspaceServiceStatus === "ok"}
             {onClose}
             on:done={onDone}
             on:reset={onReset}

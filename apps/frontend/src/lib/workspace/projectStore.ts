@@ -15,6 +15,7 @@ import {
   getWorkspaceStatus,
 } from "$lib/api";
 import { applyWorkspaceSyncsToConnectors } from "$lib/workspace/statusMapping";
+import { getLocalStorage } from "$lib/workspace/storage";
 
 const STORAGE_KEY_PREFIX = "contextos_project_";
 const CHAT_KEY_PREFIX = "contextos_chat_";
@@ -34,11 +35,6 @@ export const DEFAULT_WORKSPACE_PATH =
   import.meta.env.VITE_CONTEXTOS_DEFAULT_WORKSPACE?.trim() ||
   "contextos-default";
 export const DEMO_WORKSPACE_PATH = "contextos-demo";
-
-function getLocalStorage(): Storage | null {
-  if (typeof localStorage === "undefined") return null;
-  return localStorage;
-}
 
 function loadActiveWorkspacePath(): string {
   return getLocalStorage()?.getItem(ACTIVE_WORKSPACE_KEY) || DEFAULT_WORKSPACE_PATH;

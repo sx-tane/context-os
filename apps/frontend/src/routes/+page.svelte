@@ -30,6 +30,7 @@
         getFindingActions,
         getGraphData,
         getWorkspaceStatus,
+        probeWorkspaceService,
         probeService,
         putAnalysisBasket,
         putFindingActions,
@@ -86,6 +87,7 @@
     } from "$lib/chat/controller";
 
     let apiStatus: ServiceStatus = "checking";
+    let workspaceServiceStatus: ServiceStatus = "checking";
     let workerStatus: ServiceStatus = "checking";
     let codexLoggedIn = false;
     let codexInstalled = false;
@@ -132,6 +134,7 @@
     );
     $: statusLine = buildStatusLine(
         apiStatus,
+        workspaceServiceStatus,
         workerStatus,
         codexInstalled,
         codexLoggedIn,
@@ -216,13 +219,27 @@
 
         const currentAPIStatus = await apiProbe;
         if (currentAPIStatus === "ok") {
+            await checkWorkspaceService(preserveDuringWork);
             await checkCodexStatus(preserveDuringWork);
         } else if (!preserveDuringWork) {
+            workspaceServiceStatus = "unreachable";
             setCodexUnavailable();
         }
         await workerProbe.catch(() => {
             workerStatus = preserveDuringWork ? "checking" : "unreachable";
         });
+    }
+
+    async function checkWorkspaceService(preserveOnFailure = false) {
+        if (workspacePath === DEMO_WORKSPACE_PATH) {
+            workspaceServiceStatus = "ok";
+            return;
+        }
+        const status = await probeWorkspaceService(workspacePath);
+        workspaceServiceStatus =
+            preserveOnFailure && status === "unreachable"
+                ? "checking"
+                : status;
     }
 
     async function checkCodexStatus(preserveOnFailure = false) {
@@ -264,6 +281,9 @@
         const status = await loadWorkspaceStatus(workspacePath);
         if (runID !== workspaceRefreshRunID) return;
         workspaceStatus = status;
+        workspaceServiceStatus = status
+            ? "ok"
+            : await probeWorkspaceService(workspacePath);
 
         const confirmedSources = getProject().connectors.filter(
             (source) => source.status === "ready",
@@ -829,12 +849,14 @@
 
     function buildStatusLine(
         currentApiStatus: ServiceStatus,
+        currentWorkspaceStatus: ServiceStatus,
         currentWorkerStatus: ServiceStatus,
         currentCodexInstalled: boolean,
         currentCodexLoggedIn: boolean,
         currentCodexAccount: string,
     ) {
         const api = serviceStatusText("API", currentApiStatus);
+        const workspace = serviceStatusText("Local DB", currentWorkspaceStatus);
         const worker = serviceStatusText("Worker", currentWorkerStatus);
         const codex =
             currentApiStatus === "ok"
@@ -844,7 +866,7 @@
                       ? "Codex CLI not logged in"
                       : `Codex connected${currentCodexAccount ? ` as ${normalizeCodexAccount(currentCodexAccount)}` : ""}`
                 : "Codex unavailable";
-        return `${api} | ${worker} | ${codex}`;
+        return `${api} | ${workspace} | ${worker} | ${codex}`;
     }
 
     function serviceStatusText(label: string, status: ServiceStatus) {
@@ -1003,6 +1025,7 @@
                 {readySources}
                 {codexLoggedIn}
                 {codexPlugins}
+                {workspaceServiceStatus}
                 {sourcePanelOpen}
                 onClose={() => (sourcePanelOpen = false)}
                 onDone={handleKnowledgeDone}
