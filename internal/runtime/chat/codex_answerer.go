@@ -197,6 +197,9 @@ func (p *progressBuffer) emit(line string) {
 	if line == "" || p.progress == nil {
 		return
 	}
+	if isNoisyCodexTextLine(line) {
+		return
+	}
 	if strings.HasPrefix(line, "{") {
 		if summary := summarizeCodexJSONEvent(line); summary != "" {
 			p.progress(summary)
@@ -208,6 +211,47 @@ func (p *progressBuffer) emit(line string) {
 		return
 	}
 	p.progress("• " + line)
+}
+
+func isNoisyCodexTextLine(line string) bool {
+	lower := strings.ToLower(strings.TrimSpace(line))
+	if lower == "" {
+		return true
+	}
+	if strings.HasPrefix(lower, "openai codex v") ||
+		strings.HasPrefix(lower, "--------") ||
+		strings.HasPrefix(lower, "workdir:") ||
+		strings.HasPrefix(lower, "model:") ||
+		strings.HasPrefix(lower, "provider:") ||
+		strings.HasPrefix(lower, "approval:") ||
+		strings.HasPrefix(lower, "sandbox:") ||
+		strings.HasPrefix(lower, "reasoning effort:") ||
+		strings.HasPrefix(lower, "reasoning summaries:") ||
+		strings.HasPrefix(lower, "session id:") ||
+		strings.HasPrefix(lower, "tokens used") ||
+		strings.HasPrefix(lower, "user") {
+		return true
+	}
+	for _, marker := range []string{
+		" warn codex_core_",
+		" warn codex_rmcp_client::oauth",
+		" warn codex_rollout::",
+		" warn codex_file_watcher:",
+		" warn codex_mcp::",
+		" error rmcp::transport::worker:",
+		"warning: codex could not find bubblewrap",
+		"ignoring interface.icon_small",
+		"ignoring interface.icon_large",
+		"ignoring interface.defaultprompt",
+		"state db discrepancy",
+		"failed to read oauth tokens from keyring",
+		"no secret service provider or dbus session found",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func summarizeCodexJSONEvent(line string) string {

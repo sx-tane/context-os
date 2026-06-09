@@ -328,6 +328,33 @@ func TestProgressBufferSummarizesCodexJSONEvents(t *testing.T) {
 	}
 }
 
+// TestProgressBufferSuppressesCodexStartupWarnings verifies internal Codex warnings do not reach the chat stream.
+func TestProgressBufferSuppressesCodexStartupWarnings(t *testing.T) {
+	lines := []string{}
+	progress := &progressBuffer{progress: func(line string) {
+		lines = append(lines, line)
+	}}
+
+	input := strings.Join([]string{
+		"2026-06-09T13:19:00.144869Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path with '..' must resolve under plugin assets/",
+		"2026-06-09T13:19:01.514918Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt[0]: prompt must be at most 128 characters path=/home/sx/.codex/.tmp/plugins/plugins/ngs-analysis/.codex-plugin/plugin.json",
+		"2026-06-09T13:19:00.914393Z  WARN codex_rmcp_client::oauth: failed to read OAuth tokens from keyring: Platform secure storage failure: no secret service provider or dbus session found",
+		"warning: Codex could not find bubblewrap on PATH.",
+		"• Called Atlassian Rovo searchJiraIssuesUsingJql",
+	}, "\n") + "\n"
+	if _, err := progress.Write([]byte(input)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	progress.Flush()
+
+	if len(lines) != 1 {
+		t.Fatalf("progress lines = %#v, want only useful line", lines)
+	}
+	if lines[0] != "• Called Atlassian Rovo searchJiraIssuesUsingJql" {
+		t.Fatalf("progress line = %q, want useful Codex line", lines[0])
+	}
+}
+
 func liveTestQuery(workspaceID string) LiveQuery {
 	return liveTestConnectorQuery(workspaceID, "github")
 }
