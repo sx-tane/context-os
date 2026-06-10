@@ -12,6 +12,28 @@ Google Drive MCP connector for Docs, Sheets, and Slides folder ingestion.
 - Emits one `document.ingested` event per file with `url`, `googledrive_file_id`, `googledrive_mime_type`, and `googledrive_modified_time` metadata.
 - Uses a stable event ID derived from Drive file ID and `modifiedTime`, so replaying an unchanged file reuses the same event identity.
 
+## File Layout
+
+- `doc.go` keeps the package-level connector description.
+- `types.go` contains connector constants, metadata keys, and small wire-format structs.
+- `connector.go` owns constructor wiring, `Name`, `Capabilities`, `Ingest`, and per-file event creation.
+- `auth.go` resolves access tokens from metadata, environment variables, OAuth credentials, or service-account credentials.
+- `drive_api.go` lists Drive files, exports file content, and performs bounded Google API requests with retry behavior.
+- `format.go` converts Sheets CSV and Slides JSON exports into text for ingestion.
+- `errors.go` maps Google API failures into pipeline connector error kinds.
+- `metadata.go` resolves folder IDs and builds stable provenance metadata values.
+- `retry.go` contains retry delay, bounded response reads, and context-aware sleep helpers.
+- `googledrive_test.go` covers end-to-end fake Google API ingestion flows.
+- `helpers_test.go` covers extracted helper behavior.
+
+## Testing
+
+Run the focused connector test suite with:
+
+```bash
+go test ./internal/source/googledrive
+```
+
 ## Replay And Provenance
 
 - `source_id=googledrive:file:<file-id>` keeps the upstream file identity stable across replays.

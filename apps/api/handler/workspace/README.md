@@ -17,8 +17,26 @@ HTTP handlers for registering, resetting, deleting, listing, inspecting, and sav
 
 ## Files
 
-- `workspace.go` contains `Handler`, repository wiring, request decoding, workspace reset/delete, local artifact cleanup, status aggregation, and typed UI-state validation.
-- `workspace_test.go` verifies reset behavior, status response behavior, and workspace-scoped UI-state round trips.
+| File | Responsibility |
+| --- | --- |
+| `doc.go` | Package documentation for workspace HTTP handlers. |
+| `handler.go` | `Handler` dependencies, constructor, and fluent option wiring. |
+| `lifecycle.go` | Workspace root dispatch, list, upsert, reset, and delete routes. |
+| `cleanup.go` | Workspace-scoped parsed artifact, graph snapshot, and Codex chat session cleanup. |
+| `helpers.go` | Shared bounded body reads, workspace lookup, query-scope, and response helpers. |
+| `validation.go` | Typed analysis basket and finding action JSON validation/default payloads. |
+| `ui_state.go` | Analysis basket and finding action GET/PUT handlers. |
+| `status.go` | Workspace status aggregation and response writing. |
+| `source.go` | Connected source registration and workspace creation fallback. |
+| `*_test.go` | Route behavior plus focused helper, validation, source, and option tests. |
+
+## Testing
+
+Run focused workspace handler tests after changing workspace routes, cleanup, status, source registration, or UI-state behavior:
+
+```bash
+go test ./apps/api/handler/workspace
+```
 
 ## Maintenance Notes
 
