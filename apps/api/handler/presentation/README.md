@@ -9,6 +9,33 @@ Routes under `/presentation/*` expose graph-backed role summaries for PMO, prese
 | GET    | `/presentation/status`  | Returns supported connectors/roles and hidden execution mode information. |
 | POST   | `/presentation/findings` | Runs ingest + pipeline reasoning, then returns role-specific summaries, PMO view model, mismatches, and assistive execution evidence metadata. |
 
+
+## Files
+
+| File | Responsibility |
+| --- | --- |
+| `doc.go` | Package documentation for presentation HTTP handlers. |
+| `handler.go` | `Handler` dependencies, options, constructor, cache and timeout constants. |
+| `status.go` | `/presentation/status` route behavior. |
+| `findings.go` | `/presentation/findings` request validation, pipeline run, persistence, and response flow. |
+| `cache.go` | Cached findings response rendering. |
+| `audit.go` | Best-effort audit writes, detached write contexts, and sync freshness helpers. |
+| `connectors.go` | Source connector resolution and broad Codex-source validation. |
+| `roles.go` | Role parsing, review-candidate splitting, role summaries, and PMO model building. |
+| `execution.go` | Assistive execution evidence wrapping. |
+| `helpers.go` | Mismatch ID, recommendation, pluralization, and severity helpers. |
+| `trace.go` | Stable response traces and unique run trace IDs. |
+| `metadata.go` | Request metadata cloning and conditional metadata mutation. |
+| `*_test.go` | Route behavior plus focused handler, connector, role, helper, trace, and context tests. |
+
+## Testing
+
+Run focused presentation handler tests after changing findings, connector resolution, role rendering, cache, or execution behavior:
+
+```bash
+go test ./apps/api/handler/presentation
+```
+
 ## Notes
 
 - Execution evidence is assistive and never replaces deterministic mismatch evidence.
