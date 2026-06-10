@@ -7,9 +7,26 @@ Chat service for answering workspace-scoped questions from persisted ContextOS r
 | File | Purpose |
 | --- | --- |
 | `answer_sections.go` | Parses structured live Codex JSON into backward-compatible answer text plus source-card sections. |
-| `chat.go` | Classifies local chat intent, resolves workspace scope, queries artifacts and sync state, resets live session metadata, and builds answer summaries. |
+| `types.go` | Defines chat request, result, answer-section, live-query, and live-answerer contracts. |
+| `service.go` | Resolves workspace scope, normalizes chat mode, routes intents, and resets live session metadata. |
+| `local_answer.go` | Answers artifact intents with optional live lookup and local repository fallback. |
+| `live_answer.go` | Runs multi-source live fanout, retries startup contention serially, and compacts live errors. |
+| `intent.go` | Classifies top-level chat intent from the message and resolved source scope. |
+| `scope.go` | Selects connected live source scopes and matches saved source names from user text. |
+| `inference.go` | Infers connectors, source URIs, search text, and local date ranges from prompts. |
+| `render.go` | Builds deterministic local, fanout, status, unsupported, and fallback answer text. |
+| `language.go` | Normalizes response language hints and detects English-heavy mixed prompts. |
+| `helpers.go` | Holds small package-local helpers shared by the split chat files. |
 | `codex_answerer.go` | Runs live Codex chat with workspace-and-connector scoped `codex exec` session metadata and `codex exec resume` on later turns. |
-| `chat_test.go` | Verifies intent routing, workspace resolution, time range inference, and answer construction. |
+| `*_test.go` | Verifies service routing plus focused inference, scope, rendering, language, and helper behavior. |
+
+## Testing
+
+Run focused chat runtime tests after changing service routing, inference, rendering, or live fanout behavior:
+
+```bash
+go test ./internal/runtime/chat
+```
 
 ## Behavior
 
