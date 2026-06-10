@@ -73,6 +73,15 @@ relationship, entity, ingest event, and workspace rows in one transaction. The
 delete is explicit instead of relying only on foreign-key cascade behavior so
 Remove cannot degrade into frontend-only hiding.
 
+## Testing
+
+Run focused store tests after changing repository implementations or shared
+store helpers:
+
+```bash
+go test ./internal/persistence/store
+```
+
 ## Usage
 
 ```go
