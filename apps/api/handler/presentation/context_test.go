@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// TestPresentationWriteContextSurvivesCanceledParent verifies detached write contexts outlive canceled request contexts.
 func TestPresentationWriteContextSurvivesCanceledParent(t *testing.T) {
 	parent, parentCancel := context.WithCancel(context.Background())
 	parentCancel()
