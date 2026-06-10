@@ -13,6 +13,24 @@ PostgreSQL-backed implementations of the `domain/repository` interfaces.
 | `MismatchStore` | `MismatchRepository` | `mismatches` |
 | `SyncStore` | `SyncRepository` | `connector_syncs` |
 
+## File Layout
+
+The store package keeps each repository implementation in a focused Go file so
+behavior remains easy to review without changing the public constructors or
+repository methods:
+
+| File | Responsibility |
+|------|----------------|
+| `workspace_store.go` | Workspace CRUD and workspace-scoped delete transactions. |
+| `workspace_ui_state_store.go` | Durable UI state JSON documents per workspace and state key. |
+| `event_store.go` | Ingest event upsert, query, count, and delete operations. |
+| `entity_store.go` | Canonical entity and relationship writes and graph reads. |
+| `graph_cleanup.go` | Explicit graph evidence and noise cleanup transactions. |
+| `mismatch_store.go` | Mismatch persistence and listing. |
+| `sync_store.go` | Connector sync status persistence. |
+| `audit_store.go` | Audit event logging and audit counters. |
+| `helpers.go` | Package-local ID and PostgreSQL array helpers shared by stores. |
+
 ## Idempotency
 
 All upsert operations use `ON CONFLICT … DO NOTHING` or `DO UPDATE` so that
